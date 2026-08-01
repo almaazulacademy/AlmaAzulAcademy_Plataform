@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { Suspense } from "react";
 import {
-  ArrowRight,
   Compass,
   Droplets,
   LifeBuoy,
   MapPin,
   ShieldCheck,
   Sparkles,
-  Users,
 } from "lucide-react";
 
 import { FAQ } from "@/components/faq";
@@ -19,7 +17,9 @@ import { Gallery } from "@/components/gallery";
 import { Hero } from "@/components/hero";
 import { Navbar } from "@/components/layout/navbar";
 import { Section } from "@/components/section";
-import { buttonVariants } from "@/components/ui/button";
+import { SessionsLoading, SessionsSection } from "@/components/sessions-section";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Imersão Paranoá",
@@ -56,34 +56,29 @@ const galleryImages = [
 
 const included = [
   {
-    icon: Compass,
-    title: "Condução completa",
-    description: "Acompanhamento da equipe Alma Azul durante todo o percurso.",
-  },
-  {
     icon: LifeBuoy,
     title: "Equipamentos",
-    description: "Canoa, remo e colete salva-vidas preparados para a experiência.",
+    description: "Coletes salva-vidas e remos preparados para a experiência.",
+  },
+  {
+    icon: Compass,
+    title: "Instrutores em cada canoa",
+    description: "Acompanhamento próximo da equipe Alma Azul durante todo o percurso.",
   },
   {
     icon: ShieldCheck,
-    title: "Orientação de segurança",
-    description: "Instruções claras antes da saída e suporte em toda a travessia.",
+    title: "Instrução para iniciantes",
+    description: "Orientação completa antes da saída, mesmo para quem nunca remou.",
+  },
+  {
+    icon: Sparkles,
+    title: "Lanche colaborativo",
+    description: "Encontro na base ao final, com café preto por conta da casa.",
   },
   {
     icon: Droplets,
     title: "Banho no lago",
     description: "Uma pausa para entrar na água e aproveitar o Lago Paranoá.",
-  },
-  {
-    icon: Users,
-    title: "Experiência em grupo",
-    description: "Ritmo coletivo, boas conversas e espaço para novas conexões.",
-  },
-  {
-    icon: Sparkles,
-    title: "Memórias reais",
-    description: "Uma manhã fora do automático, cercada pela natureza de Brasília.",
   },
 ];
 
@@ -106,12 +101,12 @@ const faqs = [
   {
     question: "Quanto tempo dura a experiência?",
     answer:
-      "A Imersão ocupa uma manhã. Horários exatos, ponto de encontro e duração serão apresentados junto às próximas datas disponíveis.",
+      "A experiência dura aproximadamente 1h30. O horário exato e as informações do encontro aparecem em cada sessão disponível.",
   },
   {
     question: "Quando as reservas serão abertas?",
     answer:
-      "O sistema de reservas ainda está em preparação. Esta primeira versão apresenta a experiência; as próximas datas e vagas serão anunciadas em breve.",
+      "As próximas sessões abertas aparecem automaticamente na seção Próximas datas. A reserva online será habilitada em uma etapa futura.",
   },
 ];
 
@@ -122,13 +117,13 @@ export default function ImersaoParanoaPage() {
       <Hero
         eyebrow="Experiência inaugural · Alma Azul Academy"
         title="Imersão Paranoá"
-        description="Uma manhã de canoa entre a mata do Córrego do Torto e a imensidão do Lago Paranoá."
+        description="Explore o lado mais preservado do Lago Paranoá."
         image="/images/backgrounds/hero-alma-azul-lago.webp"
-        primaryLabel="Reservas em breve"
-        primaryHref="#reserva"
+        primaryLabel="Ver próximas datas"
+        primaryHref="#reservas"
         secondaryLabel="Conheça o percurso"
         secondaryHref="#sobre"
-        details={["Brasília, DF", "Experiência guiada", "Nível iniciante"]}
+        details={["Brasília, DF", "1h30 de experiência", "Nível iniciante"]}
         immersive
       />
 
@@ -137,8 +132,8 @@ export default function ImersaoParanoaPage() {
           {[
             ["Onde", "Lago Paranoá"],
             ["Formato", "Em grupo"],
-            ["Duração", "Uma manhã"],
-            ["Reservas", "Em breve"],
+            ["Duração", "1h30"],
+            ["Reservas", "Datas abertas"],
           ].map(([label, value]) => (
             <div key={label} className="rounded-2xl border border-ink/10 bg-white/55 p-5 sm:p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{label}</p>
@@ -153,13 +148,13 @@ export default function ImersaoParanoaPage() {
           <div className="max-w-xl">
             <p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-lake">Sobre a experiência</p>
             <h2 className="text-balance text-4xl font-medium leading-[1.02] tracking-[-0.05em] sm:text-6xl">
-              Brasília como você nunca viu.
+              Explore o lado mais preservado do Lago Paranoá.
             </h2>
             <p className="mt-8 text-lg leading-8 text-ink/65">
-              A travessia começa em águas estreitas, sob o verde do corredor do Córrego do Torto. Aos poucos, a paisagem se abre até encontrar o Lago Paranoá.
+              Uma experiência de 1h30 navegando pelo Lago Paranoá por um dos lugares mais preservados e belos de Brasília: o Córrego do Torto.
             </p>
             <p className="mt-5 text-lg leading-8 text-ink/65">
-              Não é uma competição. É um convite para remar junto, observar e sentir a cidade por outro ponto de vista.
+              No caminho passamos por paisagens que poucas pessoas conhecem, fazemos uma pausa para banho em uma prainha no meio do lago e encerramos tudo com um lanche colaborativo na nossa base.
             </p>
           </div>
           <div className="relative min-h-[580px] overflow-hidden rounded-4xl sm:min-h-[720px]">
@@ -235,8 +230,8 @@ export default function ImersaoParanoaPage() {
         </div>
       </section>
 
-      <section id="reserva" className="scroll-mt-20 bg-white p-3 sm:p-5">
-        <div className="relative isolate min-h-[680px] overflow-hidden rounded-4xl text-white">
+      <section id="reservas" className="scroll-mt-20 bg-white p-3 sm:p-5">
+        <div className="relative isolate overflow-hidden rounded-4xl bg-ink text-white">
           <Image
             src="/images/experiences/imersao-paranoa/lago/img-1225.webp"
             alt="Grupo observando o Lago Paranoá ao final da travessia"
@@ -244,21 +239,16 @@ export default function ImersaoParanoaPage() {
             sizes="100vw"
             className="object-cover"
           />
-          <div className="absolute inset-0 bg-ink/65" />
-          <div className="container relative z-10 flex min-h-[680px] items-center justify-center py-24 text-center">
-            <div className="max-w-3xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Próximas edições</p>
-              <h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.055em] sm:text-7xl">
-                Pronto para mudar o ritmo?
-              </h2>
-              <p className="mx-auto mt-7 max-w-xl text-lg leading-8 text-white/70">
-                As reservas serão abertas em breve. Por enquanto, explore a experiência e acompanhe as novidades da Alma Azul.
-              </p>
-              <span className={buttonVariants({ variant: "light", size: "lg", className: "mt-9 cursor-default" })}>
-                Reservas em breve <ArrowRight className="size-4" />
-              </span>
-              <p className="mt-4 text-xs text-white/45">Nenhuma cobrança ou reserva é realizada nesta versão.</p>
+          <div className="absolute inset-0 bg-ink/85" />
+          <div className="container relative z-10 py-24 sm:py-28 lg:py-36">
+            <div className="mb-12 max-w-3xl sm:mb-16">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sand">Escolha seu dia</p>
+              <h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.055em] sm:text-7xl">Próximas datas</h2>
+              <p className="mt-7 max-w-xl text-lg leading-8 text-white/65">Confira as sessões futuras e abertas. Nesta etapa, exibimos disponibilidade em tempo real sem realizar reservas.</p>
             </div>
+            <Suspense fallback={<SessionsLoading />}>
+              <SessionsSection />
+            </Suspense>
           </div>
         </div>
       </section>

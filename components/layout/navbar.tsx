@@ -20,6 +20,14 @@ type NavbarProps = {
 
 export function Navbar({ overlay = false }: NavbarProps) {
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > Math.max(80, window.innerHeight * 0.72));
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -31,15 +39,17 @@ export function Navbar({ overlay = false }: NavbarProps) {
   return (
     <header
       className={cn(
-        "z-50 w-full",
-        overlay ? "absolute left-0 top-0 text-white" : "relative bg-paper text-ink",
+        "fixed left-0 top-0 z-50 w-full transition-all duration-500",
+        overlay && !scrolled && !open
+          ? "bg-transparent text-white"
+          : "border-b border-ink/5 bg-white/85 text-ink shadow-[0_10px_35px_rgba(20,49,44,0.08)] backdrop-blur-xl",
       )}
     >
       <div className="container flex h-24 items-center justify-between">
-        <Link href="/" aria-label="Alma Azul Academy — início" className="relative z-50">
+        <Link href="/" aria-label="Alma Azul Academy — início" className="relative z-50 transition-transform hover:scale-[1.02]">
           <Image
             src={
-              open
+              open || scrolled
                 ? "/images/branding/alma-azul-logo-dark.png"
                 : overlay
                 ? "/images/branding/alma-azul-logo-white.png"
@@ -60,17 +70,17 @@ export function Navbar({ overlay = false }: NavbarProps) {
               href={link.href}
               className={cn(
                 "text-sm font-medium transition-opacity hover:opacity-60",
-                overlay ? "text-white" : "text-ink",
+                overlay && !scrolled ? "text-white" : "text-ink",
               )}
             >
               {link.label}
             </Link>
           ))}
           <Link
-            href="/imersao-paranoa#reserva"
-            className={buttonVariants({ variant: overlay ? "light" : "default", size: "sm" })}
+            href="/imersao-paranoa#reservas"
+            className={buttonVariants({ variant: overlay && !scrolled ? "light" : "default", size: "sm" })}
           >
-            Ver experiência
+            Reservar vaga
           </Link>
         </nav>
 
@@ -80,7 +90,7 @@ export function Navbar({ overlay = false }: NavbarProps) {
             "relative z-50 grid size-11 place-items-center rounded-full border lg:hidden",
             open
               ? "border-ink/15 bg-white text-ink"
-              : overlay
+              : overlay && !scrolled
                 ? "border-white/40 text-white"
                 : "border-ink/15 text-ink",
           )}
@@ -111,11 +121,11 @@ export function Navbar({ overlay = false }: NavbarProps) {
           ))}
         </nav>
         <Link
-          href="/imersao-paranoa#reserva"
+          href="/imersao-paranoa#reservas"
           onClick={() => setOpen(false)}
           className={cn(buttonVariants({ size: "lg" }), "mt-auto")}
         >
-          Ver experiência
+          Reservar vaga
         </Link>
       </div>
     </header>

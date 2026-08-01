@@ -33,22 +33,22 @@ export default function HomePage() {
           sizes="100vw"
           className="animate-drift object-cover"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(9,32,28,0.80)_0%,rgba(9,32,28,0.42)_46%,rgba(9,32,28,0.08)_100%)]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-ink/55 via-transparent to-ink/20" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,25,22,0.88)_0%,rgba(7,25,22,0.60)_52%,rgba(7,25,22,0.24)_100%)]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-transparent to-ink/35" />
         <div className="container relative z-10 flex items-end pb-16 pt-36 sm:pb-20 lg:items-center lg:pb-0">
           <div className="max-w-5xl animate-fade-up">
             <p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
               Alma Azul Academy · Brasília
             </p>
-            <h1 className="max-w-5xl text-balance text-[clamp(3.7rem,8.7vw,8.5rem)] font-medium leading-[0.86] tracking-[-0.07em]">
-              A água muda o ritmo de tudo.
+            <h1 className="max-w-5xl text-balance text-[clamp(3.25rem,7.6vw,7.6rem)] font-medium leading-[0.9] tracking-[-0.065em] drop-shadow-sm">
+              Descubra um lado de Brasília que quase ninguém conhece.
             </h1>
             <p className="mt-8 max-w-xl text-lg leading-8 text-white/78 sm:text-xl">
               Experiências para sair do automático e encontrar um novo jeito de estar presente.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link href="/imersao-paranoa" className={buttonVariants({ variant: "light", size: "lg" })}>
-                Conheça a Imersão Paranoá
+              <Link href="/imersao-paranoa#reservas" className={buttonVariants({ variant: "light", size: "lg" })}>
+                Reservar minha vaga
                 <ArrowRight className="size-4" />
               </Link>
               <Link
