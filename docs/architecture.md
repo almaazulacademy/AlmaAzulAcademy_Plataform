@@ -4,7 +4,7 @@
 
 ## Estado deste documento
 
-Este documento reflete o código presente na branch `main` após a Sprint 3, no commit `1874799dc6539aa5a8fca01fd88dc5b913c098b7`. A arquitetura de reservas está implementada no repositório, mas sua ativação em produção depende da migration e das variáveis externas descritas em [deployment.md](deployment.md).
+Este documento reflete o código da Sprint 4. Reservas e painel administrativo estão implementados no repositório, mas a ativação em produção depende das migrations e das variáveis externas descritas em [deployment.md](deployment.md).
 
 ## Visão geral
 
@@ -41,13 +41,16 @@ Esse fluxo representa o código atual. A conexão efetiva com Supabase, Infinite
 ```text
 app/                         rotas, páginas e Route Handlers
   api/                       API server-side de reservas e pagamento
+  admin/                     dashboard e operação protegida
   reservar/[sessionId]/      reserva genérica por sessão
   acompanhar-reserva/        recuperação por CPF + código
 components/
+  admin/                     shell, formulários, listas e feedback operacional
   layout/                    Navbar e Footer
   reservation/               formulário, resumo, retenção e acompanhamento
   ui/                        Button, Card e Accordion locais
 lib/
+  admin/                     auth, tipos, validação, formatação e acesso a dados
   payments/                  contrato PaymentProvider e InfinitePay
   reservations/              tipos, validação, acesso a dados e confirmação
   supabase/                  clientes browser, servidor público e service role
@@ -69,8 +72,13 @@ docs/                        documentação técnica e de produto
 | `/reservar/[sessionId]` | Dinâmica | Carrega uma sessão aberta e apresenta formulário/resumo |
 | `/acompanhar-reserva` | Estática com interação cliente | Consulta por CPF + código e retoma pagamento quando possível |
 | `/pagamento/retorno` | Dinâmica | Verifica os parâmetros de retorno e tenta confirmar o pagamento |
-| `/login` | Estática | Placeholder; autenticação ainda não implementada |
-| `/admin` | Estática | Placeholder; painel ainda não implementado |
+| `/login` | Interativa | Login real pelo Supabase Auth |
+| `/admin` | Dinâmica e protegida | Dashboard operacional |
+| `/admin/sessoes` | Dinâmica e protegida | Gestão de sessões |
+| `/admin/reservas` | Dinâmica e protegida | Lista e filtros de reservas |
+| `/admin/reservas/[reservationId]` | Dinâmica e protegida | Detalhe e ações da reserva |
+| `/admin/experiencias` | Dinâmica e protegida | Gestão de experiências |
+| `/admin/configuracoes` | Dinâmica e protegida | Configurações somente leitura |
 | `/_not-found` | Estática | Tratamento visual de rota inexistente |
 
 ### APIs
@@ -80,8 +88,15 @@ docs/                        documentação técnica e de produto
 | `POST /api/reservations` | Valida entrada, cria pré-reserva atômica, cria checkout e associa sua URL |
 | `POST /api/reservations/lookup` | Valida CPF + código e devolve a visão limitada da reserva |
 | `POST /api/payments/infinitepay/webhook` | Recebe o evento, consulta a InfinitePay e solicita confirmação protegida no banco |
+| `POST /api/auth/login` | Autentica, autoriza o papel administrativo e cria cookies HttpOnly |
+| `POST /api/auth/logout` | Encerra a sessão local e remove cookies |
+| `POST /api/admin/sessions` | Cria sessão por RPC protegida |
+| `PATCH/DELETE /api/admin/sessions/[sessionId]` | Atualiza ou exclui sessão conforme invariantes do banco |
+| `POST /api/admin/experiences` | Cria experiência |
+| `PATCH /api/admin/experiences/[experienceId]` | Atualiza conteúdo, ordem e status |
+| `POST /api/admin/reservations/[reservationId]/actions` | Confirma manualmente ou cancela com motivo e auditoria |
 
-Não há APIs administrativas na versão atual.
+Todas as mutações administrativas validam sessão, autorização, origem e payload no servidor antes de chamar RPCs exclusivas da service role.
 
 ## Server Components e Client Components
 
@@ -112,10 +127,11 @@ Componentes com `"use client"` existem somente quando precisam de estado, evento
 
 ## Camada Supabase
 
-`lib/supabase/server.ts` expõe dois clientes:
+`lib/supabase/server.ts` expõe três clientes:
 
 - `getSupabaseServerClient`: chave anônima ou publicável, sem persistência de sessão; usado para leitura pública.
 - `getSupabaseAdminClient`: service role; usado apenas em Route Handlers e confirmação server-side.
+- `getSupabaseUserClient`: chave pública com bearer token explícito; valida a identidade do usuário administrativo sem persistir sessão no navegador.
 
 `lib/supabase/client.ts` contém um singleton de navegador com chave anônima. Ele está preparado, mas o fluxo atual de reservas não o utiliza para gravar dados.
 
@@ -164,12 +180,19 @@ Detalhes de concorrência e status estão em [database.md](database.md); detalhe
 - **Renderização dinâmica onde necessário:** landing, sessão e retorno consultam estado atual.
 - **Acessibilidade e movimento reduzido:** componentes usam atributos ARIA e o CSS respeita `prefers-reduced-motion`.
 
+## Camada administrativa
+
+`middleware.ts` protege páginas e APIs administrativas, valida access tokens e renova sessões. O layout de `/admin` exige novamente uma linha ativa em `admin_users`; Route Handlers repetem essa autorização antes de usar a service role.
+
+As consultas iniciais são Server Components. Interações como formulários, confirmações, toast, filtros e menu mobile ficam em Client Components. Capacidade, transição de reserva e auditoria permanecem em RPCs Postgres.
+
 ## Limites atuais
 
 - Não há confirmação no repositório de que a migration esteja aplicada no Supabase de produção.
 - Não há credenciais ou valores reais versionados, corretamente.
 - InfinitePay não funciona sem `INFINITEPAY_HANDLE`, domínio público e configuração do projeto.
-- Não há painel, autenticação administrativa, tabela `profiles` ou controle de papéis implementado.
+- A migration administrativa, a configuração do Supabase Auth e o primeiro `admin_users` não estão confirmados no ambiente de produção.
+- Não há edição de configurações sensíveis nem promoção de administradores pela interface.
 - Não há envio de email/WhatsApp, check-in, CRM ou Analytics.
 - Não há teste automatizado de integração com Supabase/InfinitePay; os testes atuais cobrem validação local.
 - `lib/experiences.ts` e a tabela `experiences` ainda não compartilham uma única fonte editorial.

@@ -118,10 +118,12 @@ Não existem outros nomes consumidos pelo código. Se a InfinitePay ou outro pro
 2. Faça backup e confira o schema atual antes de aplicar qualquer migration.
 3. Revise [database.md](database.md), especialmente a compatibilidade com uma tabela `sessions` preexistente.
 4. Aplique, pelo processo aprovado da equipe, `supabase/migrations/202608010001_reservation_platform.sql`.
-5. Confirme as tabelas, funções, policies, grants, índices e o job `expire-alma-azul-pre-reservations`.
-6. Configure URL, chave pública e service role nos ambientes local e Vercel.
-7. Cadastre sessões futuras com `experience_id`, `starts_at`, `duration_minutes`, `price_cents`, `capacity` e status `OPEN`.
-8. Valide leitura, concorrência de pré-reservas, expiração e RLS antes de abrir reservas ao público.
+5. Em seguida, aplique `supabase/migrations/202608010002_admin_dashboard_mvp.sql`.
+6. Confirme tabelas, funções, policies, grants, índices e o job `expire-alma-azul-pre-reservations`.
+7. Configure URL, chave pública e service role nos ambientes local e Vercel.
+8. Crie a primeira conta pelo Supabase Auth e autorize seu UUID em `admin_users`, conforme [admin.md](admin.md).
+9. Cadastre sessões futuras com `experience_id`, `starts_at`, `duration_minutes`, `price_cents`, `capacity` e status `OPEN`.
+10. Valide leitura, concorrência de pré-reservas, expiração, login, autorização, CRUD e RLS antes de abrir reservas ao público.
 
 Esta documentação não executa a migration. Não aplique SQL em produção sem backup e revisão do ambiente real.
 
@@ -190,7 +192,10 @@ Preview deployments de outras branches dependem da configuração do projeto Ver
 - Pagamento confirmado muda a reserva para `CONFIRMED`.
 - CPF sozinho não recupera reserva.
 - Expiração deixa de contar vagas e muda status via cron.
-- `/admin` e `/login` continuam placeholders até a Sprint 4.
+- `/login` autentica uma conta autorizada e contas ausentes/inativas em `admin_users` são rejeitadas.
+- `/admin`, sessões, reservas, experiências e configurações exigem sessão válida.
+- Uma redução de capacidade ou confirmação manual não consegue causar overbooking.
+- Ações administrativas sensíveis aparecem em `admin_audit_log`.
 
 ## Erros comuns
 

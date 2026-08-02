@@ -2,6 +2,29 @@
 
 Registro das mudanças confirmadas no histórico Git. O formato segue os princípios do [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), organizado por sprint em vez de versões publicadas.
 
+## Sprint 4 — painel administrativo MVP
+
+**Estado:** concluída no código; ativação externa ainda depende da migration, do Supabase Auth e do cadastro do primeiro administrador.
+
+### Adicionado
+
+- Login real com Supabase Auth, cookies HttpOnly, renovação de sessão e proteção de rotas.
+- Autorização explícita por `admin_users`, com papéis `ADMIN` e `OPERATOR`.
+- Dashboard operacional em `/admin` e navegação responsiva.
+- Gestão de sessões, experiências e reservas, incluindo filtros e detalhes.
+- Confirmação manual e cancelamento de reservas com motivo, proteção de capacidade e auditoria.
+- Configurações operacionais somente leitura e estados de loading, vazio, sucesso e erro.
+- Migration administrativa com RPCs, RLS, grants, auditoria e configurações da plataforma.
+- Testes de validação e garantias estáticas da migration.
+
+### Limites confirmados
+
+- A migration administrativa não foi aplicada ao Supabase por esta entrega.
+- Nenhuma credencial real foi adicionada ao repositório; não havia `.env.local` no ambiente de validação.
+- O primeiro usuário precisa ser criado no Supabase Auth e autorizado em `admin_users` pelo processo operacional documentado.
+- O CPF completo continua sem persistência em texto simples; o painel exibe somente os quatro últimos dígitos e aceita CPF completo apenas como filtro server-side por hash.
+- Reenvio de código e mensagem apenas preparam o contato; não existe integração de envio nesta sprint.
+
 ## Sprint 3 — ciclo de reservas
 
 **Estado:** concluída no código; integrações externas ainda dependem de configuração.

@@ -4,9 +4,9 @@
 
 ## Fonte de verdade documentada
 
-O schema abaixo vem exclusivamente de `supabase/migrations/202608010001_reservation_platform.sql`, a única migration versionada no repositório. Não foi executada nenhuma consulta ou migration para produzir este documento, e a aplicação desse arquivo no ambiente de produção não está confirmada.
+O schema vem de `202608010001_reservation_platform.sql` e `202608010002_admin_dashboard_mvp.sql`. Não foi executada nenhuma consulta ou migration remota para produzir este documento, e a aplicação desses arquivos no ambiente de produção não está confirmada.
 
-Não existe tabela `profiles` na migration atual. Autenticação e perfis administrativos continuam planejados.
+Não existe tabela `profiles`. A autorização administrativa usa `admin_users`, ligada diretamente a `auth.users`.
 
 ## Extensões e tipos
 
@@ -44,6 +44,14 @@ reservations 1 ── N payment_events
 Exclusões de experiências, sessões e reservas relacionadas usam `ON DELETE RESTRICT` nos vínculos definidos pela migration.
 
 ## Tabelas
+
+### Tabelas administrativas da Sprint 4
+
+- `admin_users`: autoriza o UUID do Supabase Auth, nome de exibição, papel `ADMIN`/`OPERATOR` e estado ativo.
+- `admin_audit_log`: registra ator, ação, entidade, motivo e metadados das mutações.
+- `platform_settings`: singleton com nome da empresa, WhatsApp, email e PIX, consultado como somente leitura pelo MVP.
+
+A migration também adiciona `sessions.internal_notes`, `experiences.image_url` e `experiences.display_order` com limites e índices apropriados.
 
 ### `experiences`
 
@@ -210,5 +218,14 @@ Não há policy pública de leitura para `reservations` ou `payment_events`; pri
 | Arquivo | Conteúdo |
 | --- | --- |
 | `202608010001_reservation_platform.sql` | Schema completo de reservas, funções, RLS, seed da primeira experiência e cron |
+| `202608010002_admin_dashboard_mvp.sql` | Autorização administrativa, auditoria, configurações e RPCs operacionais |
+
+## RPCs administrativas
+
+As funções `admin_dashboard_metrics`, `admin_list_experiences`, `admin_list_sessions`, `admin_list_reservations` e `admin_get_reservation` fornecem leituras operacionais. As funções de criação/atualização de sessões e experiências, exclusão de sessão, confirmação manual e cancelamento protegem as mutações.
+
+Todas exigem um ator ativo, usam `SECURITY DEFINER` com `search_path` explícito e têm execução revogada de `public`, `anon` e `authenticated`. Somente `service_role` recebe `EXECUTE`; o servidor deriva `p_actor_id` da sessão validada, nunca do payload do cliente.
+
+Confirmação manual e alteração de capacidade bloqueiam os registros necessários e recalculam a ocupação. Trocar a experiência de uma sessão com histórico e excluir uma sessão com reservas são proibidos.
 
 Antes de aplicar em um banco com tabelas anteriores, faça backup e revise colunas/dados existentes. Este repositório não contém uma migration anterior nem um dump de produção que permita comprovar compatibilidade de dados.

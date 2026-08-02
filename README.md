@@ -12,7 +12,7 @@ Plataforma oficial de experiências da Alma Azul Academy. A Imersão Paranoá é
 | Pré-reserva por 2 horas | Implementada no código/migration |
 | Acompanhamento por CPF + código | Implementado no código/migration |
 | InfinitePay | Integração preparada; configuração e teste em produção não confirmados |
-| Painel administrativo | Planejado; `/login` e `/admin` são placeholders |
+| Painel administrativo | Implementado no código; exige migration, Supabase Auth e administrador ativo |
 
 Não presuma que reservas ou pagamentos estejam ativos em produção sem confirmar migration, credenciais, sessões, cron e configuração da InfinitePay.
 
@@ -35,14 +35,21 @@ Não presuma que reservas ou pagamentos estejam ativos em produção sem confirm
 | `/reservar/[sessionId]` | Formulário e resumo da sessão |
 | `/acompanhar-reserva` | Recuperação segura por CPF + código |
 | `/pagamento/retorno` | Retorno e verificação do checkout |
-| `/login` | Placeholder de autenticação administrativa |
-| `/admin` | Placeholder do futuro painel |
+| `/login` | Login administrativo com Supabase Auth |
+| `/admin` | Dashboard operacional protegido |
+| `/admin/sessoes` | Criação e gestão de sessões |
+| `/admin/reservas` | Filtros, detalhes e ações sobre reservas |
+| `/admin/experiencias` | Cadastro e publicação de experiências |
+| `/admin/configuracoes` | Configuração operacional somente leitura |
 
 APIs server-side:
 
 - `POST /api/reservations`
 - `POST /api/reservations/lookup`
 - `POST /api/payments/infinitepay/webhook`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `/api/admin/*` para mutações administrativas autenticadas
 
 ## Instalação local
 
@@ -90,13 +97,14 @@ INFINITEPAY_HANDLE
 
 ## Banco e reservas
 
-A única migration versionada é:
+As migrations versionadas são:
 
 ```text
 supabase/migrations/202608010001_reservation_platform.sql
+supabase/migrations/202608010002_admin_dashboard_mvp.sql
 ```
 
-Ela define `experiences`, `sessions`, `reservations`, `payment_events`, RPCs, RLS, índices e o cron de expiração. Não aplique em produção sem backup e revisão do schema real.
+A primeira define reservas, pagamentos, RPCs, RLS, índices e expiração. A segunda adiciona autorização administrativa, auditoria, configurações e RPCs operacionais. Aplique-as em ordem, com backup e revisão do schema real.
 
 O cálculo de vagas é protegido no banco:
 
@@ -142,7 +150,7 @@ O push não comprova sozinho que o deployment terminou. Verifique o dashboard, l
 - [docs/database.md](docs/database.md) — schema, RPCs, RLS, capacidade e migrations
 - [docs/deployment.md](docs/deployment.md) — recuperação, ambientes e Vercel
 - [docs/roadmap.md](docs/roadmap.md) — entregas concluídas e planejadas
-- [docs/admin.md](docs/admin.md) — escopo planejado do painel
+- [docs/admin.md](docs/admin.md) — autenticação, operação e ativação do painel
 - [docs/payments.md](docs/payments.md) — pré-reserva, InfinitePay e pendências
 
 ## Contribuição
@@ -169,4 +177,4 @@ O push não comprova sozinho que o deployment terminou. Verifique o dashboard, l
 
 ## Roadmap imediato
 
-A Sprint 4 está planejada para o painel administrativo MVP, mas não foi iniciada. Consulte [docs/roadmap.md](docs/roadmap.md) e [docs/admin.md](docs/admin.md).
+A Sprint 4 entrega o painel administrativo MVP no código. A ativação exige aplicar as migrations em ordem, configurar o Supabase e autorizar o primeiro administrador. Consulte [docs/roadmap.md](docs/roadmap.md) e [docs/admin.md](docs/admin.md).

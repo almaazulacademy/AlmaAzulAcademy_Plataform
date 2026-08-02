@@ -60,9 +60,9 @@ Commit: `1874799dc6539aa5a8fca01fd88dc5b913c098b7`.
 - InfiniteTag e configuração de retorno/webhook na InfinitePay.
 - Teste com pagamento real e procedimento para pagamento após expiração.
 
-## Sprint 4 — planejada
+## Sprint 4 — concluída no código
 
-Objetivo: painel administrativo MVP.
+Objetivo entregue: painel administrativo MVP.
 
 - Login administrativo.
 - Controle de administradores.
@@ -77,7 +77,7 @@ Objetivo: painel administrativo MVP.
 - Estados de loading, sucesso, vazio e erro.
 - Uso responsivo em celular e tablet pela equipe.
 
-Consulte [admin.md](admin.md). Nada dessa lista está implementado além dos placeholders `/login` e `/admin`.
+Consulte [admin.md](admin.md). A operação real ainda depende da aplicação da migration administrativa, das variáveis do Supabase e do cadastro de um usuário autorizado.
 
 ## Sprints futuras — planejadas
 

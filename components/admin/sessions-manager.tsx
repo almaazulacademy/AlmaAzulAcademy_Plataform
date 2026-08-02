@@ -1,0 +1,233 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
+import { CalendarPlus, Copy, Lock, Pencil, Plus, Trash2, Unlock, X } from "lucide-react";
+
+import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
+import { fieldErrorClass, inputClass, labelClass, textareaClass } from "@/components/admin/form-styles";
+import { AdminPageHeader } from "@/components/admin/page-header";
+import { StatusBadge } from "@/components/admin/status-badge";
+import { AdminEmptyState } from "@/components/admin/states";
+import { useToast } from "@/components/admin/toast-provider";
+import { Button } from "@/components/ui/button";
+import type { AdminExperience, AdminSession, SessionStatus } from "@/lib/admin/types";
+import { brasiliaLocalToIso, formatAdminDateTime, formatCurrency, toBrasiliaDateTimeLocal } from "@/lib/admin/format";
+
+type FormState = {
+  experienceId: string;
+  startsAt: string;
+  durationMinutes: string;
+  price: string;
+  capacity: string;
+  status: SessionStatus;
+  internalNotes: string;
+};
+
+type ApiPayload = { message?: string; errors?: Record<string, string> };
+
+const emptyForm = (experienceId = ""): FormState => ({
+  experienceId,
+  startsAt: "",
+  durationMinutes: "90",
+  price: "",
+  capacity: "",
+  status: "OPEN",
+  internalNotes: "",
+});
+
+function fromSession(session: AdminSession): FormState {
+  return {
+    experienceId: session.experienceId,
+    startsAt: toBrasiliaDateTimeLocal(session.startsAt),
+    durationMinutes: String(session.durationMinutes),
+    price: (session.priceCents / 100).toFixed(2),
+    capacity: String(session.capacity),
+    status: session.status,
+    internalNotes: session.internalNotes ?? "",
+  };
+}
+
+export function SessionsManager({ sessions, experiences, initiallyOpen }: {
+  sessions: AdminSession[];
+  experiences: AdminExperience[];
+  initiallyOpen: boolean;
+}) {
+  const router = useRouter();
+  const { notify } = useToast();
+  const [formOpen, setFormOpen] = useState(initiallyOpen);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formTitle, setFormTitle] = useState("Nova sessão");
+  const [form, setForm] = useState<FormState>(() => emptyForm(experiences[0]?.id));
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState<AdminSession | null>(null);
+
+  const openNew = () => {
+    setEditingId(null);
+    setFormTitle("Nova sessão");
+    setForm(emptyForm(experiences[0]?.id));
+    setErrors({});
+    setFormOpen(true);
+  };
+
+  const openEdit = (session: AdminSession) => {
+    setEditingId(session.id);
+    setFormTitle("Editar sessão");
+    setForm(fromSession(session));
+    setErrors({});
+    setFormOpen(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const openDuplicate = (session: AdminSession) => {
+    setEditingId(null);
+    setFormTitle("Duplicar sessão");
+    setForm(fromSession(session));
+    setErrors({ startsAt: "Confirme ou altere a data da nova sessão." });
+    setFormOpen(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const payloadFrom = (state: FormState, status = state.status) => ({
+    experienceId: state.experienceId,
+    startsAt: brasiliaLocalToIso(state.startsAt),
+    durationMinutes: Number(state.durationMinutes),
+    priceCents: Math.round(Number(state.price.replace(",", ".")) * 100),
+    capacity: Number(state.capacity),
+    status,
+    internalNotes: state.internalNotes,
+  });
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoading(true);
+    setErrors({});
+    const url = editingId ? `/api/admin/sessions/${editingId}` : "/api/admin/sessions";
+    try {
+      const response = await fetch(url, {
+        method: editingId ? "PATCH" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payloadFrom(form)),
+      });
+      const payload = await response.json().catch(() => ({})) as ApiPayload;
+      if (!response.ok) {
+        setErrors(payload.errors ?? { form: payload.message ?? "Não foi possível salvar a sessão." });
+        throw new Error(payload.message ?? "Revise os campos informados.");
+      }
+      notify({ title: editingId ? "Sessão atualizada" : "Sessão criada", description: "A agenda administrativa foi atualizada." });
+      setFormOpen(false);
+      setEditingId(null);
+      router.replace("/admin/sessoes");
+      router.refresh();
+    } catch (error) {
+      notify({ title: "Sessão não salva", description: error instanceof Error ? error.message : "Tente novamente.", variant: "error" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const changeStatus = async (session: AdminSession, status: SessionStatus) => {
+    try {
+      const response = await fetch(`/api/admin/sessions/${session.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payloadFrom(fromSession(session), status)),
+      });
+      const payload = await response.json().catch(() => ({})) as ApiPayload;
+      if (!response.ok) throw new Error(payload.message ?? "Não foi possível alterar o status.");
+      notify({ title: status === "OPEN" ? "Reservas abertas" : "Reservas fechadas" });
+      router.refresh();
+    } catch (error) {
+      notify({ title: "Status não alterado", description: error instanceof Error ? error.message : "Tente novamente.", variant: "error" });
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    const response = await fetch(`/api/admin/sessions/${deleting.id}`, { method: "DELETE" });
+    const payload = await response.json().catch(() => ({})) as ApiPayload;
+    if (!response.ok) throw new Error(payload.message ?? "Não foi possível excluir a sessão.");
+    notify({ title: "Sessão excluída", description: "A sessão sem histórico foi removida." });
+    setDeleting(null);
+    router.refresh();
+  };
+
+  return (
+    <div>
+      <AdminPageHeader
+        eyebrow="Operação"
+        title="Sessões"
+        description="Crie e organize datas para qualquer experiência da Alma Azul. Horários são exibidos no fuso de Brasília."
+        action={<Button type="button" onClick={openNew}><Plus className="size-4" /> Nova sessão</Button>}
+      />
+
+      {formOpen ? (
+        <section className="mt-8 rounded-3xl border border-lake/20 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="session-form-title">
+          <div className="flex items-center justify-between gap-4">
+            <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-lake">Agenda</p><h2 id="session-form-title" className="mt-2 text-2xl font-semibold tracking-[-0.03em]">{formTitle}</h2></div>
+            <button type="button" onClick={() => setFormOpen(false)} disabled={loading} className="grid size-10 place-items-center rounded-full text-ink/50 hover:bg-ink/5" aria-label="Fechar formulário"><X className="size-5" /></button>
+          </div>
+          <form className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4" onSubmit={submit} noValidate>
+            <label className="block md:col-span-2">
+              <span className={labelClass}>Experiência</span>
+              <select className={inputClass} value={form.experienceId} onChange={(event) => setForm({ ...form, experienceId: event.target.value })} disabled={loading}>
+                <option value="">Selecione</option>
+                {experiences.map((experience) => <option key={experience.id} value={experience.id}>{experience.title}</option>)}
+              </select>
+              {errors.experienceId ? <span className={fieldErrorClass}>{errors.experienceId}</span> : null}
+            </label>
+            <label className="block md:col-span-2">
+              <span className={labelClass}>Data e horário</span>
+              <input type="datetime-local" className={inputClass} value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })} disabled={loading} />
+              {errors.startsAt ? <span className={fieldErrorClass}>{errors.startsAt}</span> : null}
+            </label>
+            <label className="block"><span className={labelClass}>Duração (min)</span><input type="number" min="15" max="1440" className={inputClass} value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: event.target.value })} disabled={loading} />{errors.durationMinutes ? <span className={fieldErrorClass}>{errors.durationMinutes}</span> : null}</label>
+            <label className="block"><span className={labelClass}>Capacidade</span><input type="number" min="1" max="500" className={inputClass} value={form.capacity} onChange={(event) => setForm({ ...form, capacity: event.target.value })} disabled={loading} />{errors.capacity ? <span className={fieldErrorClass}>{errors.capacity}</span> : null}</label>
+            <label className="block"><span className={labelClass}>Preço (R$)</span><input type="number" min="0" step="0.01" className={inputClass} value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} disabled={loading} />{errors.priceCents ? <span className={fieldErrorClass}>{errors.priceCents}</span> : null}</label>
+            <label className="block"><span className={labelClass}>Status</span><select className={inputClass} value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as SessionStatus })} disabled={loading}><option value="OPEN">Aberta</option><option value="CLOSED">Fechada</option><option value="CANCELLED">Cancelada</option></select>{errors.status ? <span className={fieldErrorClass}>{errors.status}</span> : null}</label>
+            <label className="block md:col-span-2 xl:col-span-4"><span className={labelClass}>Observações internas</span><textarea className={textareaClass} value={form.internalNotes} onChange={(event) => setForm({ ...form, internalNotes: event.target.value })} maxLength={1000} disabled={loading} placeholder="Informações operacionais que não aparecem no site." />{errors.internalNotes ? <span className={fieldErrorClass}>{errors.internalNotes}</span> : null}</label>
+            {errors.form ? <p className="md:col-span-2 xl:col-span-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{errors.form}</p> : null}
+            <div className="flex flex-col-reverse gap-3 md:col-span-2 md:flex-row md:justify-end xl:col-span-4"><Button type="button" variant="ghost" onClick={() => setFormOpen(false)} disabled={loading}>Cancelar</Button><Button type="submit" disabled={loading || experiences.length === 0}><CalendarPlus className="size-4" /> {loading ? "Salvando..." : "Salvar sessão"}</Button></div>
+          </form>
+        </section>
+      ) : null}
+
+      <section className="mt-8 space-y-4" aria-label="Lista de sessões">
+        {sessions.length === 0 ? <AdminEmptyState title="Nenhuma sessão cadastrada" description="Crie a primeira data para começar a organizar a agenda." /> : sessions.map((session) => (
+          <article key={session.id} className="rounded-3xl border border-ink/10 bg-white p-5 sm:p-6">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2"><StatusBadge status={session.status} /><span className="text-xs font-medium text-ink/40">{session.reservationsCount} reservas</span></div>
+                <h2 className="mt-3 text-lg font-semibold text-ink">{session.experienceTitle}</h2>
+                <p className="mt-1 text-sm text-ink/55">{formatAdminDateTime(session.startsAt)}</p>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4 xl:min-w-[430px]">
+                <div><dt className="text-xs text-ink/45">Preço</dt><dd className="mt-1 text-sm font-semibold">{formatCurrency(session.priceCents)}</dd></div>
+                <div><dt className="text-xs text-ink/45">Capacidade</dt><dd className="mt-1 text-sm font-semibold">{session.capacity}</dd></div>
+                <div><dt className="text-xs text-ink/45">Vagas</dt><dd className="mt-1 text-sm font-semibold">{session.remainingSpots}</dd></div>
+                <div><dt className="text-xs text-ink/45">Duração</dt><dd className="mt-1 text-sm font-semibold">{session.durationMinutes} min</dd></div>
+              </dl>
+              <div className="flex flex-wrap gap-2 xl:justify-end">
+                <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(session)}><Pencil className="size-4" /> Editar</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => openDuplicate(session)}><Copy className="size-4" /> Duplicar</Button>
+                {session.status === "OPEN" ? <Button type="button" size="sm" variant="ghost" onClick={() => changeStatus(session, "CLOSED")}><Lock className="size-4" /> Fechar</Button> : <Button type="button" size="sm" variant="ghost" onClick={() => changeStatus(session, "OPEN")}><Unlock className="size-4" /> Abrir</Button>}
+                <Button type="button" size="sm" variant="ghost" className="text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => setDeleting(session)}><Trash2 className="size-4" /> Excluir</Button>
+              </div>
+            </div>
+            {session.internalNotes ? <p className="mt-4 border-t border-ink/10 pt-4 text-sm leading-6 text-ink/55"><span className="font-semibold text-ink/70">Nota interna:</span> {session.internalNotes}</p> : null}
+          </article>
+        ))}
+      </section>
+
+      <ConfirmationDialog
+        open={Boolean(deleting)}
+        title="Excluir esta sessão?"
+        description="A exclusão só será permitida se não existir nenhuma reserva vinculada. Sessões com histórico permanecem preservadas."
+        confirmLabel="Excluir sessão"
+        onClose={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+      />
+    </div>
+  );
+}

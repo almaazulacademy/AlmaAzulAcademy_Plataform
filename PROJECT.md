@@ -112,7 +112,7 @@ Experiências diferentes devem compartilhar contratos e componentes. Adicionar u
 | Pré-reserva e ciclo de vida | Implementado no código e na migration; aplicação em produção não confirmada |
 | InfinitePay | Camada implementada; credenciais e operação em produção não confirmadas |
 | Acompanhamento por CPF + código | Implementado no código; depende do banco configurado |
-| Painel administrativo | Planejado para a Sprint 4; rotas atuais são placeholders |
+| Painel administrativo | Implementado no código; exige migration, Supabase Auth e administrador ativo |
 
 ## Visão de longo prazo
 
