@@ -2,6 +2,20 @@
 
 Registro das mudanças confirmadas no histórico Git. O formato segue os princípios do [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), organizado por sprint em vez de versões publicadas.
 
+## Não publicado — compatibilidade do schema legado
+
+### Adicionado
+
+- Migration idempotente e não destrutiva para compatibilizar tabelas e enums legados com as Sprints 3 e 4.
+- Cópia operacional em `supabase/bootstrap` para o bootstrap manual anterior às migrations 001 e 002 neste banco específico.
+- Preservação explícita dos campos editoriais, IDs, relacionamentos e do snapshot legado `spots_available`.
+- Documentação da ordem especial de bootstrap, backup, validação e recuperação.
+
+### Estado
+
+- Alterações somente locais; nenhuma migration foi executada e nenhum ambiente Supabase foi alterado.
+- Aplicação depende de inventário remoto atualizado, backup e autorização explícita.
+
 ## Sprint 4 — painel administrativo MVP
 
 **Estado:** concluída no código; ativação externa ainda depende da migration, do Supabase Auth e do cadastro do primeiro administrador.

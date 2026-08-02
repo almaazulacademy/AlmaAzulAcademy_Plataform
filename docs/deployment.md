@@ -114,6 +114,26 @@ Não existem outros nomes consumidos pelo código. Se a InfinitePay ou outro pro
 
 ## Conectar e preparar o Supabase
 
+### Projeto com schema legado
+
+Não use o runner normal diretamente enquanto `202608010001_reservation_platform.sql` estiver pendente: ele ordena a 001 antes da migration de compatibilidade e repetirá a falha. Após backup e validação do inventário, execute o conteúdo revisado de `202608020001_legacy_schema_compatibility.sql` como uma única transação de bootstrap. Só então execute o processo normal, que aplicará 001, 002 e tornará a executar a compatibilidade sem efeitos adicionais. Não marque migrations como aplicadas sem comprovar todos os objetos correspondentes.
+
+Ordem operacional aprovada para este banco específico:
+
+1. realizar backup recuperável do projeto;
+2. salvar o inventário pré-migração, incluindo contagens, IDs, enums, colunas, constraints, funções, triggers, índices, policies, grants e cron;
+3. executar manualmente `supabase/bootstrap/legacy_schema_compatibility.sql` em uma única transação;
+4. validar enums, contagens, IDs preservados, relacionamentos e colunas canônicas;
+5. executar `202608010001_reservation_platform.sql`;
+6. executar `202608010002_admin_dashboard_mvp.sql`;
+7. executar `202608020001_legacy_schema_compatibility.sql` como migration 003, ou confirmar formalmente sua reaplicação idempotente pelo runner normal;
+8. cadastrar o primeiro administrador no Supabase Auth e em `admin_users`;
+9. testar o fluxo público, pagamentos, expiração, concorrência, RLS, login e operações administrativas.
+
+Não reutilize o arquivo de bootstrap sem obter um novo inventário do banco. A migration 003 permanece no histórico normal e não deve ser removida.
+
+Antes e depois, registre contagens e IDs de `experiences`, `sessions` e `reservations`, labels dos enums, colunas, constraints, funções, triggers, índices, policies, grants e jobs do cron. Qualquer erro deve abortar a transação. A recuperação é restaurar o backup/PITR em um ambiente separado, validar as contagens e só então decidir a troca; não faça rollback destrutivo improvisado em produção.
+
 1. Crie ou selecione o projeto correto no Supabase.
 2. Faça backup e confira o schema atual antes de aplicar qualquer migration.
 3. Revise [database.md](database.md), especialmente a compatibilidade com uma tabela `sessions` preexistente.

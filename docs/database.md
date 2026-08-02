@@ -8,6 +8,18 @@ O schema vem de `202608010001_reservation_platform.sql` e `202608010002_admin_da
 
 Não existe tabela `profiles`. A autorização administrativa usa `admin_users`, ligada diretamente a `auth.users`.
 
+## Compatibilidade com o schema legado
+
+O projeto Supabase existente contém versões legadas de `experiences`, `sessions`, `reservations`, `reservation_status` e `session_status`. A tentativa da migration `202608010001_reservation_platform.sql` falhou porque `CREATE TYPE` ignorou o tipo já existente, mas o restante do arquivo passou a usar labels novos.
+
+`202608020001_legacy_schema_compatibility.sql` prepara esse schema sem apagar tabelas, colunas, dados ou tipos. Os labels são renomeados no próprio enum: `pending` → `PRE_RESERVED`, `confirmed` → `CONFIRMED`, `expired` → `EXPIRED`, `cancelled` → `CANCELLED`; e `scheduled` → `OPEN`, `completed` → `CLOSED`, `cancelled` → `CANCELLED`. `completed` vira `CLOSED` porque representa uma sessão encerrada e não deve reabrir vendas.
+
+Campos editoriais legados são preservados. `summary`, `image_url` e `status` recebem projeções de `short_description`, `cover_image` e `active`. `spots_available` também permanece, mas é somente um snapshot legado: a fonte canônica é `available_spots`, calculada por capacidade menos confirmadas e pré-reservas ainda válidas.
+
+A migration é idempotente e também tolera uma instalação limpa. Se encontrar reservas legadas sem `cpf_hash`, interrompe a transação em vez de inventar dados pessoais. O inventário informado registra zero reservas; essa precondição deve ser reconfirmada imediatamente antes da aplicação.
+
+Para o banco legado específico, a cópia operacional está em `supabase/bootstrap/legacy_schema_compatibility.sql`. Seu corpo SQL é idêntico ao da migration 003, precedido apenas por instruções operacionais. A ordem obrigatória é: backup; inventário; bootstrap manual; validação; migration 001; migration 002; migration 003/reaplicação idempotente; primeiro administrador; testes completos.
+
 ## Extensões e tipos
 
 ### Extensões
@@ -219,6 +231,7 @@ Não há policy pública de leitura para `reservations` ou `payment_events`; pri
 | --- | --- |
 | `202608010001_reservation_platform.sql` | Schema completo de reservas, funções, RLS, seed da primeira experiência e cron |
 | `202608010002_admin_dashboard_mvp.sql` | Autorização administrativa, auditoria, configurações e RPCs operacionais |
+| `202608020001_legacy_schema_compatibility.sql` | Bootstrap idempotente e não destrutivo para o schema legado |
 
 ## RPCs administrativas
 

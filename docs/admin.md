@@ -4,6 +4,8 @@
 
 > **Estado:** implementado no código na Sprint 4. O ambiente validado não possuía `.env.local`, e a migration administrativa não foi aplicada por esta entrega. O uso real depende dos passos de ativação abaixo.
 
+> **Compatibilidade pendente:** o schema remoto informado é legado. A migration de compatibilidade foi preparada localmente, mas não foi executada. A migration administrativa 002 só deve ser aplicada depois do bootstrap compatível e da 001 concluída e validada.
+
 ## Objetivo
 
 Permitir que a equipe opere experiências, sessões e reservas sem acessar diretamente o dashboard do banco. O painel reutiliza as tabelas e as regras do motor público; não existe um segundo cálculo de capacidade.
@@ -45,8 +47,8 @@ Uma conta inativa ou ausente é rejeitada mesmo com email e senha válidos. A se
 
 ## Ativação inicial
 
-1. Faça backup e confirme que `202608010001_reservation_platform.sql` já foi aplicada.
-2. Revise e aplique `202608010002_admin_dashboard_mvp.sql` no mesmo projeto Supabase.
+1. No banco legado, conclua a ordem documentada em [deployment.md](deployment.md): backup, inventário, bootstrap manual, validação, migrations 001, 002 e 003.
+2. Confirme que as três migrations e todos os objetos administrativos foram validados.
 3. Crie a conta administrativa pelo fluxo seguro do Supabase Auth. Não insira senha por SQL.
 4. Autorize o UUID criado, substituindo os valores de exemplo:
 

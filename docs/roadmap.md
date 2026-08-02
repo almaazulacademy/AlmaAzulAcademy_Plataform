@@ -79,6 +79,15 @@ Objetivo entregue: painel administrativo MVP.
 
 Consulte [admin.md](admin.md). A operação real ainda depende da aplicação da migration administrativa, das variáveis do Supabase e do cadastro de um usuário autorizado.
 
+## Compatibilidade do banco — preparada no código, não aplicada
+
+- conflito entre enums legados e os labels das Sprints 3/4 diagnosticado;
+- migration idempotente e não destrutiva preparada;
+- registro e seis sessões existentes preservados por desenho;
+- `completed` mapeado para `CLOSED` e `spots_available` mantido apenas como legado;
+- backup, inventário remoto, bootstrap transacional e validação ponta a ponta ainda pendentes de autorização.
+- ordem operacional registrada: backup, inventário, bootstrap, validação, migrations 001/002/003, primeiro administrador e testes.
+
 ## Sprints futuras — planejadas
 
 Os itens abaixo são direções, sem prazo ou sequência garantida:
