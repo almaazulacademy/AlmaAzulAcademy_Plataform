@@ -1,62 +1,172 @@
 # Alma Azul Academy
 
-Plataforma oficial da Alma Azul Academy. A Imersão Paranoá é a primeira experiência de um catálogo preparado para receber novos formatos, como Remada da Lua Cheia, Sunset, aulas, Team Building e loja.
+Plataforma oficial de experiências da Alma Azul Academy. A Imersão Paranoá é a primeira experiência publicada de uma arquitetura preparada para novos formatos na água.
 
-## Plataforma
+## Status atual
 
-- Home institucional em `/`
-- Landing page da Imersão Paranoá em `/imersao-paranoa`
-- Placeholders de acesso em `/login` e `/admin`
-- Componentes reutilizáveis para navegação, seções, cards, galeria e FAQ
-- Catálogo de experiências orientado a dados em `lib/experiences.ts`
-- Sistema genérico de experiências, sessões e reservas
-- Pré-reservas atômicas com validade exata de 2 horas
-- Checkout InfinitePay desacoplado por `PaymentProvider`
-- Confirmação de pagamento por webhook com verificação server-to-server
-- Recuperação segura por CPF + código da reserva
-- Expiração automática via Supabase Cron
-- Acervo oficial da Alma Azul organizado em `public/images`
+| Área | Estado |
+| --- | --- |
+| Home e landing da Imersão Paranoá | Implementadas |
+| Galeria, FAQ e identidade responsiva | Implementadas |
+| Leitura de sessões e vagas | Implementada no código; exige Supabase configurado |
+| Pré-reserva por 2 horas | Implementada no código/migration |
+| Acompanhamento por CPF + código | Implementado no código/migration |
+| InfinitePay | Integração preparada; configuração e teste em produção não confirmados |
+| Painel administrativo | Planejado; `/login` e `/admin` são placeholders |
 
-O painel administrativo continua fora do escopo atual.
+Não presuma que reservas ou pagamentos estejam ativos em produção sem confirmar migration, credenciais, sessões, cron e configuração da InfinitePay.
 
-## Stack
+## Tecnologias
 
 - Next.js 15 com App Router
-- React 19 e TypeScript
+- React 19 e TypeScript estrito
 - Tailwind CSS
 - shadcn/ui e Radix UI
-- Supabase
+- Supabase/PostgreSQL
+- InfinitePay atrás de `PaymentProvider`
+- Vercel e GitHub
 
-## Desenvolvimento
+## Rotas principais
+
+| Rota | Finalidade |
+| --- | --- |
+| `/` | Home institucional |
+| `/imersao-paranoa` | Landing e próximas sessões |
+| `/reservar/[sessionId]` | Formulário e resumo da sessão |
+| `/acompanhar-reserva` | Recuperação segura por CPF + código |
+| `/pagamento/retorno` | Retorno e verificação do checkout |
+| `/login` | Placeholder de autenticação administrativa |
+| `/admin` | Placeholder do futuro painel |
+
+APIs server-side:
+
+- `POST /api/reservations`
+- `POST /api/reservations/lookup`
+- `POST /api/payments/infinitepay/webhook`
+
+## Instalação local
+
+```bash
+git clone https://github.com/almaazulacademy/Imers-o-Parano-LandPage.git
+cd Imers-o-Parano-LandPage
+pnpm install --frozen-lockfile
+cp .env.example .env.local
+pnpm dev
+```
+
+No PowerShell, use `Copy-Item .env.example .env.local`.
+
+Também é possível usar os scripts com npm:
 
 ```bash
 npm install
-cp .env.example .env.local
 npm run dev
 ```
 
-Para habilitar reservas, aplique as migrations em `supabase/migrations` e defina:
+Sem credenciais, as páginas públicas continuam disponíveis, mas sessões/reservas usam estados de configuração ausente.
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-NEXT_PUBLIC_SITE_URL=https://your-domain.com
-PAYMENT_PROVIDER=INFINITEPAY
-INFINITEPAY_HANDLE=your-infinite-tag
+## Variáveis de ambiente
+
+Use `.env.example` como referência. Nunca registre valores reais no Git.
+
+### Públicas
+
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+NEXT_PUBLIC_SITE_URL
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` é utilizada somente em Route Handlers e nunca é enviada ao navegador. Reservas e eventos de pagamento não possuem leitura pública direta.
+### Privadas
 
-## Banco e disponibilidade
+```text
+SUPABASE_SERVICE_ROLE_KEY
+PAYMENT_PROVIDER
+INFINITEPAY_HANDLE
+```
 
-`create_pre_reservation` serializa criações por sessão, expira retenções vencidas e calcula disponibilidade considerando somente `CONFIRMED` e `PRE_RESERVED` ainda válidas. A função `expire_pre_reservations` é idempotente e executada automaticamente a cada minuto pelo Supabase Cron.
+`SUPABASE_SERVICE_ROLE_KEY` deve existir somente em ambiente server-side. Consulte [docs/deployment.md](docs/deployment.md) para finalidade, ambientes e recuperação completa.
 
-Para uma nova experiência, basta criar o registro em `experiences`, associar suas linhas em `sessions` e renderizar `SessionsSection` com o novo slug. O fluxo de reserva e pagamento não precisa ser alterado.
+## Banco e reservas
 
-## Validação
+A única migration versionada é:
+
+```text
+supabase/migrations/202608010001_reservation_platform.sql
+```
+
+Ela define `experiences`, `sessions`, `reservations`, `payment_events`, RPCs, RLS, índices e o cron de expiração. Não aplique em produção sem backup e revisão do schema real.
+
+O cálculo de vagas é protegido no banco:
+
+```text
+capacidade - CONFIRMED - PRE_RESERVED ainda válida
+```
+
+`create_pre_reservation` bloqueia a sessão durante o cálculo para impedir overbooking. A retenção termina em 2 horas; a disponibilidade ignora retenções vencidas e o cron as marca como `EXPIRED`.
+
+## Scripts
+
+| Comando | Uso |
+| --- | --- |
+| `npm run dev` | Desenvolvimento local |
+| `npm run build` | Build de produção e validação do Next.js |
+| `npm run start` | Servidor sobre build existente |
+| `npm run lint` | Script legado de lint configurado no projeto |
+| `npm test` | Testes de validação com o runner do Node |
+
+Validação mínima antes de publicar:
 
 ```bash
 npm test
 npm run build
+git diff --check
 ```
+
+## Deploy
+
+O destino previsto é a Vercel. Quando o projeto Vercel está conectado a este repositório e acompanha `main`, um push pode iniciar deploy automático:
+
+```bash
+git push origin main
+```
+
+O push não comprova sozinho que o deployment terminou. Verifique o dashboard, logs, variáveis e domínio. O guia completo está em [docs/deployment.md](docs/deployment.md).
+
+## Documentação
+
+- [PROJECT.md](PROJECT.md) — visão e princípios do produto
+- [CHANGELOG.md](CHANGELOG.md) — histórico confirmado por sprint
+- [docs/architecture.md](docs/architecture.md) — arquitetura, rotas e componentes
+- [docs/database.md](docs/database.md) — schema, RPCs, RLS, capacidade e migrations
+- [docs/deployment.md](docs/deployment.md) — recuperação, ambientes e Vercel
+- [docs/roadmap.md](docs/roadmap.md) — entregas concluídas e planejadas
+- [docs/admin.md](docs/admin.md) — escopo planejado do painel
+- [docs/payments.md](docs/payments.md) — pré-reserva, InfinitePay e pendências
+
+## Contribuição
+
+1. Atualize a branch e confirme o remote.
+2. Mantenha cada alteração dentro do escopo aprovado.
+3. Não crie regras específicas da Imersão Paranoá quando o domínio puder atender qualquer experiência.
+4. Preserve regras críticas no banco/servidor.
+5. Evite dependências desnecessárias e duplicação.
+6. Atualize documentação e testes quando contratos mudarem.
+7. Execute testes e build.
+8. Revise `git status` e `git diff` antes do commit.
+9. Nunca use force push em `main`.
+
+## Segurança
+
+- Não commite `.env.local`, chaves, tokens, senhas, CPFs ou payloads reais.
+- Não exponha service role no navegador.
+- Não permita recuperação apenas por CPF.
+- Não calcule disponibilidade somente no frontend.
+- Não confirme pagamento sem consulta server-to-server e validação do valor.
+- Não crie acesso administrativo antes de implementar autenticação e autorização reais.
+- Faça backup e revise RLS/grants antes de migrations.
+
+## Roadmap imediato
+
+A Sprint 4 está planejada para o painel administrativo MVP, mas não foi iniciada. Consulte [docs/roadmap.md](docs/roadmap.md) e [docs/admin.md](docs/admin.md).
