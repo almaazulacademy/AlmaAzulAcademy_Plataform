@@ -124,13 +124,21 @@ Ordem operacional aprovada para este banco específico:
 2. salvar o inventário pré-migração, incluindo contagens, IDs, enums, colunas, constraints, funções, triggers, índices, policies, grants e cron;
 3. executar manualmente `supabase/bootstrap/legacy_schema_compatibility.sql` em uma única transação;
 4. validar enums, contagens, IDs preservados, relacionamentos e colunas canônicas;
-5. executar `202608010001_reservation_platform.sql`;
+5. executar a cópia operacional `supabase/bootstrap/001_reservation_platform_after_legacy_bootstrap.sql`; não executar novamente a 001 histórica neste banco legado;
 6. executar `202608010002_admin_dashboard_mvp.sql`;
 7. executar `202608020001_legacy_schema_compatibility.sql` como migration 003, ou confirmar formalmente sua reaplicação idempotente pelo runner normal;
 8. cadastrar o primeiro administrador no Supabase Auth e em `admin_users`;
 9. testar o fluxo público, pagamentos, expiração, concorrência, RLS, login e operações administrativas.
 
 Não reutilize o arquivo de bootstrap sem obter um novo inventário do banco. A migration 003 permanece no histórico normal e não deve ser removida.
+
+### Recuperação da tentativa parcial da migration 001
+
+A 001 histórica não deve ser editada nem repetida manualmente neste banco: seu `INSERT ... ON CONFLICT` falha antes do conflito porque a tabela legada possui colunas editoriais `NOT NULL`. Use a cópia operacional somente depois de salvar o inventário SQL comentado no cabeçalho do próprio arquivo.
+
+A cópia operacional mantém as definições da 001, mas troca o seed por um `UPDATE` do slug existente, preservando seu UUID e campos editoriais. O `INSERT` de contingência só ocorre quando o slug não existe e fornece valores para todas as colunas legadas obrigatórias conhecidas. O cron só é criado quando ausente; definição conflitante ou duplicada interrompe a transação para revisão manual.
+
+Execute o arquivo completo como uma única transação pelo processo aprovado da equipe. Se houver erro, interrompa: não avance para a 002, não marque a migration como aplicada e não remova objetos manualmente. Compare o inventário pós-erro com o inventário prévio e com as consultas de verificação do arquivo operacional antes de decidir qualquer recuperação.
 
 Antes e depois, registre contagens e IDs de `experiences`, `sessions` e `reservations`, labels dos enums, colunas, constraints, funções, triggers, índices, policies, grants e jobs do cron. Qualquer erro deve abortar a transação. A recuperação é restaurar o backup/PITR em um ambiente separado, validar as contagens e só então decidir a troca; não faça rollback destrutivo improvisado em produção.
 
