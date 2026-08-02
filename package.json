@@ -2,11 +2,13 @@
   "name": "alma-azul-academy",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --experimental-strip-types --test tests/reservation-validation.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",

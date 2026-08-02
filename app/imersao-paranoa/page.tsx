@@ -244,10 +244,10 @@ export default function ImersaoParanoaPage() {
             <div className="mb-12 max-w-3xl sm:mb-16">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sand">Escolha seu dia</p>
               <h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.055em] sm:text-7xl">Próximas datas</h2>
-              <p className="mt-7 max-w-xl text-lg leading-8 text-white/65">Confira as sessões futuras e abertas. Nesta etapa, exibimos disponibilidade em tempo real sem realizar reservas.</p>
+              <p className="mt-7 max-w-xl text-lg leading-8 text-white/65">Confira as sessões futuras e abertas, escolha sua data e garanta suas vagas com pagamento seguro.</p>
             </div>
             <Suspense fallback={<SessionsLoading />}>
-              <SessionsSection />
+              <SessionsSection experienceSlug="imersao-paranoa" />
             </Suspense>
           </div>
         </div>

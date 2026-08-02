@@ -12,6 +12,7 @@ const links = [
   { label: "Experiências", href: "/#experiencias" },
   { label: "Sobre", href: "/#sobre" },
   { label: "Imersão Paranoá", href: "/imersao-paranoa" },
+  { label: "Acompanhar reserva", href: "/acompanhar-reserva" },
 ];
 
 type NavbarProps = {
