@@ -31,17 +31,34 @@ export function Navbar({ overlay = false }: NavbarProps) {
   }, []);
 
   useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
+    if (!open) return;
+
+    const scrollY = window.scrollY;
+    const previousStyles = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+    };
+
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+
     return () => {
-      document.body.style.overflow = "";
+      Object.assign(document.body.style, previousStyles);
+      window.scrollTo(0, scrollY);
     };
   }, [open]);
 
   return (
     <header
       className={cn(
-        "fixed left-0 top-0 z-50 w-full transition-all duration-500",
-        overlay && !scrolled && !open
+        "fixed left-0 top-0 z-[100] w-full transition-all duration-500",
+        open
+          ? "bg-transparent text-ink"
+          : overlay && !scrolled
           ? "bg-transparent text-white"
           : "border-b border-ink/5 bg-white/85 text-ink shadow-[0_10px_35px_rgba(20,49,44,0.08)] backdrop-blur-xl",
       )}
@@ -105,9 +122,12 @@ export function Navbar({ overlay = false }: NavbarProps) {
 
       <div
         className={cn(
-          "fixed inset-0 z-40 flex flex-col bg-paper px-5 pb-10 pt-32 text-ink transition-all duration-300 lg:hidden",
-          open ? "visible translate-y-0 opacity-100" : "invisible -translate-y-4 opacity-0",
+          "fixed inset-0 z-40 flex min-h-[100dvh] flex-col bg-paper px-5 pb-10 pt-32 text-ink transition-all duration-300 lg:hidden",
+          open
+            ? "visible pointer-events-auto translate-y-0 opacity-100"
+            : "invisible pointer-events-none -translate-y-4 opacity-0",
         )}
+        aria-hidden={!open}
       >
         <nav className="flex flex-col border-t border-ink/10">
           {links.map((link) => (
