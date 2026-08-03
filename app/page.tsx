@@ -7,7 +7,7 @@ import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { Section } from "@/components/section";
 import { buttonVariants } from "@/components/ui/button";
-import { experiences } from "@/lib/experiences";
+import { listPublishedExperiences } from "@/lib/editorial/data";
 
 const futureFormats = [
   { label: "Lua Cheia", icon: Moon },
@@ -17,8 +17,20 @@ const futureFormats = [
   { label: "Loja", icon: Store },
 ];
 
-export default function HomePage() {
-  const [featured, ...upcoming] = experiences;
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const published = await listPublishedExperiences();
+  const cards = published.map((experience) => ({
+    title: experience.title,
+    eyebrow: experience.editorial.hero.eyebrow,
+    summary: experience.summary,
+    location: experience.editorial.hero.details[0] ?? "",
+    image: experience.imageUrl ?? experience.editorial.hero.image.src,
+    imageAlt: experience.editorial.hero.image.alt,
+    href: `/experiencias/${experience.slug}`,
+  }));
+  const [featured, ...upcoming] = cards;
 
   return (
     <main>
@@ -47,7 +59,7 @@ export default function HomePage() {
               Experiências para sair do automático e encontrar um novo jeito de estar presente.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link href="/imersao-paranoa#reservas" className={buttonVariants({ variant: "light", size: "lg" })}>
+              <Link href={`${featured.href}#reservas`} className={buttonVariants({ variant: "light", size: "lg" })}>
                 Reservar minha vaga
                 <ArrowRight className="size-4" />
               </Link>
@@ -91,7 +103,7 @@ export default function HomePage() {
             <p className="mt-8 text-lg leading-8 text-ink/65">
               A Alma Azul cria experiências que aproximam pessoas, movimento e natureza. A água é o caminho — presença é o destino.
             </p>
-            <Link href="/imersao-paranoa" className="mt-8 inline-flex items-center gap-2 font-semibold text-forest">
+            <Link href={featured.href} className="mt-8 inline-flex items-center gap-2 font-semibold text-forest">
               Descobrir a primeira experiência <ArrowRight className="size-4" />
             </Link>
           </div>
@@ -107,7 +119,7 @@ export default function HomePage() {
       >
         <div className="grid gap-5 lg:grid-cols-2">
           {upcoming.map((experience) => (
-            <ExperienceCard key={experience.slug} experience={experience} />
+            <ExperienceCard key={experience.href} experience={experience} />
           ))}
         </div>
         <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -135,8 +147,8 @@ export default function HomePage() {
             <h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.05em] sm:text-7xl">
               Seu próximo mergulho começa aqui.
             </h2>
-            <Link href="/imersao-paranoa" className={buttonVariants({ variant: "light", size: "lg", className: "mt-9" })}>
-              Explorar Imersão Paranoá
+            <Link href={featured.href} className={buttonVariants({ variant: "light", size: "lg", className: "mt-9" })}>
+              Explorar {featured.title}
             </Link>
           </div>
         </div>

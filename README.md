@@ -148,6 +148,7 @@ O push não comprova sozinho que o deployment terminou. Verifique o dashboard, l
 - [CHANGELOG.md](CHANGELOG.md) — histórico confirmado por sprint
 - [docs/architecture.md](docs/architecture.md) — arquitetura, rotas e componentes
 - [docs/database.md](docs/database.md) — schema, RPCs, RLS, capacidade e migrations
+- [docs/editorial-experiences.md](docs/editorial-experiences.md) — contrato editorial, rotas dinâmicas, preview e ativação
 - [docs/deployment.md](docs/deployment.md) — recuperação, ambientes e Vercel
 - [docs/roadmap.md](docs/roadmap.md) — entregas concluídas e planejadas
 - [docs/admin.md](docs/admin.md) — autenticação, operação e ativação do painel

@@ -1,5 +1,15 @@
 # Changelog
 
+## Sprint 5.2 — Experiências dinâmicas
+
+- Adiciona contrato editorial JSONB versionado e validado no servidor.
+- Cria `/experiencias/[slug]`, metadata dinâmica e 404 para conteúdo não publicado.
+- Migra fielmente a Imersão Paranoá para o renderer compartilhado, preservando `/imersao-paranoa`.
+- Faz a Home consumir somente experiências publicadas e ordenadas pelo Supabase.
+- Amplia o painel com edição editorial completa, validação de publicação e preview protegido.
+- Mantém imagens em `public/images` ou HTTPS, sem Supabase Storage.
+- Preserva motor de reservas, pagamentos, autenticação, schema legado e migrations históricas.
+
 Registro das mudanças confirmadas no histórico Git. O formato segue os princípios do [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), organizado por sprint em vez de versões publicadas.
 
 ## Não publicado — compatibilidade do schema legado

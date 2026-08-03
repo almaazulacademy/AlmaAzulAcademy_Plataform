@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminExperience } from "@/lib/admin/data";
 import { adminMutationError, authorizeAdminApi, isSameOriginRequest } from "@/lib/admin/http";
-import { slugify, validateAdminExperienceInput } from "@/lib/admin/validation";
+import { isReservedExperienceSlug, slugify, validateAdminExperienceInput } from "@/lib/admin/validation";
 
 export async function POST(request: Request) {
   if (!isSameOriginRequest(request)) {
@@ -16,6 +16,7 @@ export async function POST(request: Request) {
   if (!validation.success) return NextResponse.json({ errors: validation.errors }, { status: 400 });
   const slug = slugify(validation.data.title);
   if (!slug) return NextResponse.json({ message: "Não foi possível gerar o identificador da experiência." }, { status: 400 });
+  if (isReservedExperienceSlug(slug)) return NextResponse.json({ message: "Esse identificador é reservado pela plataforma." }, { status: 409 });
 
   try {
     const id = await createAdminExperience(authorization.context.profile.userId, slug, validation.data);

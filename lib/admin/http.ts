@@ -74,6 +74,15 @@ export function adminMutationError(error: unknown) {
   if (message.includes("duplicate key")) {
     return { status: 409, message: "Já existe um registro com esses dados." };
   }
+  if (message.includes("EXPERIENCE_SLUG_EXISTS")) {
+    return { status: 409, message: "Já existe uma experiência com esse identificador." };
+  }
+  if (message.includes("RESERVED_EXPERIENCE_SLUG")) {
+    return { status: 409, message: "Esse identificador é reservado pela plataforma." };
+  }
+  if (message.includes("INCOMPLETE_EDITORIAL_CONTENT")) {
+    return { status: 400, message: "Complete o conteúdo editorial obrigatório antes de publicar." };
+  }
   if (message.includes("ADMIN_FORBIDDEN")) {
     return { status: 403, message: "Seu acesso administrativo não está ativo." };
   }

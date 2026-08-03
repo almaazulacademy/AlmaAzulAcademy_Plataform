@@ -14,6 +14,7 @@ import type {
 } from "@/lib/admin/types";
 import type { ReservationStatus } from "@/lib/reservations/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
+import { emptyExperienceEditorial, validateExperienceEditorial } from "@/lib/editorial/experience";
 
 type Row = Record<string, unknown>;
 
@@ -125,7 +126,9 @@ export async function getAdminDashboard(actorUserId: string): Promise<AdminDashb
 export async function listAdminExperiences(actorUserId: string): Promise<AdminExperience[]> {
   const result = await adminClient().rpc("admin_list_experiences", { p_actor_id: actorUserId });
   if (result.error) throw new Error(result.error.message);
-  return asRows(result.data).map((row) => ({
+  return asRows(result.data).map((row) => {
+    const editorial = validateExperienceEditorial(row.editorial_content, false);
+    return ({
     id: asString(row.id),
     slug: asString(row.slug),
     title: asString(row.title),
@@ -137,10 +140,11 @@ export async function listAdminExperiences(actorUserId: string): Promise<AdminEx
     status: asString(row.status) as ExperienceStatus,
     imageUrl: nullableString(row.image_url),
     displayOrder: asNumber(row.display_order),
+    editorialContent: editorial.success ? editorial.data : emptyExperienceEditorial(),
     sessionsCount: asNumber(row.sessions_count),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
-  }));
+  }); });
 }
 
 export async function listAdminSessions(actorUserId: string): Promise<AdminSession[]> {
@@ -217,6 +221,7 @@ export async function createAdminExperience(actorUserId: string, slug: string, i
     p_duration_minutes: input.durationMinutes,
     p_price_cents: input.priceCents,
     p_default_capacity: input.defaultCapacity,
+    p_editorial_content: input.editorialContent,
   });
   if (result.error) throw new Error(result.error.message);
   return asString(result.data);
@@ -235,6 +240,7 @@ export async function updateAdminExperience(actorUserId: string, experienceId: s
     p_duration_minutes: input.durationMinutes,
     p_price_cents: input.priceCents,
     p_default_capacity: input.defaultCapacity,
+    p_editorial_content: input.editorialContent,
   });
   if (result.error) throw new Error(result.error.message);
   return asBoolean(result.data);

@@ -1,4 +1,5 @@
-import type { ValidationResult } from "@/lib/reservations/validation";
+import type { ValidationResult } from "../reservations/validation.ts";
+import { emptyExperienceEditorial, validateExperienceEditorial } from "../editorial/experience.ts";
 import {
   EXPERIENCE_STATUSES,
   SESSION_STATUSES,
@@ -9,6 +10,7 @@ import {
 } from "./types.ts";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const RESERVED_EXPERIENCE_SLUGS = new Set(["admin", "api", "login", "reservar", "pagamento", "acompanhar-reserva", "experiencias", "imersao-paranoa"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -93,6 +95,14 @@ export function validateAdminExperienceInput(value: unknown): ValidationResult<A
   const imageUrl = String(value.imageUrl ?? "").trim();
   const displayOrder = typeof value.displayOrder === "number" ? value.displayOrder : Number.NaN;
   const errors: Record<string, string> = {};
+  let editorialValue: unknown = value.editorialContent ?? (status === "PUBLISHED" ? undefined : emptyExperienceEditorial());
+  if (typeof editorialValue === "string") {
+    try {
+      editorialValue = JSON.parse(editorialValue);
+    } catch {
+      errors.editorialContent = "O conteúdo editorial não contém JSON válido.";
+    }
+  }
 
   if (title.length < 3 || title.length > 120) errors.title = "Use entre 3 e 120 caracteres.";
   if (summary.length < 10 || summary.length > 300) errors.summary = "Use entre 10 e 300 caracteres.";
@@ -108,10 +118,16 @@ export function validateAdminExperienceInput(value: unknown): ValidationResult<A
   if (!Number.isInteger(displayOrder) || displayOrder < 0 || displayOrder > 10_000) {
     errors.displayOrder = "Informe uma ordem entre 0 e 10000.";
   }
+  const editorial = validateExperienceEditorial(editorialValue, status === "PUBLISHED");
+  if (!editorial.success) errors.editorialContent = editorial.errors.join(" ");
 
   return Object.keys(errors).length
     ? { success: false, errors }
-    : { success: true, data: { title, summary, description, durationMinutes, priceCents, defaultCapacity, status, imageUrl, displayOrder } };
+    : { success: true, data: { title, summary, description, durationMinutes, priceCents, defaultCapacity, status, imageUrl, displayOrder, editorialContent: editorial.success ? editorial.data : editorialValue as never } };
+}
+
+export function isReservedExperienceSlug(slug: string) {
+  return RESERVED_EXPERIENCE_SLUGS.has(slug);
 }
 
 export function validateReservationAdminAction(value: unknown): ValidationResult<{

@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { Eye, EyeOff, ImageIcon, Pencil, Plus, Save, X } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, ImageIcon, Pencil, Plus, Save, X } from "lucide-react";
 
 import { fieldErrorClass, inputClass, labelClass, textareaClass } from "@/components/admin/form-styles";
 import { AdminPageHeader } from "@/components/admin/page-header";
@@ -11,6 +12,7 @@ import { AdminEmptyState } from "@/components/admin/states";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
 import type { AdminExperience, ExperienceStatus } from "@/lib/admin/types";
+import { emptyExperienceEditorial } from "@/lib/editorial/experience";
 
 type FormState = {
   title: string;
@@ -22,11 +24,12 @@ type FormState = {
   imageUrl: string;
   displayOrder: string;
   status: ExperienceStatus;
+  editorialJson: string;
 };
 
 type ApiPayload = { message?: string; errors?: Record<string, string> };
 
-const emptyForm: FormState = { title: "", summary: "", description: "", durationMinutes: "90", price: "", defaultCapacity: "15", imageUrl: "", displayOrder: "0", status: "DRAFT" };
+const emptyForm: FormState = { title: "", summary: "", description: "", durationMinutes: "90", price: "", defaultCapacity: "15", imageUrl: "", displayOrder: "0", status: "DRAFT", editorialJson: JSON.stringify(emptyExperienceEditorial(), null, 2) };
 
 function fromExperience(experience: AdminExperience): FormState {
   return {
@@ -39,6 +42,7 @@ function fromExperience(experience: AdminExperience): FormState {
     imageUrl: experience.imageUrl ?? "",
     displayOrder: String(experience.displayOrder),
     status: experience.status,
+    editorialJson: JSON.stringify(experience.editorialContent, null, 2),
   };
 }
 
@@ -76,6 +80,7 @@ export function ExperiencesManager({ experiences }: { experiences: AdminExperien
     imageUrl: state.imageUrl,
     displayOrder: Number(state.displayOrder),
     status,
+    editorialContent: state.editorialJson,
   });
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -114,7 +119,7 @@ export function ExperiencesManager({ experiences }: { experiences: AdminExperien
         body: JSON.stringify(apiInput(fromExperience(experience), status)),
       });
       const payload = await response.json().catch(() => ({})) as ApiPayload;
-      if (!response.ok) throw new Error(payload.message ?? "Não foi possível alterar o status.");
+      if (!response.ok) throw new Error(payload.errors?.editorialContent ?? payload.message ?? "Não foi possível alterar o status.");
       notify({ title: status === "PUBLISHED" ? "Experiência ativada" : "Experiência desativada" });
       router.refresh();
     } catch (error) {
@@ -127,7 +132,7 @@ export function ExperiencesManager({ experiences }: { experiences: AdminExperien
       <AdminPageHeader
         eyebrow="Catálogo"
         title="Experiências"
-        description="Gerencie o cadastro comum usado por sessões e reservas. A landing pública continua separada deste painel."
+        description="Gerencie o cadastro, o conteúdo completo da landing e a publicação de cada experiência."
         action={<Button type="button" onClick={openNew}><Plus className="size-4" /> Nova experiência</Button>}
       />
 
@@ -147,6 +152,7 @@ export function ExperiencesManager({ experiences }: { experiences: AdminExperien
             <label className="block"><span className={labelClass}>Capacidade padrão</span><input type="number" min="1" max="500" className={inputClass} value={form.defaultCapacity} onChange={(event) => setForm({ ...form, defaultCapacity: event.target.value })} disabled={loading} />{errors.defaultCapacity ? <span className={fieldErrorClass}>{errors.defaultCapacity}</span> : null}</label>
             <label className="block"><span className={labelClass}>Ordem de exibição</span><input type="number" min="0" max="10000" className={inputClass} value={form.displayOrder} onChange={(event) => setForm({ ...form, displayOrder: event.target.value })} disabled={loading} />{errors.displayOrder ? <span className={fieldErrorClass}>{errors.displayOrder}</span> : null}</label>
             <label className="block"><span className={labelClass}>Status</span><select className={inputClass} value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as ExperienceStatus })} disabled={loading}><option value="DRAFT">Rascunho</option><option value="PUBLISHED">Ativa</option><option value="ARCHIVED">Inativa</option></select>{errors.status ? <span className={fieldErrorClass}>{errors.status}</span> : null}</label>
+            <label className="block md:col-span-2"><span className={labelClass}>Conteúdo editorial versionado (JSON)</span><textarea className={`${textareaClass} min-h-[32rem] font-mono text-xs`} value={form.editorialJson} onChange={(event) => setForm({ ...form, editorialJson: event.target.value })} spellCheck={false} disabled={loading} /><span className="mt-2 block text-xs leading-5 text-ink/45">Edite Hero, CTAs, informações rápidas, Sobre, galeria, etapas, itens inclusos, o que levar, restrições, FAQ, reservas, SEO, textos alternativos e créditos. A ordem dos arrays define a ordem de exibição.</span>{errors.editorialContent ? <span className={fieldErrorClass}>{errors.editorialContent}</span> : null}</label>
             {errors.form ? <p className="md:col-span-2 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{errors.form}</p> : null}
             <div className="flex flex-col-reverse gap-3 md:col-span-2 md:flex-row md:justify-end"><Button type="button" variant="ghost" onClick={() => setFormOpen(false)} disabled={loading}>Cancelar</Button><Button type="submit" disabled={loading}><Save className="size-4" /> {loading ? "Salvando..." : "Salvar experiência"}</Button></div>
           </form>
@@ -161,7 +167,7 @@ export function ExperiencesManager({ experiences }: { experiences: AdminExperien
             <p className="mt-2 text-xs font-medium text-lake">/{experience.slug}</p>
             <p className="mt-4 min-h-12 text-sm leading-6 text-ink/55">{experience.summary}</p>
             <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 border-t border-ink/10 pt-4 text-xs text-ink/50"><span>Ordem {experience.displayOrder}</span><span>{experience.sessionsCount} sessões</span><span>{experience.durationMinutes} min</span><span>{experience.defaultCapacity} vagas</span><span>{experience.imageUrl ? "Imagem definida" : "Sem imagem"}</span></div>
-            <div className="mt-5 flex flex-wrap gap-2"><Button type="button" size="sm" variant="ghost" onClick={() => openEdit(experience)}><Pencil className="size-4" /> Editar</Button><Button type="button" size="sm" variant="ghost" onClick={() => toggleStatus(experience)}>{experience.status === "PUBLISHED" ? <EyeOff className="size-4" /> : <Eye className="size-4" />}{experience.status === "PUBLISHED" ? "Desativar" : "Ativar"}</Button></div>
+            <div className="mt-5 flex flex-wrap gap-2"><Button type="button" size="sm" variant="ghost" onClick={() => openEdit(experience)}><Pencil className="size-4" /> Editar</Button><Link href={`/preview/experiencias/${experience.id}`} className="inline-flex h-9 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold text-forest hover:bg-mist"><ExternalLink className="size-4" /> Preview</Link><Button type="button" size="sm" variant="ghost" onClick={() => toggleStatus(experience)}>{experience.status === "PUBLISHED" ? <EyeOff className="size-4" /> : <Eye className="size-4" />}{experience.status === "PUBLISHED" ? "Desativar" : "Ativar"}</Button></div>
           </article>
         ))}
       </section>

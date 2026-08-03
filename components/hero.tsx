@@ -1,8 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowDown, ArrowRight } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
+import { EditorialImage } from "@/components/editorial-image";
 import { cn } from "@/lib/utils";
 
 type HeroProps = {
@@ -10,6 +10,8 @@ type HeroProps = {
   title: string;
   description: string;
   image: string;
+  imageAlt?: string;
+  imageCredit?: string;
   primaryLabel: string;
   primaryHref: string;
   secondaryLabel?: string;
@@ -23,6 +25,8 @@ export function Hero({
   title,
   description,
   image,
+  imageAlt = "",
+  imageCredit,
   primaryLabel,
   primaryHref,
   secondaryLabel,
@@ -38,13 +42,12 @@ export function Hero({
         immersive ? "h-[100svh] min-h-[700px]" : "h-[92svh]",
       )}
     >
-      <Image
+      <EditorialImage
         src={image}
-        alt=""
-        fill
+        alt={imageAlt}
         priority
         sizes="100vw"
-        className="animate-drift object-cover"
+        className="absolute inset-0 h-full w-full animate-drift object-cover"
       />
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,28,25,0.82)_0%,rgba(8,28,25,0.45)_50%,rgba(8,28,25,0.12)_100%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(8,28,25,0.52)_0%,transparent_45%)]" />
@@ -95,6 +98,7 @@ export function Hero({
       >
         <ArrowDown className="size-4" />
       </Link>
+      {imageCredit ? <p className="absolute bottom-3 left-5 z-10 text-xs text-white/55">{imageCredit}</p> : null}
     </section>
   );
 }

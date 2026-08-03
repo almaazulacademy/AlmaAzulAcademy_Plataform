@@ -1,4 +1,5 @@
 import type { ReservationStatus } from "@/lib/reservations/types";
+import type { ExperienceEditorial } from "@/lib/editorial/experience";
 
 export const SESSION_STATUSES = ["OPEN", "CLOSED", "CANCELLED"] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
@@ -57,6 +58,7 @@ export type AdminExperience = {
   status: ExperienceStatus;
   imageUrl: string | null;
   displayOrder: number;
+  editorialContent: ExperienceEditorial;
   sessionsCount: number;
   createdAt: string;
   updatedAt: string;
@@ -153,4 +155,5 @@ export type AdminExperienceInput = {
   status: ExperienceStatus;
   imageUrl: string;
   displayOrder: number;
+  editorialContent: ExperienceEditorial;
 };

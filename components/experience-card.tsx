@@ -1,11 +1,12 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
-import type { Experience } from "@/lib/experiences";
+import { EditorialImage } from "@/components/editorial-image";
 import { cn } from "@/lib/utils";
 
-export function ExperienceCard({ experience, featured = false }: { experience: Experience; featured?: boolean }) {
+export type ExperienceCardData = { title: string; eyebrow: string; summary: string; location: string; image: string; imageAlt: string; href: string };
+
+export function ExperienceCard({ experience, featured = false }: { experience: ExperienceCardData; featured?: boolean }) {
   return (
     <Link
       href={experience.href}
@@ -14,12 +15,11 @@ export function ExperienceCard({ experience, featured = false }: { experience: E
         featured && "min-h-[600px] lg:min-h-[680px]",
       )}
     >
-      <Image
+      <EditorialImage
         src={experience.image}
-        alt={experience.title}
-        fill
+        alt={experience.imageAlt}
         sizes={featured ? "(min-width: 1024px) 90vw, 100vw" : "(min-width: 768px) 50vw, 100vw"}
-        className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035]"
+        className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035]"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/20 to-transparent" />
       <div className="relative mt-auto flex w-full items-end justify-between gap-6 p-7 sm:p-9 lg:p-11">
