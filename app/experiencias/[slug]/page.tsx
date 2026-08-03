@@ -12,11 +12,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const experience = await getPublishedExperience(slug);
   if (!experience) return { title: "Experiência não encontrada", robots: { index: false, follow: false } };
+  const seoTitle = experience.editorial.seo.title;
   return {
-    title: experience.editorial.seo.title,
+    title: seoTitle.includes("Alma Azul Academy") ? { absolute: seoTitle } : seoTitle,
     description: experience.editorial.seo.description,
+    alternates: { canonical: `/experiencias/${experience.slug}` },
     openGraph: {
-      title: experience.editorial.seo.title,
+      title: seoTitle,
       description: experience.editorial.seo.description,
       images: [experience.editorial.hero.image.src],
       type: "website",

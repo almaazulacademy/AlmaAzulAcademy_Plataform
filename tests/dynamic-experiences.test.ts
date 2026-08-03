@@ -115,7 +115,7 @@ test("Imersão preserva conteúdo e as duas rotas usam o mesmo renderer", () => 
   assert.match(dynamic, /ExperienceLanding/);
   assert.equal(imersaoParanoaEditorial.about.paragraphs[0], "Uma experiência de 1h30 navegando pelo Lago Paranoá por um dos lugares mais preservados e belos de Brasília: o Córrego do Torto.");
   assert.equal(imersaoParanoaEditorial.gallery?.images.length, 6);
-  assert.equal(imersaoParanoaEditorial.faq?.items.length, 5);
+  assert.equal(imersaoParanoaEditorial.faq?.items.length, 1);
 });
 
 test("renderer mantém breakpoints para mobile, tablet e desktop e aceita seções opcionais", () => {
@@ -124,5 +124,5 @@ test("renderer mantém breakpoints para mobile, tablet e desktop e aceita seçõ
   assert.match(landing, /lg:grid-cols-3/);
   assert.match(landing, /content\.gallery \?/);
   assert.match(landing, /content\.steps \?/);
-  assert.match(landing, /content\.faq \?/);
+  assert.match(landing, /resolveExperienceFaq\(content\.faq\)/);
 });

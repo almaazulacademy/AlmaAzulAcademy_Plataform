@@ -66,11 +66,7 @@ export const imersaoParanoaEditorial: ExperienceEditorial = {
     title: "Antes de entrar na água.",
     locationLabel: "Brasília · Distrito Federal",
     items: [
-      { question: "Preciso ter experiência com canoa?", answer: "Não. A experiência é conduzida pela equipe Alma Azul e começa com orientações sobre remada e segurança. O percurso foi pensado para receber também quem está começando." },
-      { question: "Preciso saber nadar?", answer: "O uso do colete salva-vidas é parte da experiência. As orientações específicas de participação e segurança serão confirmadas no momento da reserva, em uma próxima etapa da plataforma." },
-      { question: "O que devo levar?", answer: "Roupas leves que possam molhar, proteção solar, garrafa de água e uma troca de roupa. A lista completa será enviada antes de cada edição." },
       { question: "Quanto tempo dura a experiência?", answer: "A experiência dura aproximadamente 1h30. O horário exato e as informações do encontro aparecem em cada sessão disponível." },
-      { question: "Quando as reservas serão abertas?", answer: "As próximas sessões abertas aparecem automaticamente na seção Próximas datas. A reserva online será habilitada em uma etapa futura." },
     ],
   },
   reservations: {

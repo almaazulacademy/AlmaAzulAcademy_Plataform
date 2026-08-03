@@ -86,6 +86,13 @@ export default async function HomePage() {
         tone="paper"
       >
         <ExperienceCard experience={featured} featured />
+        {upcoming.length ? (
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            {upcoming.map((experience) => (
+              <ExperienceCard key={experience.href} experience={experience} />
+            ))}
+          </div>
+        ) : null}
       </Section>
 
       <section id="sobre" className="bg-white py-20 sm:py-28 lg:py-36">
@@ -121,11 +128,6 @@ export default async function HomePage() {
         description="A Imersão Paranoá abre o caminho. Novos formatos serão lançados aos poucos."
         tone="mist"
       >
-        <div className="grid gap-5 lg:grid-cols-2">
-          {upcoming.map((experience) => (
-            <ExperienceCard key={experience.href} experience={experience} />
-          ))}
-        </div>
         <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {futureFormats.map(({ label, icon: Icon }) => (
             <div key={label} className="flex min-h-36 flex-col justify-between rounded-3xl border border-ink/10 bg-white/65 p-5">

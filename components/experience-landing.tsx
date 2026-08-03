@@ -11,11 +11,13 @@ import { Navbar } from "@/components/layout/navbar";
 import { Section } from "@/components/section";
 import { SessionsLoading, SessionsSection } from "@/components/sessions-section";
 import type { PublicExperience } from "@/lib/editorial/experience";
+import { resolveExperienceFaq } from "@/lib/editorial/faq";
 
 const icons: Record<string, LucideIcon> = { Compass, Droplets, LifeBuoy, ShieldCheck, Sparkles };
 
 export function ExperienceLanding({ experience }: { experience: PublicExperience }) {
   const content = experience.editorial;
+  const faq = resolveExperienceFaq(content.faq);
   return (
     <main>
       <Navbar overlay />
@@ -71,7 +73,7 @@ export function ExperienceLanding({ experience }: { experience: PublicExperience
 
       {content.whatToBring || content.restrictions ? <Section tone="mist"><div className="grid gap-8 lg:grid-cols-2">{[content.whatToBring, content.restrictions].filter(Boolean).map((section) => section ? <div key={section.title} className="rounded-3xl bg-white p-7 sm:p-9"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-lake">{section.eyebrow}</p><h2 className="mt-4 text-3xl font-medium">{section.title}</h2><ul className="mt-6 space-y-3 text-ink/65">{section.items.map((item) => <li key={item}>• {item}</li>)}</ul></div> : null)}</div></Section> : null}
 
-      {content.faq ? <section className="bg-paper py-20 sm:py-28 lg:py-36"><div className="container grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:gap-24"><div><p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-lake">{content.faq.eyebrow}</p><h2 className="text-balance text-4xl font-medium leading-[1.02] tracking-[-0.05em] sm:text-6xl">{content.faq.title}</h2>{content.faq.locationLabel ? <div className="mt-8 inline-flex items-center gap-2 text-sm text-ink/55"><MapPin className="size-4 text-lake" /> {content.faq.locationLabel}</div> : null}</div><FAQ items={content.faq.items} /></div></section> : null}
+      <section className="bg-paper py-20 sm:py-28 lg:py-36"><div className="container grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:gap-24"><div><p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-lake">{faq.eyebrow}</p><h2 className="text-balance text-4xl font-medium leading-[1.02] tracking-[-0.05em] sm:text-6xl">{faq.title}</h2>{faq.locationLabel ? <div className="mt-8 inline-flex items-center gap-2 text-sm text-ink/55"><MapPin className="size-4 text-lake" /> {faq.locationLabel}</div> : null}</div><FAQ items={faq.items} /></div></section>
 
       <section id="reservas" className="scroll-mt-20 bg-white p-3 sm:p-5">
         <div className="relative isolate overflow-hidden rounded-4xl bg-ink text-white">
