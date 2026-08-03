@@ -15,26 +15,85 @@ begin
 end;
 $$;
 
--- Keep only the still-relevant Paranoá-specific question. The shared renderer
--- supplies the approved standard FAQ to every experience.
-update public.experiences
-set editorial_content = jsonb_set(
-      editorial_content,
-      '{faq,items}',
-      '[{"question":"Quanto tempo dura a experiência?","answer":"A experiência dura aproximadamente 1h30. O horário exato e as informações do encontro aparecem em cada sessão disponível."}]'::jsonb,
-      false
-    ),
-    updated_at = now()
-where slug = 'imersao-paranoa'
-  and editorial_content->>'version' = '1'
-  and jsonb_typeof(editorial_content->'faq') = 'object';
-
--- Open one catalog position immediately after Imersão Paranoá only on the
--- first insertion. Re-running the migration does not keep shifting records.
-do $$
+-- The reviewed production database retains seven legacy editorial columns.
+-- A clean installation has none of them. Refuse an unknown partial/type-mismatched
+-- legacy shape before shifting catalog positions or writing the new experience.
+do $migration$
 declare
   paranoa_order integer;
+  legacy_column_count integer;
+  incompatible_legacy_columns text;
+  unsupported_required_columns text;
+  experience_editorial jsonb;
 begin
+  select count(*)
+  into legacy_column_count
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'experiences'
+    and column_name = any (array[
+      'eyebrow', 'short_description', 'location', 'cover_image',
+      'gallery', 'included', 'active'
+    ]);
+
+  if legacy_column_count not in (0, 7) then
+    raise exception using
+      message = 'EXPERIENCES_LEGACY_SCHEMA_INCOMPLETE',
+      detail = format('Expected none or all 7 compatibility columns, found %s.', legacy_column_count),
+      hint = 'Run supabase/diagnostics/202608030003_experiences_schema_preflight.sql and review the schema.';
+  end if;
+
+  if legacy_column_count = 7 then
+    with expected(column_name, accepted_data_types) as (
+      values
+        ('eyebrow', array['text', 'character varying']::text[]),
+        ('short_description', array['text', 'character varying']::text[]),
+        ('location', array['text', 'character varying']::text[]),
+        ('cover_image', array['text', 'character varying']::text[]),
+        ('gallery', array['jsonb']::text[]),
+        ('included', array['jsonb']::text[]),
+        ('active', array['boolean']::text[])
+    )
+    select string_agg(format('%I is %s', expected.column_name, actual.data_type), ', ' order by expected.column_name)
+    into incompatible_legacy_columns
+    from expected
+    join information_schema.columns actual
+      on actual.table_schema = 'public'
+     and actual.table_name = 'experiences'
+     and actual.column_name = expected.column_name
+    where not (actual.data_type = any (expected.accepted_data_types));
+
+    if incompatible_legacy_columns is not null then
+      raise exception using
+        message = 'EXPERIENCES_LEGACY_SCHEMA_INCOMPATIBLE',
+        detail = incompatible_legacy_columns,
+        hint = 'Run supabase/diagnostics/202608030003_experiences_schema_preflight.sql and review the schema.';
+    end if;
+  end if;
+
+  select string_agg(column_name, ', ' order by ordinal_position)
+  into unsupported_required_columns
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'experiences'
+    and is_nullable = 'NO'
+    and column_default is null
+    and is_identity = 'NO'
+    and is_generated = 'NEVER'
+    and not (column_name = any (array[
+      'slug', 'title', 'eyebrow', 'short_description', 'description',
+      'duration_minutes', 'location', 'cover_image', 'gallery', 'included',
+      'active', 'summary', 'price_cents', 'default_capacity', 'status',
+      'image_url', 'display_order', 'editorial_content', 'created_at', 'updated_at'
+    ]));
+
+  if unsupported_required_columns is not null then
+    raise exception using
+      message = 'EXPERIENCES_REQUIRED_COLUMNS_UNSUPPORTED',
+      detail = format('Required columns without defaults are not mapped: %s.', unsupported_required_columns),
+      hint = 'Run supabase/diagnostics/202608030003_experiences_schema_preflight.sql and review the schema.';
+  end if;
+
   select display_order into paranoa_order
   from public.experiences
   where slug = 'imersao-paranoa';
@@ -49,34 +108,8 @@ begin
         updated_at = now()
     where display_order > paranoa_order;
   end if;
-end;
-$$;
 
-insert into public.experiences (
-  slug,
-  title,
-  summary,
-  description,
-  duration_minutes,
-  price_cents,
-  default_capacity,
-  status,
-  image_url,
-  display_order,
-  editorial_content
-)
-values (
-  'remada-sunset',
-  'Remada Sunset',
-  'Uma remada ao entardecer com pausas para banho, contemplação e as últimas luzes do dia no Lago Paranoá.',
-  'Uma experiência de 1h30 em canoa havaiana para contemplar o pôr do sol, aproveitar o Lago Paranoá e encerrar o dia em uma prainha, cercado pela natureza.',
-  90,
-  7000,
-  28,
-  'PUBLISHED',
-  '/images/experiences/remada-sunset/remada-sunset-hero.webp',
-  (select display_order + 1 from public.experiences where slug = 'imersao-paranoa'),
-  $editorial$
+  experience_editorial := $editorial$
   {
     "version": 1,
     "hero": {
@@ -189,20 +222,94 @@ values (
       "description": "Contemple o pôr do sol de Brasília em uma canoa havaiana. Experiência de 1h30 com instrução, banho no lago, fotos e acompanhamento completo."
     }
   }
-  $editorial$::jsonb
-)
-on conflict (slug) do update
-set title = excluded.title,
-    summary = excluded.summary,
-    description = excluded.description,
-    duration_minutes = excluded.duration_minutes,
-    price_cents = excluded.price_cents,
-    default_capacity = excluded.default_capacity,
-    status = excluded.status,
-    image_url = excluded.image_url,
-    display_order = excluded.display_order,
-    editorial_content = excluded.editorial_content,
-    updated_at = now();
+  $editorial$::jsonb;
+
+  if legacy_column_count = 7 then
+    execute $legacy_insert$
+      insert into public.experiences (
+        slug, title, eyebrow, short_description, description, duration_minutes,
+        location, cover_image, gallery, included, active,
+        summary, price_cents, default_capacity, status, image_url, display_order,
+        editorial_content, created_at, updated_at
+      )
+      values (
+        'remada-sunset',
+        'Remada Sunset',
+        'PÔR DO SOL NO LAGO PARANOÁ',
+        'Uma remada ao entardecer com pausas para banho, contemplação e as últimas luzes do dia no Lago Paranoá.',
+        'Uma experiência de 1h30 em canoa havaiana para contemplar o pôr do sol, aproveitar o Lago Paranoá e encerrar o dia em uma prainha, cercado pela natureza.',
+        90,
+        'Base da Alma Azul Academy, Lago Norte, Brasília',
+        '/images/experiences/remada-sunset/remada-sunset-hero.webp',
+        $1 #> '{gallery,images}',
+        $1 #> '{included,items}',
+        true,
+        'Uma remada ao entardecer com pausas para banho, contemplação e as últimas luzes do dia no Lago Paranoá.',
+        7000,
+        28,
+        'PUBLISHED',
+        '/images/experiences/remada-sunset/remada-sunset-hero.webp',
+        $2,
+        $1,
+        now(),
+        now()
+      )
+      on conflict (slug) do update
+      set title = excluded.title,
+          eyebrow = excluded.eyebrow,
+          short_description = excluded.short_description,
+          description = excluded.description,
+          duration_minutes = excluded.duration_minutes,
+          location = excluded.location,
+          cover_image = excluded.cover_image,
+          gallery = excluded.gallery,
+          included = excluded.included,
+          active = excluded.active,
+          summary = excluded.summary,
+          price_cents = excluded.price_cents,
+          default_capacity = excluded.default_capacity,
+          status = excluded.status,
+          image_url = excluded.image_url,
+          display_order = excluded.display_order,
+          editorial_content = excluded.editorial_content,
+          updated_at = now()
+    $legacy_insert$ using experience_editorial, paranoa_order + 1;
+  else
+    insert into public.experiences (
+      slug, title, summary, description, duration_minutes, price_cents,
+      default_capacity, status, image_url, display_order, editorial_content,
+      created_at, updated_at
+    )
+    values (
+      'remada-sunset',
+      'Remada Sunset',
+      'Uma remada ao entardecer com pausas para banho, contemplação e as últimas luzes do dia no Lago Paranoá.',
+      'Uma experiência de 1h30 em canoa havaiana para contemplar o pôr do sol, aproveitar o Lago Paranoá e encerrar o dia em uma prainha, cercado pela natureza.',
+      90,
+      7000,
+      28,
+      'PUBLISHED',
+      '/images/experiences/remada-sunset/remada-sunset-hero.webp',
+      paranoa_order + 1,
+      experience_editorial,
+      now(),
+      now()
+    )
+    on conflict (slug) do update
+    set title = excluded.title,
+        summary = excluded.summary,
+        description = excluded.description,
+        duration_minutes = excluded.duration_minutes,
+        price_cents = excluded.price_cents,
+        default_capacity = excluded.default_capacity,
+        status = excluded.status,
+        image_url = excluded.image_url,
+        display_order = excluded.display_order,
+        editorial_content = excluded.editorial_content,
+        updated_at = now();
+  end if;
+end;
+$migration$;
 
 -- 17:00 in America/Sao_Paulo is 20:00 UTC on 2026-08-09.
 insert into public.sessions (

@@ -9,6 +9,10 @@ import { sessionLocalToIso } from "../lib/sessions/date-time.ts";
 
 const migrationPath = new URL("../supabase/migrations/202608030003_remada_sunset.sql", import.meta.url);
 const migration = readFileSync(migrationPath, "utf8");
+const diagnostic = readFileSync(
+  new URL("../supabase/diagnostics/202608030003_experiences_schema_preflight.sql", import.meta.url),
+  "utf8",
+);
 
 function sunsetEditorial() {
   const match = migration.match(/\$editorial\$\s*(\{[\s\S]*?\})\s*\$editorial\$::jsonb/);
@@ -56,11 +60,36 @@ test("FAQ padrão é canônico e combina perguntas específicas sem duplicação
 });
 
 test("migration posiciona após Paranoá e faz upsert sem duplicar sessão", () => {
-  assert.match(migration, /display_order \+ 1 from public\.experiences where slug = 'imersao-paranoa'/);
+  assert.match(migration, /paranoa_order \+ 1/);
   assert.match(migration, /on conflict \(slug\) do update/);
   assert.match(migration, /if not exists \(select 1 from public\.experiences where slug = 'remada-sunset'\)/);
   assert.match(migration, /not exists \([\s\S]*from public\.sessions session[\s\S]*session\.starts_at = make_timestamptz/);
   assert.equal((migration.match(/insert into public\.sessions/g) ?? []).length, 1);
+});
+
+test("migration preenche de uma vez todos os campos obrigatórios do schema legado", () => {
+  assert.match(migration, /legacy_column_count not in \(0, 7\)/);
+  assert.match(migration, /EXPERIENCES_REQUIRED_COLUMNS_UNSUPPORTED/);
+  assert.match(migration, /is_nullable = 'NO'[\s\S]*column_default is null/);
+  assert.match(migration, /slug, title, eyebrow, short_description, description, duration_minutes,[\s\S]*location, cover_image, gallery, included, active/);
+  assert.match(migration, /'PÔR DO SOL NO LAGO PARANOÁ'/);
+  assert.match(migration, /'Base da Alma Azul Academy, Lago Norte, Brasília'/);
+  assert.match(migration, /\$1 #> '\{gallery,images\}'/);
+  assert.match(migration, /\$1 #> '\{included,items\}'/);
+  assert.match(migration, /cover_image = excluded\.cover_image/);
+  assert.match(migration, /active = excluded\.active/);
+  assert.doesNotMatch(migration, /set editorial_content = jsonb_set/);
+  assert.doesNotMatch(migration, /drop column|alter column[^;]*drop not null/i);
+});
+
+test("diagnóstico de experiences é somente leitura e expõe o inventário solicitado", () => {
+  const executable = diagnostic.replace(/^\s*--.*$/gm, "");
+  assert.doesNotMatch(executable, /\b(insert|update|delete|alter|create|drop|truncate|grant|revoke|do)\b/i);
+  assert.match(diagnostic, /column_name/);
+  assert.match(diagnostic, /data_type/);
+  assert.match(diagnostic, /is_nullable/);
+  assert.match(diagnostic, /column_default/);
+  assert.match(diagnostic, /table_name = 'experiences'/);
 });
 
 test("primeira sessão representa 09/08/2026 às 17h em Brasília", () => {
