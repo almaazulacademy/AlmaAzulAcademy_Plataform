@@ -26,7 +26,10 @@ export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   const configured = Boolean(url && key && !url?.includes("your-project"));
-  if (!url || !key || !configured) return unauthorized(request, false);
+  if (!url || !key || !configured) {
+    console.info("[admin-auth]", { stage: "middleware_configuration_missing", path: request.nextUrl.pathname });
+    return unauthorized(request, false);
+  }
 
   const accessToken = request.cookies.get(ADMIN_ACCESS_COOKIE)?.value ?? "";
   const refreshToken = request.cookies.get(ADMIN_REFRESH_COOKIE)?.value ?? "";
@@ -34,7 +37,16 @@ export async function middleware(request: NextRequest) {
 
   if (accessToken) {
     const user = await supabase.auth.getUser(accessToken);
-    if (!user.error && user.data.user) return NextResponse.next();
+    if (!user.error && user.data.user) {
+      console.info("[admin-auth]", { stage: "middleware_access_token_valid", path: request.nextUrl.pathname });
+      return NextResponse.next();
+    }
+    console.info("[admin-auth]", {
+      stage: "middleware_access_token_rejected",
+      path: request.nextUrl.pathname,
+      errorCode: user.error?.code ?? "missing_user",
+      errorStatus: user.error?.status ?? null,
+    });
   }
 
   if (refreshToken) {
@@ -55,6 +67,12 @@ export async function middleware(request: NextRequest) {
       });
       return response;
     }
+    console.info("[admin-auth]", {
+      stage: "middleware_refresh_rejected",
+      path: request.nextUrl.pathname,
+      errorCode: refreshed.error?.code ?? "missing_session",
+      errorStatus: refreshed.error?.status ?? null,
+    });
   }
 
   return clearAuthCookies(unauthorized(request, true));

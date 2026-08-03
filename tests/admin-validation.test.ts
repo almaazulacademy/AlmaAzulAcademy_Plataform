@@ -10,6 +10,7 @@ import {
   validateLoginInput,
   validateReservationAdminAction,
 } from "../lib/admin/validation.ts";
+import { describeAuthFailure } from "../lib/admin/auth-errors.ts";
 
 test("normaliza o slug de qualquer experiência", () => {
   assert.equal(slugify("  Remada da Lua Cheia  "), "remada-da-lua-cheia");
@@ -24,6 +25,16 @@ test("valida credenciais sem expor ou normalizar a senha", () => {
     assert.equal(valid.data.password, "segura123");
   }
   assert.equal(validateLoginInput({ email: "inválido", password: "123" }).success, false);
+});
+
+test("distingue falhas de autenticação sem mascarar configuração e sessão", () => {
+  assert.deepEqual(describeAuthFailure({ code: "email_not_confirmed", status: 400 }), {
+    status: 403,
+    message: "O email desta conta ainda não foi confirmado.",
+  });
+  assert.equal(describeAuthFailure({ code: "invalid_credentials", status: 400 }).status, 401);
+  assert.equal(describeAuthFailure({ message: "Invalid API key", status: 401 }).status, 503);
+  assert.equal(describeAuthFailure({ code: "unexpected_failure", status: 500 }).status, 503);
 });
 
 test("valida os limites de uma sessão administrativa", () => {

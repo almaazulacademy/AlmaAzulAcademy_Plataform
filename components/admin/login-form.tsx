@@ -29,12 +29,15 @@ export function LoginForm({ destination }: { destination: string }) {
         body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
       });
       const payload = await response.json().catch(() => ({})) as ErrorResponse;
+      const diagnosticId = response.headers.get("x-auth-diagnostic-id");
+      console.info("[admin-auth]", { stage: "login_response_received", diagnosticId, status: response.status });
       if (!response.ok) {
         setErrors(payload.errors ?? { form: payload.message ?? "Não foi possível entrar." });
         notify({ title: "Acesso não realizado", description: payload.message ?? "Revise os dados informados.", variant: "error" });
         return;
       }
       notify({ title: "Login realizado", description: "Bem-vinda ao painel Alma Azul." });
+      console.info("[admin-auth]", { stage: "admin_redirect_started", diagnosticId, destination });
       router.replace(destination);
       router.refresh();
     } catch {

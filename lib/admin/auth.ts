@@ -5,6 +5,7 @@ import type { NextResponse } from "next/server";
 import type { Session } from "@supabase/supabase-js";
 
 import { ADMIN_ACCESS_COOKIE, ADMIN_COOKIE_BASE, ADMIN_REFRESH_COOKIE } from "@/lib/admin/auth-cookies";
+import { authErrorDetails, describeAuthFailure } from "@/lib/admin/auth-errors";
 import type { AdminContext, AdminProfile, AdminRole } from "@/lib/admin/types";
 import { getSupabaseAdminClient, getSupabaseServerClient, getSupabaseUserClient } from "@/lib/supabase/server";
 
@@ -15,6 +16,10 @@ type AdminMembershipRow = {
   is_active: boolean;
 };
 
+type MembershipResult =
+  | { membership: AdminMembershipRow; state: "AUTHORIZED" }
+  | { membership: null; state: "NOT_AUTHORIZED" | "NOT_CONFIGURED" | "QUERY_ERROR" };
+
 export type AdminLoginResult =
   | { success: true; session: Session; profile: AdminProfile }
   | { success: false; status: number; message: string };
@@ -23,9 +28,17 @@ function isAdminRole(value: string): value is AdminRole {
   return value === "ADMIN" || value === "OPERATOR";
 }
 
-async function getMembership(userId: string) {
+function authLog(requestId: string, stage: string, details: Record<string, unknown> = {}) {
+  // Temporary diagnostic logging. Never include email, password, JWTs or refresh tokens.
+  console.info("[admin-auth]", { requestId, stage, ...details });
+}
+
+async function getMembership(userId: string, requestId = "session") : Promise<MembershipResult> {
   const admin = getSupabaseAdminClient();
-  if (!admin) return { membership: null, configured: false };
+  if (!admin) {
+    authLog(requestId, "membership_client_missing");
+    return { membership: null, state: "NOT_CONFIGURED" };
+  }
 
   const result = await admin
     .from("admin_users")
@@ -33,34 +46,68 @@ async function getMembership(userId: string) {
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (result.error) return { membership: null, configured: false };
+  if (result.error) {
+    authLog(requestId, "membership_query_failed", authErrorDetails(result.error));
+    return { membership: null, state: "QUERY_ERROR" };
+  }
   const membership = result.data as AdminMembershipRow | null;
   if (!membership?.is_active || !isAdminRole(membership.role)) {
-    return { membership: null, configured: true };
+    authLog(requestId, "membership_not_authorized", {
+      rowFound: Boolean(membership),
+      active: membership?.is_active ?? null,
+      validRole: membership ? isAdminRole(membership.role) : false,
+    });
+    return { membership: null, state: "NOT_AUTHORIZED" };
   }
-  return { membership, configured: true };
+  authLog(requestId, "membership_authorized", { role: membership.role });
+  return { membership, state: "AUTHORIZED" };
 }
 
-export async function authenticateAdminCredentials(email: string, password: string): Promise<AdminLoginResult> {
+export async function authenticateAdminCredentials(email: string, password: string, requestId = crypto.randomUUID()): Promise<AdminLoginResult> {
   const supabase = getSupabaseServerClient();
-  if (!supabase || !getSupabaseAdminClient()) {
-    return { success: false, status: 503, message: "A autenticação administrativa ainda não está configurada." };
+  if (!supabase) {
+    authLog(requestId, "public_auth_client_missing");
+    return { success: false, status: 503, message: "Variável ausente ou inválida: URL e chave pública do Supabase." };
+  }
+  if (!getSupabaseAdminClient()) {
+    authLog(requestId, "admin_auth_client_missing");
+    return { success: false, status: 503, message: "Variável ausente: SUPABASE_SERVICE_ROLE_KEY." };
   }
 
-  const login = await supabase.auth.signInWithPassword({ email, password });
-  if (login.error || !login.data.user || !login.data.session) {
-    return { success: false, status: 401, message: "Email ou senha inválidos." };
+  authLog(requestId, "password_sign_in_started");
+  let login: Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>;
+  try {
+    login = await supabase.auth.signInWithPassword({ email, password });
+  } catch (error) {
+    authLog(requestId, "password_sign_in_exception", authErrorDetails(error));
+    return { success: false, status: 503, message: "Não foi possível conectar ao Supabase Auth." };
+  }
+  if (login.error) {
+    authLog(requestId, "password_sign_in_rejected", authErrorDetails(login.error));
+    return { success: false, ...describeAuthFailure(login.error) };
+  }
+  if (!login.data.user) {
+    authLog(requestId, "password_sign_in_missing_user");
+    return { success: false, status: 502, message: "O Supabase autenticou a solicitação, mas não retornou o usuário." };
+  }
+  if (!login.data.session) {
+    authLog(requestId, "password_sign_in_missing_session");
+    return { success: false, status: 502, message: "Usuário autenticado, mas o Supabase não criou uma sessão." };
   }
 
-  const membershipResult = await getMembership(login.data.user.id);
+  authLog(requestId, "password_sign_in_succeeded");
+  const membershipResult = await getMembership(login.data.user.id, requestId);
   if (!membershipResult.membership) {
     await supabase.auth.signOut().catch(() => undefined);
+    const messages = {
+      NOT_AUTHORIZED: "Usuário autenticado, mas sem acesso administrativo ativo.",
+      NOT_CONFIGURED: "Variável ausente: SUPABASE_SERVICE_ROLE_KEY.",
+      QUERY_ERROR: "Usuário autenticado, mas ocorreu um erro ao consultar admin_users.",
+    } as const;
     return {
       success: false,
-      status: membershipResult.configured ? 403 : 503,
-      message: membershipResult.configured
-        ? "Esta conta não possui acesso administrativo ativo."
-        : "O controle de administradores ainda não está configurado.",
+      status: membershipResult.state === "NOT_AUTHORIZED" ? 403 : 503,
+      message: messages[membershipResult.state],
     };
   }
 
@@ -97,7 +144,10 @@ export async function getAdminContextFromAccessToken(accessToken: string): Promi
   if (!userClient) return null;
 
   const userResult = await userClient.auth.getUser(accessToken);
-  if (userResult.error || !userResult.data.user) return null;
+  if (userResult.error || !userResult.data.user) {
+    authLog("session", "access_token_rejected", userResult.error ? authErrorDetails(userResult.error) : {});
+    return null;
+  }
   const membershipResult = await getMembership(userResult.data.user.id);
   if (!membershipResult.membership) return null;
 
