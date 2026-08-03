@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { brasiliaLocalToIso, formatMaskedCpf } from "../lib/admin/format.ts";
+import { formatMaskedCpf } from "../lib/admin/format.ts";
+import { sessionLocalToIso } from "../lib/sessions/date-time.ts";
 import {
   isUuid,
   slugify,
@@ -148,5 +149,5 @@ test("ações sensíveis exigem motivo explícito", () => {
 
 test("formata CPF mascarado e converte horário de Brasília", () => {
   assert.equal(formatMaskedCpf("4725"), "•••.•••.47-25");
-  assert.equal(brasiliaLocalToIso("2026-09-10T09:00"), "2026-09-10T12:00:00.000Z");
+  assert.equal(sessionLocalToIso("2026-09-10T09:00"), "2026-09-10T12:00:00.000Z");
 });

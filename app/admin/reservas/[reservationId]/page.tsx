@@ -9,6 +9,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { getAdminReservation } from "@/lib/admin/data";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency, formatMaskedCpf } from "@/lib/admin/format";
 import { isUuid } from "@/lib/admin/validation";
+import { formatSessionDateTime } from "@/lib/sessions/date-time";
 
 export const metadata = { title: "Detalhe da reserva" };
 
@@ -27,7 +28,7 @@ export default async function AdminReservationDetailPage({ params }: { params: P
     ["Quantidade", String(reservation.quantity)],
     ["Valor unitário", formatCurrency(reservation.unitPriceCents)],
     ["Valor total", formatCurrency(reservation.totalCents)],
-    ["Sessão", `${reservation.experienceTitle} · ${formatAdminDateTime(reservation.startsAt)}`],
+    ["Sessão", `${reservation.experienceTitle} · ${formatSessionDateTime(reservation.startsAt)}`],
     ["Código da reserva", reservation.publicCode],
     ["Criada em", formatAdminDateTime(reservation.createdAt)],
     ["Expiração", formatAdminDateTime(reservation.expiresAt)],

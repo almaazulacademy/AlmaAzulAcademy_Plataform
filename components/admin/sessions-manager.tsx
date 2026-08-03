@@ -12,7 +12,8 @@ import { AdminEmptyState } from "@/components/admin/states";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
 import type { AdminExperience, AdminSession, SessionStatus } from "@/lib/admin/types";
-import { brasiliaLocalToIso, formatAdminDateTime, formatCurrency, toBrasiliaDateTimeLocal } from "@/lib/admin/format";
+import { formatCurrency } from "@/lib/admin/format";
+import { formatSessionDateTime, sessionLocalToIso, toSessionDateTimeLocal } from "@/lib/sessions/date-time";
 
 type FormState = {
   experienceId: string;
@@ -39,7 +40,7 @@ const emptyForm = (experienceId = ""): FormState => ({
 function fromSession(session: AdminSession): FormState {
   return {
     experienceId: session.experienceId,
-    startsAt: toBrasiliaDateTimeLocal(session.startsAt),
+    startsAt: toSessionDateTimeLocal(session.startsAt),
     durationMinutes: String(session.durationMinutes),
     price: (session.priceCents / 100).toFixed(2),
     capacity: String(session.capacity),
@@ -91,7 +92,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
 
   const payloadFrom = (state: FormState, status = state.status) => ({
     experienceId: state.experienceId,
-    startsAt: brasiliaLocalToIso(state.startsAt),
+    startsAt: sessionLocalToIso(state.startsAt),
     durationMinutes: Number(state.durationMinutes),
     priceCents: Math.round(Number(state.price.replace(",", ".")) * 100),
     capacity: Number(state.capacity),
@@ -200,7 +201,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2"><StatusBadge status={session.status} /><span className="text-xs font-medium text-ink/40">{session.reservationsCount} reservas</span></div>
                 <h2 className="mt-3 text-lg font-semibold text-ink">{session.experienceTitle}</h2>
-                <p className="mt-1 text-sm text-ink/55">{formatAdminDateTime(session.startsAt)}</p>
+                <p className="mt-1 text-sm text-ink/55">{formatSessionDateTime(session.startsAt)}</p>
               </div>
               <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4 xl:min-w-[430px]">
                 <div><dt className="text-xs text-ink/45">Preço</dt><dd className="mt-1 text-sm font-semibold">{formatCurrency(session.priceCents)}</dd></div>

@@ -10,6 +10,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { listAdminExperiences, listAdminReservations, listAdminSessions } from "@/lib/admin/data";
 import type { AdminReservationFilters } from "@/lib/admin/types";
 import { RESERVATION_STATUSES, type ReservationStatus } from "@/lib/reservations/types";
+import { formatSessionDateShort } from "@/lib/sessions/date-time";
 
 export const metadata = { title: "Reservas" };
 
@@ -52,7 +53,7 @@ export default async function AdminReservationsPage({ searchParams }: { searchPa
             <label><span className={labelClass}>Data</span><input type="date" name="date" defaultValue={filters.date} className={inputClass} /></label>
             <label><span className={labelClass}>Experiência</span><select name="experienceId" defaultValue={filters.experienceId} className={inputClass}><option value="">Todas</option>{experiences.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
             <label><span className={labelClass}>Status</span><select name="status" defaultValue={filters.status} className={inputClass}><option value="">Todos</option><option value="PRE_RESERVED">Pré-reserva</option><option value="CONFIRMED">Confirmada</option><option value="EXPIRED">Expirada</option><option value="CANCELLED">Cancelada</option></select></label>
-            <label><span className={labelClass}>Sessão</span><select name="sessionId" defaultValue={filters.sessionId} className={inputClass}><option value="">Todas</option>{sessions.map((item) => <option key={item.id} value={item.id}>{item.experienceTitle} · {new Date(item.startsAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}</option>)}</select></label>
+            <label><span className={labelClass}>Sessão</span><select name="sessionId" defaultValue={filters.sessionId} className={inputClass}><option value="">Todas</option>{sessions.map((item) => <option key={item.id} value={item.id}>{item.experienceTitle} · {formatSessionDateShort(item.startsAt)}</option>)}</select></label>
             <label><span className={labelClass}>Nome</span><input name="name" defaultValue={filters.name} className={inputClass} placeholder="Nome do responsável" /></label>
             <label><span className={labelClass}>Telefone</span><input name="phone" defaultValue={filters.phone} className={inputClass} inputMode="tel" placeholder="DDD ou número" /></label>
             <label><span className={labelClass}>CPF</span><input name="cpf" defaultValue={filters.cpf} className={inputClass} inputMode="numeric" placeholder="CPF completo ou últimos 4" /><span className="mt-1.5 block text-xs text-ink/40">A busca compara o hash; o CPF não é armazenado em texto.</span></label>

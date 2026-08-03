@@ -6,7 +6,8 @@ import { StatusBadge } from "@/components/admin/status-badge";
 import { AdminEmptyState } from "@/components/admin/states";
 import { buttonVariants } from "@/components/ui/button";
 import type { AdminReservation } from "@/lib/admin/types";
-import { formatAdminDateTime, formatAdminPhone, formatCurrency } from "@/lib/admin/format";
+import { formatAdminPhone, formatCurrency } from "@/lib/admin/format";
+import { formatSessionDateTime } from "@/lib/sessions/date-time";
 
 export function ReservationsList({ reservations }: { reservations: AdminReservation[] }) {
   if (reservations.length === 0) {
@@ -25,7 +26,7 @@ export function ReservationsList({ reservations }: { reservations: AdminReservat
             </div>
             <dl className="grid flex-1 grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 xl:grid-cols-5">
               <div><dt className="text-xs text-ink/45">Experiência</dt><dd className="mt-1 text-sm font-semibold">{reservation.experienceTitle}</dd></div>
-              <div><dt className="text-xs text-ink/45">Horário</dt><dd className="mt-1 text-sm font-semibold">{formatAdminDateTime(reservation.startsAt)}</dd></div>
+              <div><dt className="text-xs text-ink/45">Horário</dt><dd className="mt-1 text-sm font-semibold">{formatSessionDateTime(reservation.startsAt)}</dd></div>
               <div><dt className="text-xs text-ink/45">Pessoas</dt><dd className="mt-1 flex items-center gap-1.5 text-sm font-semibold"><Users className="size-4 text-lake" /> {reservation.quantity}</dd></div>
               <div><dt className="text-xs text-ink/45">Valor</dt><dd className="mt-1 text-sm font-semibold">{formatCurrency(reservation.totalCents)}</dd></div>
               <div><dt className="text-xs text-ink/45">Código</dt><dd className="mt-1 font-mono text-sm font-semibold tracking-wide">{reservation.publicCode}</dd></div>

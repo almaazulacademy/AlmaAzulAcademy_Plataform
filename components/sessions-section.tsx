@@ -3,6 +3,7 @@ import { CalendarDays, Clock3, Ticket, Users } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { listOpenSessions } from "@/lib/reservations/data";
+import { formatSessionDayMonth, formatSessionTime, formatSessionWeekday } from "@/lib/sessions/date-time";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export function SessionsLoading() {
@@ -35,19 +36,17 @@ export async function SessionsSection({ experienceSlug }: { experienceSlug: stri
 
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {sessions.map((session) => {
-          const date = new Date(session.startsAt);
-          return (
+        {sessions.map((session) => (
             <article key={session.id} className="group flex min-h-80 flex-col rounded-3xl border border-white/15 bg-white/[0.07] p-7 transition duration-300 hover:-translate-y-1 hover:bg-white/[0.11]">
               <div className="flex items-start justify-between gap-5">
                 <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-sand">{new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(date)}</p>
-                  <p className="mt-2 text-3xl font-medium capitalize">{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long" }).format(date)}</p>
+                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-sand">{formatSessionWeekday(session.startsAt)}</p>
+                  <p className="mt-2 text-3xl font-medium capitalize">{formatSessionDayMonth(session.startsAt)}</p>
                 </div>
                 <CalendarDays className="size-5 text-white/45" />
               </div>
               <div className="mt-8 space-y-3 border-t border-white/10 pt-6 text-sm text-white/70">
-                <p className="flex items-center gap-3"><Clock3 className="size-4 text-sand" />{new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(date)}</p>
+                <p className="flex items-center gap-3"><Clock3 className="size-4 text-sand" />{formatSessionTime(session.startsAt)}</p>
                 <p className="flex items-center gap-3"><Ticket className="size-4 text-sand" />{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(session.priceCents / 100)} por pessoa</p>
                 <p className="flex items-center gap-3"><Users className="size-4 text-sand" />{session.remainingSpots} {session.remainingSpots === 1 ? "vaga restante" : "vagas restantes"}</p>
               </div>
@@ -55,8 +54,7 @@ export async function SessionsSection({ experienceSlug }: { experienceSlug: stri
                 Selecionar esta data
               </Link>
             </article>
-          );
-        })}
+        ))}
       </div>
     );
   } catch (error) {

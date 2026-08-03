@@ -16,6 +16,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
 import { getAdminDashboard } from "@/lib/admin/data";
 import { formatAdminDateTime, formatCurrency } from "@/lib/admin/format";
+import { formatSessionDateTime } from "@/lib/sessions/date-time";
 
 const cards = [
   { key: "futureSessions", label: "Sessões futuras", icon: CalendarCheck2 },
@@ -48,7 +49,7 @@ export default async function AdminDashboardPage() {
             {metrics.nextSession ? (
               <div className="mt-7">
                 <h2 className="text-2xl font-semibold tracking-[-0.03em]">{metrics.nextSession.experienceTitle}</h2>
-                <p className="mt-2 text-sm text-white/60">{formatAdminDateTime(metrics.nextSession.startsAt)}</p>
+                <p className="mt-2 text-sm text-white/60">{formatSessionDateTime(metrics.nextSession.startsAt)}</p>
                 <p className="mt-5 text-sm font-medium">{metrics.nextSession.remainingSpots} vagas restantes</p>
               </div>
             ) : (
