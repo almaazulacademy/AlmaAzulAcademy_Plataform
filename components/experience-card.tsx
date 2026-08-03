@@ -4,7 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { EditorialImage } from "@/components/editorial-image";
 import { cn } from "@/lib/utils";
 
-export type ExperienceCardData = { title: string; eyebrow: string; summary: string; location: string; image: string; imageAlt: string; href: string };
+export type ExperienceCardData = { title: string; eyebrow: string; summary: string; location: string; image: string | null; imageAlt: string; href: string };
 
 export function ExperienceCard({ experience, featured = false }: { experience: ExperienceCardData; featured?: boolean }) {
   return (

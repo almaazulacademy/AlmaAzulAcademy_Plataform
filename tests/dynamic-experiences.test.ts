@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import test from "node:test";
 
-import { imersaoParanoaEditorial } from "../lib/editorial/imersao-paranoa.ts";
+import { imersaoParanoaEditorial, imersaoParanoaFallback } from "../lib/editorial/imersao-paranoa.ts";
 import { emptyExperienceEditorial, validateExperienceEditorial } from "../lib/editorial/experience.ts";
+import { resolveExperienceCardMedia } from "../lib/editorial/image.ts";
 import { isReservedExperienceSlug, slugify, validateAdminExperienceInput } from "../lib/admin/validation.ts";
 
 function source(path: string) {
@@ -62,7 +64,48 @@ test("rota dinâmica gera metadata, retorna 404 e usa sessões por slug", () => 
 test("Home usa catálogo publicado e não importa a fonte editorial local", () => {
   const home = source("app/page.tsx");
   assert.match(home, /listPublishedExperiences/);
+  assert.match(home, /resolveExperienceCardMedia/);
   assert.doesNotMatch(home, /from "@\/lib\/experiences"/);
+});
+
+test("Home prioriza hero.image e usa image_url apenas como fallback legado", () => {
+  const experience = structuredClone(imersaoParanoaFallback);
+  experience.imageUrl = "/images/experiences/imersao-paranoa/grupos/IMG_3964.webp";
+  assert.deepEqual(resolveExperienceCardMedia(experience), {
+    src: "/images/backgrounds/hero-alma-azul-lago.webp",
+    alt: "Canoas da Alma Azul no Lago Paranoá vistas de cima",
+  });
+
+  experience.editorial.hero.image.src = "https://cdn.example.com/experiencia.webp";
+  assert.equal(resolveExperienceCardMedia(experience).src, "https://cdn.example.com/experiencia.webp");
+
+  experience.editorial.hero.image.src = "arquivo-invalido.webp";
+  experience.imageUrl = "/images/backgrounds/corredor-corrego-do-torto.webp";
+  assert.equal(resolveExperienceCardMedia(experience).src, "/images/backgrounds/corredor-corrego-do-torto.webp");
+
+  experience.imageUrl = null;
+  assert.equal(resolveExperienceCardMedia(experience).src, null);
+});
+
+test("imagem aprovada existe com capitalização exata no repositório", () => {
+  const backgrounds = readdirSync(new URL("../public/images/backgrounds/", import.meta.url));
+  const groups = readdirSync(new URL("../public/images/experiences/imersao-paranoa/grupos/", import.meta.url));
+  assert.equal(backgrounds.includes("hero-alma-azul-lago.webp"), true);
+  assert.equal(backgrounds.includes("corredor-corrego-do-torto.webp"), true);
+  assert.equal(groups.includes("img-3964.webp"), true);
+  assert.equal(groups.includes("IMG_3964.webp"), false);
+});
+
+test("componente esconde alt quebrado e mantém fallback e overlay", () => {
+  const image = source("components/editorial-image.tsx");
+  const card = source("components/experience-card.tsx");
+  const data = source("lib/editorial/data.ts");
+  assert.match(image, /onError=\{\(\) => setFailedSource\(src\)\}/);
+  assert.match(image, /text-transparent/);
+  assert.match(image, /radial-gradient/);
+  assert.match(image, /src\.startsWith\("\/images\/"\)/);
+  assert.match(card, /bg-gradient-to-t from-ink\/90/);
+  assert.match(data, /row\.image_url/);
 });
 
 test("Imersão preserva conteúdo e as duas rotas usam o mesmo renderer", () => {

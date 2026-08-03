@@ -8,6 +8,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { Section } from "@/components/section";
 import { buttonVariants } from "@/components/ui/button";
 import { listPublishedExperiences } from "@/lib/editorial/data";
+import { resolveExperienceCardMedia } from "@/lib/editorial/image";
 
 const futureFormats = [
   { label: "Lua Cheia", icon: Moon },
@@ -21,15 +22,18 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const published = await listPublishedExperiences();
-  const cards = published.map((experience) => ({
-    title: experience.title,
-    eyebrow: experience.editorial.hero.eyebrow,
-    summary: experience.summary,
-    location: experience.editorial.hero.details[0] ?? "",
-    image: experience.imageUrl ?? experience.editorial.hero.image.src,
-    imageAlt: experience.editorial.hero.image.alt,
-    href: `/experiencias/${experience.slug}`,
-  }));
+  const cards = published.map((experience) => {
+    const media = resolveExperienceCardMedia(experience);
+    return {
+      title: experience.title,
+      eyebrow: experience.editorial.hero.eyebrow,
+      summary: experience.summary,
+      location: experience.editorial.hero.details[0] ?? "",
+      image: media.src,
+      imageAlt: media.alt,
+      href: `/experiencias/${experience.slug}`,
+    };
+  });
   const [featured, ...upcoming] = cards;
 
   return (
