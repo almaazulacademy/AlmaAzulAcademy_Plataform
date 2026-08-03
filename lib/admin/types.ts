@@ -36,6 +36,12 @@ export type AdminDashboardMetrics = {
   expectedRevenueCents: number;
   confirmedRevenueCents: number;
   totalParticipants: number;
+  totalReservations: number;
+  averageOccupancyRate: number;
+  topExperience: string | null;
+  monthlyRevenueCents: number;
+  averageTicketCents: number;
+  revenueByMonth: Array<{ month: string; revenueCents: number }>;
   lastUpdatedAt: string | null;
 };
 
@@ -44,6 +50,10 @@ export type AdminExperience = {
   slug: string;
   title: string;
   summary: string;
+  description: string;
+  durationMinutes: number;
+  priceCents: number;
+  defaultCapacity: number;
   status: ExperienceStatus;
   imageUrl: string | null;
   displayOrder: number;
@@ -66,6 +76,7 @@ export type AdminSession = {
   internalNotes: string | null;
   createdAt: string;
   updatedAt: string;
+  participants: Array<{ id: string; name: string; quantity: number; status: ReservationStatus }>;
 };
 
 export type AdminReservation = {
@@ -107,6 +118,9 @@ export type AdminReservationFilters = {
   phone: string;
   cpf: string;
   sessionId: string;
+  paymentStatus: PaymentStatus | "";
+  query: string;
+  sort: "recent" | "oldest" | "session";
 };
 
 export type PlatformSettings = {
@@ -132,6 +146,10 @@ export type AdminSessionInput = {
 export type AdminExperienceInput = {
   title: string;
   summary: string;
+  description: string;
+  durationMinutes: number;
+  priceCents: number;
+  defaultCapacity: number;
   status: ExperienceStatus;
   imageUrl: string;
   displayOrder: number;

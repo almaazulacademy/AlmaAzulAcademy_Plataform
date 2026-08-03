@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --test tests/reservation-validation.test.ts tests/admin-validation.test.ts tests/admin-migration.test.ts tests/reservation-compatibility-migration.test.ts tests/session-date-time.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",

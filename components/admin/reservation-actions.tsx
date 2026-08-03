@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CheckCircle2, Copy, Mail, MessageCircle, RotateCcw, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, Mail, MessageCircle, RotateCcw, XCircle } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
 import { useToast } from "@/components/admin/toast-provider";
@@ -13,13 +13,14 @@ import type { ReservationStatus } from "@/lib/reservations/types";
 type Action = "confirm" | "cancel" | null;
 type ApiPayload = { message?: string };
 
-export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, showMessageButton = false }: {
+export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false }: {
   reservationId: string;
   status: ReservationStatus;
   fullName: string;
   phone: string;
   email: string;
   publicCode: string;
+  checkoutUrl?: string | null;
   showMessageButton?: boolean;
 }) {
   const router = useRouter();
@@ -71,6 +72,8 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
         <Button type="button" size="sm" variant="ghost" onClick={() => copy(phone, "WhatsApp")}><MessageCircle className="size-4" /> Copiar WhatsApp</Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => copy(email, "Email")}><Mail className="size-4" /> Copiar email</Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => copy(reservationMessage(fullName, publicCode), "Mensagem com código")}><RotateCcw className="size-4" /> Reenviar código</Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => copy(publicCode, "Código da reserva")}><Copy className="size-4" /> Copiar código</Button>
+        {checkoutUrl ? <a href={checkoutUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-semibold text-forest hover:bg-mist"><ExternalLink className="size-4" /> Reenviar checkout</a> : null}
         {showMessageButton ? <Button type="button" size="sm" onClick={openWhatsappDraft}><MessageCircle className="size-4" /> Enviar mensagem</Button> : null}
       </div>
 

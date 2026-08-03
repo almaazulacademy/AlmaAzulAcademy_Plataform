@@ -121,6 +121,10 @@ test("valida cadastro e imagem oficial da experiência", () => {
   assert.equal(validateAdminExperienceInput({
     title: "Remada Sunset",
     summary: "Uma remada ao entardecer no Lago Paranoá.",
+    description: "Uma experiência completa ao entardecer, conduzida pela equipe Alma Azul.",
+    durationMinutes: 90,
+    priceCents: 18000,
+    defaultCapacity: 15,
     status: "DRAFT",
     imageUrl: "/images/experiences/sunset/capa.webp",
     displayOrder: 1,
@@ -128,6 +132,10 @@ test("valida cadastro e imagem oficial da experiência", () => {
   assert.equal(validateAdminExperienceInput({
     title: "X",
     summary: "curta",
+    description: "curta",
+    durationMinutes: 0,
+    priceCents: -1,
+    defaultCapacity: 0,
     status: "INVALID",
     imageUrl: "http://inseguro.example/imagem.jpg",
     displayOrder: -1,
@@ -135,6 +143,10 @@ test("valida cadastro e imagem oficial da experiência", () => {
   assert.equal(validateAdminExperienceInput({
     title: "Remada Sunset",
     summary: "Uma remada ao entardecer no Lago Paranoá.",
+    description: "Uma experiência completa ao entardecer, conduzida pela equipe Alma Azul.",
+    durationMinutes: 90,
+    priceCents: 18000,
+    defaultCapacity: 15,
     status: "DRAFT",
     imageUrl: "",
     displayOrder: "1",

@@ -85,6 +85,10 @@ export function validateAdminExperienceInput(value: unknown): ValidationResult<A
 
   const title = String(value.title ?? "").trim().replace(/\s+/g, " ");
   const summary = String(value.summary ?? "").trim().replace(/\s+/g, " ");
+  const description = String(value.description ?? "").trim();
+  const durationMinutes = typeof value.durationMinutes === "number" ? value.durationMinutes : Number.NaN;
+  const priceCents = typeof value.priceCents === "number" ? value.priceCents : Number.NaN;
+  const defaultCapacity = typeof value.defaultCapacity === "number" ? value.defaultCapacity : Number.NaN;
   const status = String(value.status ?? "") as ExperienceStatus;
   const imageUrl = String(value.imageUrl ?? "").trim();
   const displayOrder = typeof value.displayOrder === "number" ? value.displayOrder : Number.NaN;
@@ -92,6 +96,10 @@ export function validateAdminExperienceInput(value: unknown): ValidationResult<A
 
   if (title.length < 3 || title.length > 120) errors.title = "Use entre 3 e 120 caracteres.";
   if (summary.length < 10 || summary.length > 300) errors.summary = "Use entre 10 e 300 caracteres.";
+  if (description.length < 20 || description.length > 5000) errors.description = "Use entre 20 e 5000 caracteres.";
+  if (!Number.isInteger(durationMinutes) || durationMinutes < 15 || durationMinutes > 1440) errors.durationMinutes = "Informe uma duração entre 15 e 1440 minutos.";
+  if (!Number.isInteger(priceCents) || priceCents < 0 || priceCents > 10_000_000) errors.priceCents = "Informe um preço válido.";
+  if (!Number.isInteger(defaultCapacity) || defaultCapacity < 1 || defaultCapacity > 500) errors.defaultCapacity = "Informe uma capacidade entre 1 e 500.";
   if (!EXPERIENCE_STATUSES.includes(status)) errors.status = "Selecione um status válido.";
   if (imageUrl && !imageUrl.startsWith("/images/") && !/^https:\/\//i.test(imageUrl)) {
     errors.imageUrl = "Use uma imagem oficial em /images ou uma URL HTTPS.";
@@ -103,7 +111,7 @@ export function validateAdminExperienceInput(value: unknown): ValidationResult<A
 
   return Object.keys(errors).length
     ? { success: false, errors }
-    : { success: true, data: { title, summary, status, imageUrl, displayOrder } };
+    : { success: true, data: { title, summary, description, durationMinutes, priceCents, defaultCapacity, status, imageUrl, displayOrder } };
 }
 
 export function validateReservationAdminAction(value: unknown): ValidationResult<{

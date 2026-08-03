@@ -195,7 +195,10 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
       ) : null}
 
       <section className="mt-8 space-y-4" aria-label="Lista de sessões">
-        {sessions.length === 0 ? <AdminEmptyState title="Nenhuma sessão cadastrada" description="Crie a primeira data para começar a organizar a agenda." /> : sessions.map((session) => (
+        {sessions.length === 0 ? <AdminEmptyState title="Nenhuma sessão cadastrada" description="Crie a primeira data para começar a organizar a agenda." /> : sessions.map((session) => {
+          const occupied = session.capacity - session.remainingSpots;
+          const occupancy = session.capacity ? Math.round((occupied / session.capacity) * 100) : 0;
+          return (
           <article key={session.id} className="rounded-3xl border border-ink/10 bg-white p-5 sm:p-6">
             <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
@@ -216,9 +219,14 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
                 <Button type="button" size="sm" variant="ghost" className="text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => setDeleting(session)}><Trash2 className="size-4" /> Excluir</Button>
               </div>
             </div>
+            <div className="mt-5 border-t border-ink/10 pt-5">
+              <div className="flex items-center justify-between gap-4"><h3 className="text-sm font-semibold">Participantes</h3><span className="text-xs font-medium text-ink/45">{occupied}/{session.capacity} vagas · {occupancy}% ocupada</span></div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-mist"><div className="h-full rounded-full bg-lake" style={{ width: `${Math.min(100, occupancy)}%` }} /></div>
+              {session.participants.length ? <ul className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{session.participants.map((participant) => <li key={participant.id} className="flex items-center justify-between gap-3 rounded-2xl bg-paper px-4 py-3 text-sm"><span className="min-w-0 truncate font-medium">{participant.name} <span className="text-ink/40">· {participant.quantity}</span></span><StatusBadge status={participant.status} /></li>)}</ul> : <p className="mt-4 text-sm text-ink/45">Nenhum participante nesta sessão.</p>}
+            </div>
             {session.internalNotes ? <p className="mt-4 border-t border-ink/10 pt-4 text-sm leading-6 text-ink/55"><span className="font-semibold text-ink/70">Nota interna:</span> {session.internalNotes}</p> : null}
           </article>
-        ))}
+        );})}
       </section>
 
       <ConfirmationDialog

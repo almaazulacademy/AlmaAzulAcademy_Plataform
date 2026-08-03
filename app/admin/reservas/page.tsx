@@ -9,6 +9,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
 import { listAdminExperiences, listAdminReservations, listAdminSessions } from "@/lib/admin/data";
 import type { AdminReservationFilters } from "@/lib/admin/types";
+import { PAYMENT_STATUSES, type PaymentStatus } from "@/lib/admin/types";
 import { RESERVATION_STATUSES, type ReservationStatus } from "@/lib/reservations/types";
 import { formatSessionDateShort } from "@/lib/sessions/date-time";
 
@@ -31,6 +32,9 @@ function filtersFrom(params: SearchParams): AdminReservationFilters {
     phone: valueOf(params, "phone"),
     cpf: valueOf(params, "cpf"),
     sessionId: valueOf(params, "sessionId"),
+    paymentStatus: PAYMENT_STATUSES.includes(valueOf(params, "paymentStatus") as PaymentStatus) ? valueOf(params, "paymentStatus") as PaymentStatus : "",
+    query: valueOf(params, "query"),
+    sort: (["recent", "oldest", "session"] as const).includes(valueOf(params, "sort") as "recent") ? valueOf(params, "sort") as AdminReservationFilters["sort"] : "recent",
   };
 }
 
@@ -53,10 +57,12 @@ export default async function AdminReservationsPage({ searchParams }: { searchPa
             <label><span className={labelClass}>Data</span><input type="date" name="date" defaultValue={filters.date} className={inputClass} /></label>
             <label><span className={labelClass}>Experiência</span><select name="experienceId" defaultValue={filters.experienceId} className={inputClass}><option value="">Todas</option>{experiences.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
             <label><span className={labelClass}>Status</span><select name="status" defaultValue={filters.status} className={inputClass}><option value="">Todos</option><option value="PRE_RESERVED">Pré-reserva</option><option value="CONFIRMED">Confirmada</option><option value="EXPIRED">Expirada</option><option value="CANCELLED">Cancelada</option></select></label>
+            <label><span className={labelClass}>Pagamento</span><select name="paymentStatus" defaultValue={filters.paymentStatus} className={inputClass}><option value="">Todos</option><option value="PENDING">Pendente</option><option value="PAID">Pago</option><option value="PAID_AFTER_EXPIRATION">Pago após expirar</option><option value="NOT_PAID">Não pago</option></select></label>
             <label><span className={labelClass}>Sessão</span><select name="sessionId" defaultValue={filters.sessionId} className={inputClass}><option value="">Todas</option>{sessions.map((item) => <option key={item.id} value={item.id}>{item.experienceTitle} · {formatSessionDateShort(item.startsAt)}</option>)}</select></label>
-            <label><span className={labelClass}>Nome</span><input name="name" defaultValue={filters.name} className={inputClass} placeholder="Nome do responsável" /></label>
+            <label><span className={labelClass}>Busca</span><input name="query" defaultValue={filters.query} className={inputClass} placeholder="Nome ou código" /></label>
             <label><span className={labelClass}>Telefone</span><input name="phone" defaultValue={filters.phone} className={inputClass} inputMode="tel" placeholder="DDD ou número" /></label>
             <label><span className={labelClass}>CPF</span><input name="cpf" defaultValue={filters.cpf} className={inputClass} inputMode="numeric" placeholder="CPF completo ou últimos 4" /><span className="mt-1.5 block text-xs text-ink/40">A busca compara o hash; o CPF não é armazenado em texto.</span></label>
+            <label><span className={labelClass}>Ordenação</span><select name="sort" defaultValue={filters.sort} className={inputClass}><option value="recent">Mais recentes</option><option value="oldest">Mais antigas</option><option value="session">Data da experiência</option></select></label>
           </div>
           <div className="mt-5 flex flex-wrap justify-end gap-3">{hasFilters ? <Link href="/admin/reservas" className={buttonVariants({ variant: "ghost", size: "sm" })}><X className="size-4" /> Limpar</Link> : null}<button type="submit" className={buttonVariants({ size: "sm" })}><Search className="size-4" /> Aplicar filtros</button></div>
         </form>

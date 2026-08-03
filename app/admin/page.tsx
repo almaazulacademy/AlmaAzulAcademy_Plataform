@@ -8,6 +8,9 @@ import {
   TicketCheck,
   Users,
   WalletCards,
+  Gauge,
+  Trophy,
+  ReceiptText,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/page-header";
@@ -25,6 +28,9 @@ const cards = [
   { key: "expectedRevenueCents", label: "Receita prevista", icon: WalletCards },
   { key: "confirmedRevenueCents", label: "Receita confirmada", icon: Banknote },
   { key: "totalParticipants", label: "Total de participantes", icon: Users },
+  { key: "totalReservations", label: "Número de reservas", icon: ReceiptText },
+  { key: "monthlyRevenueCents", label: "Receita do mês", icon: Banknote },
+  { key: "averageTicketCents", label: "Ticket médio", icon: WalletCards },
 ] as const;
 
 export default async function AdminDashboardPage() {
@@ -69,6 +75,20 @@ export default async function AdminDashboardPage() {
               </article>
             );
           })}
+
+          <article className="rounded-3xl border border-ink/10 bg-white p-6">
+            <div className="flex items-start justify-between"><p className="text-sm font-medium text-ink/55">Taxa média de ocupação</p><Gauge className="size-5 text-lake" /></div>
+            <p className="mt-8 text-3xl font-semibold tracking-[-0.04em]">{metrics.averageOccupancyRate.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</p>
+          </article>
+          <article className="rounded-3xl border border-ink/10 bg-white p-6">
+            <div className="flex items-start justify-between"><p className="text-sm font-medium text-ink/55">Experiência mais vendida</p><Trophy className="size-5 text-lake" /></div>
+            <p className="mt-8 text-xl font-semibold tracking-[-0.03em]">{metrics.topExperience ?? "Sem vendas confirmadas"}</p>
+          </article>
+
+          <article className="rounded-3xl border border-ink/10 bg-white p-6 sm:col-span-2 xl:col-span-4">
+            <div><p className="text-sm font-medium text-ink/55">Receita confirmada · últimos 6 meses</p><p className="mt-1 text-xs text-ink/40">Comparativo mensal</p></div>
+            <div className="mt-7 flex h-44 items-end gap-3" aria-label="Gráfico de receita mensal">{metrics.revenueByMonth.map((item) => { const max = Math.max(...metrics.revenueByMonth.map((entry) => entry.revenueCents), 1); const height = Math.max(6, (item.revenueCents / max) * 100); return <div key={item.month} title={`${item.month}: ${formatCurrency(item.revenueCents)}`} className="flex min-w-0 flex-1 flex-col items-center gap-2"><span className="hidden text-[10px] font-medium text-ink/45 sm:block">{formatCurrency(item.revenueCents)}</span><div className="w-full rounded-t-xl bg-lake" style={{ height: `${height}%` }} /><span className="text-xs capitalize text-ink/50">{item.month}</span></div>; })}</div>
+          </article>
 
           <article className="rounded-3xl border border-ink/10 bg-white p-6 sm:col-span-2">
             <div className="flex items-start justify-between"><p className="text-sm font-medium text-ink/55">Última atualização</p><RefreshCw className="size-5 text-lake" /></div>

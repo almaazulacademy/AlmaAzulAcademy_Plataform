@@ -112,6 +112,12 @@ export async function getAdminDashboard(actorUserId: string): Promise<AdminDashb
     expectedRevenueCents: asNumber(row.expectedRevenueCents),
     confirmedRevenueCents: asNumber(row.confirmedRevenueCents),
     totalParticipants: asNumber(row.totalParticipants),
+    totalReservations: asNumber(row.totalReservations),
+    averageOccupancyRate: asNumber(row.averageOccupancyRate),
+    topExperience: nullableString(row.topExperience),
+    monthlyRevenueCents: asNumber(row.monthlyRevenueCents),
+    averageTicketCents: asNumber(row.averageTicketCents),
+    revenueByMonth: asRows(row.revenueByMonth).map((item) => ({ month: asString(item.month), revenueCents: asNumber(item.revenueCents) })),
     lastUpdatedAt: nullableString(row.lastUpdatedAt),
   };
 }
@@ -124,6 +130,10 @@ export async function listAdminExperiences(actorUserId: string): Promise<AdminEx
     slug: asString(row.slug),
     title: asString(row.title),
     summary: asString(row.summary),
+    description: asString(row.description),
+    durationMinutes: asNumber(row.duration_minutes),
+    priceCents: asNumber(row.price_cents),
+    defaultCapacity: asNumber(row.default_capacity),
     status: asString(row.status) as ExperienceStatus,
     imageUrl: nullableString(row.image_url),
     displayOrder: asNumber(row.display_order),
@@ -150,6 +160,7 @@ export async function listAdminSessions(actorUserId: string): Promise<AdminSessi
     internalNotes: nullableString(row.internal_notes),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
+    participants: asRows(row.participants).map((item) => ({ id: asString(item.id), name: asString(item.name), quantity: asNumber(item.quantity), status: mapReservationStatus(item.status) })),
   }));
 }
 
@@ -202,6 +213,10 @@ export async function createAdminExperience(actorUserId: string, slug: string, i
     p_status: input.status,
     p_image_url: input.imageUrl,
     p_display_order: input.displayOrder,
+    p_description: input.description,
+    p_duration_minutes: input.durationMinutes,
+    p_price_cents: input.priceCents,
+    p_default_capacity: input.defaultCapacity,
   });
   if (result.error) throw new Error(result.error.message);
   return asString(result.data);
@@ -216,6 +231,10 @@ export async function updateAdminExperience(actorUserId: string, experienceId: s
     p_status: input.status,
     p_image_url: input.imageUrl,
     p_display_order: input.displayOrder,
+    p_description: input.description,
+    p_duration_minutes: input.durationMinutes,
+    p_price_cents: input.priceCents,
+    p_default_capacity: input.defaultCapacity,
   });
   if (result.error) throw new Error(result.error.message);
   return asBoolean(result.data);
@@ -234,6 +253,9 @@ export async function listAdminReservations(
     p_phone: filters.phone,
     p_cpf: filters.cpf,
     p_session_id: filters.sessionId || null,
+    p_payment_status: filters.paymentStatus || null,
+    p_query: filters.query,
+    p_sort: filters.sort,
   });
   if (result.error) throw new Error(result.error.message);
   return asRows(result.data).map(mapReservation);
