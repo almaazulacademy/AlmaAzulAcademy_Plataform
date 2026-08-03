@@ -1,25 +1,48 @@
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAuthFetch } from "@/lib/supabase/auth-fetch";
 
-export function getSupabaseServerClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+function publicSupabaseConfiguration() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const key = publishableKey || anonKey;
 
   if (!url || !key || url.includes("your-project")) return null;
+  return { url, key, keyKind: publishableKey ? "publishable" : "anon" } as const;
+}
 
-  return createClient(url, key, {
+export function getSupabaseAuthConfigurationSummary() {
+  const configuration = publicSupabaseConfiguration();
+  if (!configuration) return { configured: false, projectRef: null, keyKind: null };
+  let projectRef: string | null = null;
+  try {
+    projectRef = new URL(configuration.url).hostname.split(".")[0] || null;
+  } catch {
+    return { configured: false, projectRef: null, keyKind: configuration.keyKind };
+  }
+  return { configured: true, projectRef, keyKind: configuration.keyKind };
+}
+
+export function getSupabaseServerClient() {
+  const configuration = publicSupabaseConfiguration();
+  if (!configuration) return null;
+
+  return createClient(configuration.url, configuration.key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: createSupabaseAuthFetch() },
   });
 }
 
 export function getSupabaseUserClient(accessToken: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const configuration = publicSupabaseConfiguration();
+  if (!configuration || !accessToken) return null;
 
-  if (!url || !key || url.includes("your-project") || !accessToken) return null;
-
-  return createClient(url, key, {
+  return createClient(configuration.url, configuration.key, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    global: {
+      fetch: createSupabaseAuthFetch(),
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
   });
 }
 

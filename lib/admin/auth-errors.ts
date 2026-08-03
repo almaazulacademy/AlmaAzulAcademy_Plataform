@@ -19,6 +19,13 @@ export function describeAuthFailure(error: unknown): { status: number; message: 
   const code = value.code?.toLowerCase() ?? "";
   const message = value.message?.toLowerCase() ?? "";
 
+  if (value.name === "SupabaseAuthTimeoutError" || message.includes("timed out") || message.includes("timeout")) {
+    return { status: 504, message: "O Supabase Auth excedeu o tempo limite de conexão. Tente novamente." };
+  }
+  if (value.name === "AuthRetryableFetchError" || message.includes("fetch failed") || message.includes("network")) {
+    return { status: 503, message: "Não foi possível conectar ao Supabase Auth." };
+  }
+
   if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
     return { status: 403, message: "O email desta conta ainda não foi confirmado." };
   }

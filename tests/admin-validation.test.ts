@@ -11,6 +11,8 @@ import {
   validateReservationAdminAction,
 } from "../lib/admin/validation.ts";
 import { describeAuthFailure } from "../lib/admin/auth-errors.ts";
+import { requestPasswordSession } from "../lib/admin/password-auth.ts";
+import { createSupabaseAuthFetch, SupabaseAuthTimeoutError } from "../lib/supabase/auth-fetch.ts";
 
 test("normaliza o slug de qualquer experiência", () => {
   assert.equal(slugify("  Remada da Lua Cheia  "), "remada-da-lua-cheia");
@@ -35,6 +37,51 @@ test("distingue falhas de autenticação sem mascarar configuração e sessão",
   assert.equal(describeAuthFailure({ code: "invalid_credentials", status: 400 }).status, 401);
   assert.equal(describeAuthFailure({ message: "Invalid API key", status: 401 }).status, 503);
   assert.equal(describeAuthFailure({ code: "unexpected_failure", status: 500 }).status, 503);
+});
+
+test("mantém credenciais inválidas como 401", async () => {
+  const result = await requestPasswordSession(async () => ({
+    data: { user: null, session: null },
+    error: { code: "invalid_credentials", status: 400 },
+  }), "admin@example.com", "senha-segura");
+  assert.equal(result.state, "AUTH_REJECTED");
+  if (result.state === "AUTH_REJECTED") assert.equal(describeAuthFailure(result.error).status, 401);
+});
+
+test("timeout do Supabase retorna 504 e não 401", async () => {
+  const authFetch = createSupabaseAuthFetch(
+    (_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    }),
+    5,
+  );
+  await assert.rejects(() => authFetch("https://project.supabase.co/auth/v1/token"), SupabaseAuthTimeoutError);
+  assert.equal(describeAuthFailure(new SupabaseAuthTimeoutError(5)).status, 504);
+});
+
+test("indisponibilidade de rede retorna 503", async () => {
+  const result = await requestPasswordSession(
+    async () => { throw new TypeError("fetch failed"); },
+    "admin@example.com",
+    "senha-segura",
+  );
+  assert.equal(result.state, "NETWORK_FAILURE");
+  if (result.state === "NETWORK_FAILURE") assert.equal(describeAuthFailure(result.error).status, 503);
+});
+
+test("preserva usuário e sessão criados com sucesso", async () => {
+  const result = await requestPasswordSession(async () => ({
+    data: {
+      user: { id: "3b12f1df-5232-4804-897e-917bf397618a", email: "admin@example.com" },
+      session: { access_token: "test-access", refresh_token: "test-refresh", expires_in: 3600 },
+    },
+    error: null,
+  } as never), "admin@example.com", "senha-segura");
+  assert.equal(result.state, "SUCCESS");
+  if (result.state === "SUCCESS") {
+    assert.equal(result.user.id, "3b12f1df-5232-4804-897e-917bf397618a");
+    assert.equal(result.session.expires_in, 3600);
+  }
 });
 
 test("valida os limites de uma sessão administrativa", () => {

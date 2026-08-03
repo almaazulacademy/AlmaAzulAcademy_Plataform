@@ -6,8 +6,9 @@ import type { Session } from "@supabase/supabase-js";
 
 import { ADMIN_ACCESS_COOKIE, ADMIN_COOKIE_BASE, ADMIN_REFRESH_COOKIE } from "@/lib/admin/auth-cookies";
 import { authErrorDetails, describeAuthFailure } from "@/lib/admin/auth-errors";
+import { requestPasswordSession } from "@/lib/admin/password-auth";
 import type { AdminContext, AdminProfile, AdminRole } from "@/lib/admin/types";
-import { getSupabaseAdminClient, getSupabaseServerClient, getSupabaseUserClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient, getSupabaseAuthConfigurationSummary, getSupabaseServerClient, getSupabaseUserClient } from "@/lib/supabase/server";
 
 type AdminMembershipRow = {
   user_id: string;
@@ -74,29 +75,31 @@ export async function authenticateAdminCredentials(email: string, password: stri
     return { success: false, status: 503, message: "Variável ausente: SUPABASE_SERVICE_ROLE_KEY." };
   }
 
-  authLog(requestId, "password_sign_in_started");
-  let login: Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>;
-  try {
-    login = await supabase.auth.signInWithPassword({ email, password });
-  } catch (error) {
-    authLog(requestId, "password_sign_in_exception", authErrorDetails(error));
-    return { success: false, status: 503, message: "Não foi possível conectar ao Supabase Auth." };
+  authLog(requestId, "password_sign_in_started", getSupabaseAuthConfigurationSummary());
+  const login = await requestPasswordSession(
+    (credentials) => supabase.auth.signInWithPassword(credentials),
+    email,
+    password,
+  );
+  if (login.state === "NETWORK_FAILURE") {
+    authLog(requestId, "password_sign_in_network_failure", authErrorDetails(login.error));
+    return { success: false, ...describeAuthFailure(login.error) };
   }
-  if (login.error) {
+  if (login.state === "AUTH_REJECTED") {
     authLog(requestId, "password_sign_in_rejected", authErrorDetails(login.error));
     return { success: false, ...describeAuthFailure(login.error) };
   }
-  if (!login.data.user) {
+  if (login.state === "MISSING_USER") {
     authLog(requestId, "password_sign_in_missing_user");
     return { success: false, status: 502, message: "O Supabase autenticou a solicitação, mas não retornou o usuário." };
   }
-  if (!login.data.session) {
+  if (login.state === "MISSING_SESSION") {
     authLog(requestId, "password_sign_in_missing_session");
     return { success: false, status: 502, message: "Usuário autenticado, mas o Supabase não criou uma sessão." };
   }
 
   authLog(requestId, "password_sign_in_succeeded");
-  const membershipResult = await getMembership(login.data.user.id, requestId);
+  const membershipResult = await getMembership(login.user.id, requestId);
   if (!membershipResult.membership) {
     await supabase.auth.signOut().catch(() => undefined);
     const messages = {
@@ -113,10 +116,10 @@ export async function authenticateAdminCredentials(email: string, password: stri
 
   return {
     success: true,
-    session: login.data.session,
+    session: login.session,
     profile: {
-      userId: login.data.user.id,
-      email: login.data.user.email ?? email,
+      userId: login.user.id,
+      email: login.user.email ?? email,
       displayName: membershipResult.membership.display_name,
       role: membershipResult.membership.role as AdminRole,
     },
