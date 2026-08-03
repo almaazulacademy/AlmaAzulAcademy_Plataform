@@ -2,15 +2,31 @@
 -- Additive by design: no historical or legacy field is removed or rewritten.
 
 alter table public.experiences
-  add column if not exists editorial_content jsonb not null default '{}'::jsonb;
+  add column if not exists editorial_content jsonb;
+
+update public.experiences
+set editorial_content = '{}'::jsonb
+where editorial_content is null;
+
+alter table public.experiences
+  alter column editorial_content set default '{}'::jsonb,
+  alter column editorial_content set not null;
 
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'experiences_editorial_content_object') then
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.experiences'::regclass
+      and conname = 'experiences_editorial_content_object'
+  ) then
     alter table public.experiences add constraint experiences_editorial_content_object
       check (jsonb_typeof(editorial_content) = 'object');
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'experiences_editorial_content_size') then
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.experiences'::regclass
+      and conname = 'experiences_editorial_content_size'
+  ) then
     alter table public.experiences add constraint experiences_editorial_content_size
       check (octet_length(editorial_content::text) <= 200000);
   end if;
@@ -145,8 +161,58 @@ language sql stable security definer set search_path = public as $$
   order by e.display_order, e.title;
 $$;
 
-drop function if exists public.admin_list_experiences(uuid);
-create function public.admin_list_experiences(p_actor_id uuid)
+-- RETURNS TABLE changed in Sprint 5.2. PostgreSQL cannot replace a function
+-- when its OUT columns change, so remove only this exact signature and only
+-- when its current output contract is incompatible. No CASCADE is used: an
+-- unexpected database dependency aborts safely instead of being removed.
+do $$
+declare
+  function_oid oid := to_regprocedure('public.admin_list_experiences(uuid)');
+  existing_output_types oid[];
+  existing_output_names text[];
+  expected_output_types oid[] := array[
+    'uuid'::regtype::oid,
+    'text'::regtype::oid,
+    'text'::regtype::oid,
+    'text'::regtype::oid,
+    'text'::regtype::oid,
+    'integer'::regtype::oid,
+    'integer'::regtype::oid,
+    'integer'::regtype::oid,
+    'text'::regtype::oid,
+    'text'::regtype::oid,
+    'integer'::regtype::oid,
+    'jsonb'::regtype::oid,
+    'bigint'::regtype::oid,
+    'timestamp with time zone'::regtype::oid,
+    'timestamp with time zone'::regtype::oid
+  ];
+  expected_output_names text[] := array[
+    'id', 'slug', 'title', 'summary', 'description', 'duration_minutes',
+    'price_cents', 'default_capacity', 'status', 'image_url', 'display_order',
+    'editorial_content', 'sessions_count', 'created_at', 'updated_at'
+  ];
+begin
+  if function_oid is not null then
+    select
+      array_agg(argument.arg_type order by argument.ordinality),
+      array_agg(argument.arg_name order by argument.ordinality)
+    into existing_output_types, existing_output_names
+    from pg_proc proc
+    cross join lateral unnest(proc.proallargtypes, proc.proargmodes, proc.proargnames)
+      with ordinality as argument(arg_type, arg_mode, arg_name, ordinality)
+    where proc.oid = function_oid
+      and argument.arg_mode in ('o', 't');
+
+    if existing_output_types is distinct from expected_output_types
+       or existing_output_names is distinct from expected_output_names then
+      execute 'drop function public.admin_list_experiences(uuid)';
+    end if;
+  end if;
+end;
+$$;
+
+create or replace function public.admin_list_experiences(p_actor_id uuid)
 returns table (id uuid, slug text, title text, summary text, description text, duration_minutes integer, price_cents integer, default_capacity integer, status text, image_url text, display_order integer, editorial_content jsonb, sessions_count bigint, created_at timestamptz, updated_at timestamptz)
 language plpgsql stable security definer set search_path=public as $$
 begin
@@ -155,8 +221,10 @@ begin
   from public.experiences e left join public.sessions s on s.experience_id=e.id group by e.id order by e.display_order,e.title;
 end $$;
 
-drop function if exists public.admin_create_experience(uuid,text,text,text,text,text,integer,text,integer,integer,integer);
-create function public.admin_create_experience(p_actor_id uuid,p_slug text,p_title text,p_summary text,p_status text,p_image_url text,p_display_order integer,p_description text,p_duration_minutes integer,p_price_cents integer,p_default_capacity integer,p_editorial_content jsonb)
+-- The Sprint 5.2 overloads add p_editorial_content. Their scalar return types
+-- remain uuid/boolean, so CREATE OR REPLACE is safe for partial or repeated runs.
+-- Older overloads are retained for compatibility with earlier server builds.
+create or replace function public.admin_create_experience(p_actor_id uuid,p_slug text,p_title text,p_summary text,p_status text,p_image_url text,p_display_order integer,p_description text,p_duration_minutes integer,p_price_cents integer,p_default_capacity integer,p_editorial_content jsonb)
 returns uuid language plpgsql security definer set search_path=public as $$ declare created_id uuid; begin
   if not public.is_active_admin(p_actor_id) then raise exception 'ADMIN_FORBIDDEN' using errcode='42501'; end if;
   if p_slug in ('admin','api','login','reservar','pagamento','acompanhar-reserva','experiencias','imersao-paranoa') then raise exception 'RESERVED_EXPERIENCE_SLUG' using errcode='22023'; end if;
@@ -168,8 +236,7 @@ returns uuid language plpgsql security definer set search_path=public as $$ decl
   return created_id;
 end $$;
 
-drop function if exists public.admin_update_experience(uuid,uuid,text,text,text,text,integer,text,integer,integer,integer);
-create function public.admin_update_experience(p_actor_id uuid,p_experience_id uuid,p_title text,p_summary text,p_status text,p_image_url text,p_display_order integer,p_description text,p_duration_minutes integer,p_price_cents integer,p_default_capacity integer,p_editorial_content jsonb)
+create or replace function public.admin_update_experience(p_actor_id uuid,p_experience_id uuid,p_title text,p_summary text,p_status text,p_image_url text,p_display_order integer,p_description text,p_duration_minutes integer,p_price_cents integer,p_default_capacity integer,p_editorial_content jsonb)
 returns boolean language plpgsql security definer set search_path=public as $$ begin
   if not public.is_active_admin(p_actor_id) then raise exception 'ADMIN_FORBIDDEN' using errcode='42501'; end if;
   if p_status='PUBLISHED' and not public.experience_editorial_is_publishable(p_editorial_content) then raise exception 'INCOMPLETE_EDITORIAL_CONTENT' using errcode='22023'; end if;

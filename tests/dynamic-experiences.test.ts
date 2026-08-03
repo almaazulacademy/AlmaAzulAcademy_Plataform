@@ -50,6 +50,10 @@ test("migration é aditiva, filtra publicação e restringe RPCs", () => {
   assert.match(sql, /experience_editorial_is_publishable/);
   assert.match(sql, /INCOMPLETE_EDITORIAL_CONTENT/g);
   assert.match(sql, /grant execute on function public\.get_public_experience\(text\) to anon, authenticated, service_role/);
+  assert.match(sql, /create or replace function public\.admin_create_experience/);
+  assert.match(sql, /create or replace function public\.admin_update_experience/);
+  assert.match(sql, /create or replace function public\.admin_list_experiences/);
+  assert.doesNotMatch(sql, /drop function if exists public\.admin_(create|update)_experience/);
   assert.doesNotMatch(sql, /drop table|drop column/);
 });
 
