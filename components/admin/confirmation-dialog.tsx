@@ -37,6 +37,20 @@ export function ConfirmationDialog({
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loading) onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [loading, onClose, open]);
+
   if (!open) return null;
 
   const submit = async () => {
@@ -58,7 +72,7 @@ export function ConfirmationDialog({
     <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {
       if (event.currentTarget === event.target && !loading) onClose();
     }}>
-      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-soft sm:p-8" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-soft sm:p-8" role="dialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-description">
         <div className="flex items-start justify-between gap-4">
           <div className="grid size-11 place-items-center rounded-2xl bg-red-50 text-red-700">
             <AlertTriangle className="size-5" />
@@ -68,7 +82,7 @@ export function ConfirmationDialog({
           </button>
         </div>
         <h2 id="confirmation-title" className="mt-6 text-2xl font-semibold tracking-[-0.03em] text-ink">{title}</h2>
-        <p className="mt-3 text-sm leading-6 text-ink/60">{description}</p>
+        <p id="confirmation-description" className="mt-3 text-sm leading-6 text-ink/60">{description}</p>
         {requireReason ? (
           <label className="mt-6 block">
             <span className={labelClass}>Motivo da ação</span>

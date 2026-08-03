@@ -22,6 +22,7 @@ function EmptyState({ error = false }: { error?: boolean }) {
       <p className="mx-auto mt-3 max-w-lg leading-7 text-white/60">
         {error ? "Tente novamente em alguns instantes. A experiência continua por aqui." : "Estamos preparando as próximas sessões. Volte em breve para encontrar sua data."}
       </p>
+      <Link href="/acompanhar-reserva" className={buttonVariants({ variant: "light", size: "sm", className: "mt-6" })}>Acompanhar uma reserva</Link>
     </div>
   );
 }

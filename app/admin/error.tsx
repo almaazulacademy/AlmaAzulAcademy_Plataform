@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 export default function AdminError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <section className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center text-center" role="alert">
-      <span className="flex size-12 items-center justify-center rounded-2xl bg-sunset/10 text-sunset">
+      <span className="flex size-12 items-center justify-center rounded-2xl bg-red-50 text-red-700">
         <AlertTriangle className="size-5" aria-hidden />
       </span>
       <h1 className="mt-5 text-2xl font-semibold tracking-[-0.035em]">Não foi possível carregar esta área</h1>

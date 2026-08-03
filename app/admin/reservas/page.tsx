@@ -66,7 +66,7 @@ export default async function AdminReservationsPage({ searchParams }: { searchPa
           </div>
           <div className="mt-5 flex flex-wrap justify-end gap-3">{hasFilters ? <Link href="/admin/reservas" className={buttonVariants({ variant: "ghost", size: "sm" })}><X className="size-4" /> Limpar</Link> : null}<button type="submit" className={buttonVariants({ size: "sm" })}><Search className="size-4" /> Aplicar filtros</button></div>
         </form>
-        <div className="mt-6"><p className="mb-4 text-sm text-ink/50">{reservations.length} {reservations.length === 1 ? "reserva encontrada" : "reservas encontradas"}</p><ReservationsList reservations={reservations} /></div>
+        <div className="mt-6"><p className="mb-4 text-sm text-ink/50">{reservations.length} {reservations.length === 1 ? "reserva encontrada" : "reservas encontradas"}</p><ReservationsList reservations={reservations} hasFilters={hasFilters} /></div>
       </div>
     );
   } catch {

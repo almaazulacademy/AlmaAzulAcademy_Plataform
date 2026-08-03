@@ -195,7 +195,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
       ) : null}
 
       <section className="mt-8 space-y-4" aria-label="Lista de sessões">
-        {sessions.length === 0 ? <AdminEmptyState title="Nenhuma sessão cadastrada" description="Crie a primeira data para começar a organizar a agenda." /> : sessions.map((session) => {
+        {sessions.length === 0 ? <AdminEmptyState title="Nenhuma sessão cadastrada" description="Crie a primeira data para começar a organizar a agenda." action={<Button type="button" size="sm" onClick={openNew}><Plus className="size-4" /> Criar sessão</Button>} /> : sessions.map((session) => {
           const occupied = session.capacity - session.remainingSpots;
           const occupancy = session.capacity ? Math.round((occupied / session.capacity) * 100) : 0;
           return (

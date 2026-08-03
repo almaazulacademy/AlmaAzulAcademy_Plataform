@@ -9,9 +9,9 @@ import type { AdminReservation } from "@/lib/admin/types";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency, formatMaskedCpf } from "@/lib/admin/format";
 import { formatSessionDateTime } from "@/lib/sessions/date-time";
 
-export function ReservationsList({ reservations }: { reservations: AdminReservation[] }) {
+export function ReservationsList({ reservations, hasFilters = false }: { reservations: AdminReservation[]; hasFilters?: boolean }) {
   if (reservations.length === 0) {
-    return <AdminEmptyState title="Nenhuma reserva encontrada" description="Ajuste os filtros ou aguarde novas reservas." />;
+    return <AdminEmptyState title={hasFilters ? "Nenhum resultado encontrado" : "Nenhuma reserva ainda"} description={hasFilters ? "Ajuste ou remova os filtros para ampliar a busca." : "As reservas aparecerão aqui assim que os clientes escolherem uma sessão."} action={<Link href={hasFilters ? "/admin/reservas" : "/admin/sessoes"} className={buttonVariants({ variant: "outline", size: "sm" })}>{hasFilters ? "Limpar filtros" : "Ver sessões"}</Link>} />;
   }
 
   return (

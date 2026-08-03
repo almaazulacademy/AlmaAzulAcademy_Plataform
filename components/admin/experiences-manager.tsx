@@ -154,7 +154,7 @@ export function ExperiencesManager({ experiences }: { experiences: AdminExperien
       ) : null}
 
       <section className="mt-8 grid gap-4 lg:grid-cols-2" aria-label="Lista de experiências">
-        {experiences.length === 0 ? <div className="lg:col-span-2"><AdminEmptyState title="Nenhuma experiência cadastrada" description="Crie o primeiro cadastro para associar sessões e reservas." /></div> : experiences.map((experience) => (
+        {experiences.length === 0 ? <div className="lg:col-span-2"><AdminEmptyState title="Nenhuma experiência cadastrada" description="Crie o primeiro cadastro para associar sessões e reservas." action={<Button type="button" size="sm" onClick={openNew}><Plus className="size-4" /> Criar experiência</Button>} /></div> : experiences.map((experience) => (
           <article key={experience.id} className="rounded-3xl border border-ink/10 bg-white p-6">
             <div className="flex items-start justify-between gap-4"><div className="grid size-11 place-items-center rounded-2xl bg-mist text-forest"><ImageIcon className="size-5" /></div><StatusBadge status={experience.status} /></div>
             <h2 className="mt-6 text-xl font-semibold tracking-[-0.025em]">{experience.title}</h2>

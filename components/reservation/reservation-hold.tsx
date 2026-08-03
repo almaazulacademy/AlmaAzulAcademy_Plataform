@@ -21,8 +21,12 @@ export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "S
   const expire = useCallback(() => setExpired(true), []);
 
   async function copyCode() {
-    await navigator.clipboard.writeText(publicCode);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(publicCode);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
   }
 
   return (
@@ -40,7 +44,7 @@ export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "S
       )}
       <div className="mt-6 flex flex-col gap-3 rounded-3xl border border-ink/10 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div><p className="text-xs font-semibold uppercase tracking-[0.15em] text-ink/40">Código da reserva</p><p className="mt-1 font-mono text-xl font-semibold tracking-wider">{publicCode}</p></div>
-        <button type="button" onClick={copyCode} className="inline-flex items-center gap-2 text-sm font-semibold text-forest"><Copy className="size-4" />{copied ? "Copiado" : "Copiar código"}</button>
+        <button type="button" onClick={copyCode} className="inline-flex items-center gap-2 text-sm font-semibold text-forest" aria-live="polite"><Copy className="size-4" />{copied ? "Copiado" : "Copiar código"}</button>
       </div>
       <div className="mt-7 flex flex-col gap-3 sm:flex-row">
         {!expired && checkoutUrl && <a href={checkoutUrl} className={buttonVariants({ size: "lg" })}>Pagar agora</a>}

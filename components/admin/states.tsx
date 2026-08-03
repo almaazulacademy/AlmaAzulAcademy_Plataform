@@ -1,12 +1,14 @@
+import type { ReactNode } from "react";
 import { CircleAlert, Inbox } from "lucide-react";
 
-export function AdminEmptyState({ title, description }: { title: string; description: string }) {
+export function AdminEmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
   return (
     <div className="grid min-h-64 place-items-center rounded-3xl border border-dashed border-ink/15 bg-white p-8 text-center">
       <div>
         <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-mist text-forest"><Inbox className="size-5" /></div>
         <h2 className="mt-5 text-lg font-semibold text-ink">{title}</h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/55">{description}</p>
+        {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
       </div>
     </div>
   );
