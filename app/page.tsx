@@ -80,9 +80,9 @@ export default async function HomePage() {
 
       <Section
         id="experiencias"
-        eyebrow="Experiência em destaque"
-        title="Comece pelo Paranoá."
-        description="A primeira experiência da Alma Azul Academy é uma travessia conduzida por um dos corredores naturais mais surpreendentes de Brasília."
+        eyebrow="Explore nossas experiências"
+        title="O Lago Paranoá tem muitas formas de ser vivido."
+        description="Do nascer do sol às últimas luzes do dia, criamos experiências para remar, contemplar, mergulhar e se reconectar com a natureza em Brasília."
         tone="paper"
       >
         <ExperienceCard experience={featured} featured />

@@ -113,6 +113,15 @@ test("Home renderiza experiências publicadas logo após o destaque", () => {
   assert.equal(home.match(/upcoming\.map/g)?.length, 1);
 });
 
+test("Home apresenta o catálogo sem alterar a estrutura e a ordem dos cards", () => {
+  const home = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(home, /eyebrow="Explore nossas experiências"/);
+  assert.match(home, /title="O Lago Paranoá tem muitas formas de ser vivido\."/);
+  assert.match(home, /description="Do nascer do sol às últimas luzes do dia, criamos experiências para remar, contemplar, mergulhar e se reconectar com a natureza em Brasília\."/);
+  assert.doesNotMatch(home, /Comece pelo Paranoá|A primeira experiência da Alma Azul Academy/);
+  assert.ok(home.indexOf("<ExperienceCard experience={featured} featured />") < home.indexOf("upcoming.map"));
+});
+
 test("Imersão Paranoá preserva Hero e conteúdo específico fora do FAQ", () => {
   assert.equal(imersaoParanoaEditorial.hero.image.src, "/images/backgrounds/hero-alma-azul-lago.webp");
   assert.match(imersaoParanoaEditorial.about.paragraphs.join(" "), /Córrego do Torto/);
