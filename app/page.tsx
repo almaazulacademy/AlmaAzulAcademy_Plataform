@@ -8,7 +8,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { Section } from "@/components/section";
 import { buttonVariants } from "@/components/ui/button";
 import { listPublishedExperiences } from "@/lib/editorial/data";
-import { resolveExperienceCardMedia } from "@/lib/editorial/image";
+import { resolveExperienceCardLocation, resolveExperienceCardMedia } from "@/lib/editorial/image";
 
 const futureFormats = [
   { label: "Lua Cheia", icon: Moon },
@@ -28,7 +28,7 @@ export default async function HomePage() {
       title: experience.title,
       eyebrow: experience.editorial.hero.eyebrow,
       summary: experience.summary,
-      location: experience.editorial.hero.details[0] ?? "",
+      location: resolveExperienceCardLocation(experience),
       image: media.src,
       imageAlt: media.alt,
       href: `/experiencias/${experience.slug}`,
@@ -125,7 +125,7 @@ export default async function HomePage() {
         id="proximas-experiencias"
         eyebrow="O que vem pela frente"
         title="Uma plataforma. Muitos jeitos de viver a água."
-        description="A Imersão Paranoá abre o caminho. Novos formatos serão lançados aos poucos."
+        description="As experiências de canoa havaiana abrem o caminho. Novas formas de vivenciar o lago aparecem."
         tone="mist"
       >
         <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -151,7 +151,7 @@ export default async function HomePage() {
           <div className="max-w-3xl">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Alma Azul Academy</p>
             <h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.05em] sm:text-7xl">
-              Seu próximo mergulho começa aqui.
+              Comece pela Imersão Paranoá
             </h2>
             <Link href={featured.href} className={buttonVariants({ variant: "light", size: "lg", className: "mt-9" })}>
               Explorar {featured.title}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, MapPin } from "lucide-react";
 
 import { EditorialImage } from "@/components/editorial-image";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,10 @@ export function ExperienceCard({ experience, featured = false }: { experience: E
           </p>
           <h3 className={cn("text-4xl font-medium tracking-[-0.045em]", featured && "sm:text-6xl")}>{experience.title}</h3>
           <p className="mt-4 max-w-xl text-base leading-7 text-white/72 sm:text-lg">{experience.summary}</p>
-          <p className="mt-5 text-sm text-white/55">{experience.location}</p>
+          <p className="mt-5 inline-flex items-center gap-2 text-sm text-white/55">
+            <MapPin aria-hidden="true" className="size-4 shrink-0" />
+            {experience.location}
+          </p>
         </div>
         <span className="grid size-12 shrink-0 place-items-center rounded-full bg-white text-ink transition-transform duration-300 group-hover:-translate-y-1 group-hover:translate-x-1 sm:size-14">
           <ArrowUpRight className="size-5" />

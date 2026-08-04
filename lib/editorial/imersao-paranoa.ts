@@ -46,7 +46,7 @@ export const imersaoParanoaEditorial: ExperienceEditorial = {
     items: [
       { title: "Encontro", description: "Recepção do grupo, preparação dos equipamentos e orientações de segurança." },
       { title: "Travessia", description: "Remada guiada pelo corredor do Córrego do Torto, cercado pela mata." },
-      { title: "Lago", description: "Chegada ao Paranoá, pausa para banho e tempo para aproveitar a paisagem." },
+      { title: "Banho", description: "Pausa para banho em uma prainha no meio do lago, cercada pela natureza exuberante do Lago Norte." },
     ],
   },
   included: {

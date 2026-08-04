@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { imersaoParanoaFallback } from "./imersao-paranoa.ts";
 import { validateExperienceEditorial, type PublicExperience } from "./experience.ts";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { refinePublicExperience } from "./refine.ts";
 
 type Row = Record<string, unknown>;
 
@@ -19,7 +20,7 @@ export function mapPublicExperience(value: unknown): PublicExperience | null {
   const title = typeof row.title === "string" ? row.title : "";
   const summary = typeof row.summary === "string" ? row.summary : "";
   if (!slug || !title || !summary) return null;
-  return {
+  return refinePublicExperience({
     id: typeof row.id === "string" ? row.id : slug,
     slug,
     title,
@@ -27,7 +28,7 @@ export function mapPublicExperience(value: unknown): PublicExperience | null {
     imageUrl: typeof row.image_url === "string" && row.image_url ? row.image_url : null,
     displayOrder: Number.isFinite(Number(row.display_order)) ? Number(row.display_order) : 0,
     editorial: editorial.data,
-  };
+  });
 }
 
 async function publicClient(): Promise<SupabaseClient | null> {
@@ -41,12 +42,12 @@ export async function getPublishedExperience(slug: string, fallback = false): Pr
     if (!result.error) {
       const experience = mapPublicExperience(result.data);
       if (experience) return experience;
-      return fallback && slug === imersaoParanoaFallback.slug ? imersaoParanoaFallback : null;
+      return fallback && slug === imersaoParanoaFallback.slug ? refinePublicExperience(imersaoParanoaFallback) : null;
     } else {
       console.error("Erro ao carregar experiência publicada:", result.error.message);
     }
   }
-  return slug === imersaoParanoaFallback.slug ? imersaoParanoaFallback : null;
+  return slug === imersaoParanoaFallback.slug ? refinePublicExperience(imersaoParanoaFallback) : null;
 }
 
 export async function listPublishedExperiences(): Promise<PublicExperience[]> {
@@ -60,5 +61,5 @@ export async function listPublishedExperiences(): Promise<PublicExperience[]> {
       console.error("Erro ao listar experiências publicadas:", result.error.message);
     }
   }
-  return [imersaoParanoaFallback];
+  return [refinePublicExperience(imersaoParanoaFallback)];
 }
