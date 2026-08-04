@@ -44,6 +44,10 @@ export const DEFAULT_EXPERIENCE_FAQ_ITEMS: EditorialFaqItem[] = [
     question: "Posso participar sozinho?",
     answer: "Claro. Muitas pessoas participam sozinhas e acabam compartilhando a experiência com o restante do grupo.",
   },
+  {
+    question: "Existe tolerância para atrasos?",
+    answer: "Há tolerância de até 20 minutos após o horário de chegada programado. Depois desse período, a saída poderá acontecer sem o participante para não comprometer a experiência do grupo.",
+  },
 ];
 
 function questionKey(question: string) {

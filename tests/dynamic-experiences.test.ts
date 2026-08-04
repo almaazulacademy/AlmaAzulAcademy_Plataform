@@ -76,10 +76,11 @@ test("Home prioriza hero.image e usa image_url apenas como fallback legado", () 
   const experience = structuredClone(imersaoParanoaFallback);
   experience.imageUrl = "/images/experiences/imersao-paranoa/grupos/IMG_3964.webp";
   assert.deepEqual(resolveExperienceCardMedia(experience), {
-    src: "/images/backgrounds/hero-alma-azul-lago.webp",
-    alt: "Canoas da Alma Azul no Lago Paranoá vistas de cima",
+    src: "/images/experiences/imersao-paranoa/corredor-corrego-do-torto/img-3977.webp",
+    alt: "Grupo em canoas dentro do Córrego do Torto, cercado pela mata",
   });
 
+  experience.slug = "outra-experiencia";
   experience.editorial.hero.image.src = "https://cdn.example.com/experiencia.webp";
   assert.equal(resolveExperienceCardMedia(experience).src, "https://cdn.example.com/experiencia.webp");
 

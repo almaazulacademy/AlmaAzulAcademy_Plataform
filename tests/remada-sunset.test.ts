@@ -51,10 +51,10 @@ test("assets selecionados existem em WebP e com capitalização Linux-safe", () 
 });
 
 test("FAQ padrão é canônico e combina perguntas específicas sem duplicação", () => {
-  assert.equal(DEFAULT_EXPERIENCE_FAQ_ITEMS.length, 10);
+  assert.equal(DEFAULT_EXPERIENCE_FAQ_ITEMS.length, 11);
   assert.equal(DEFAULT_EXPERIENCE_FAQ_ITEMS[0].question, "Preciso ter experiência com canoa ou remo?");
   const combined = resolveExperienceFaq(imersaoParanoaEditorial.faq);
-  assert.equal(combined.items.length, 11);
+  assert.equal(combined.items.length, 12);
   assert.equal(combined.items.at(-1)?.question, "Quanto tempo dura a experiência?");
   assert.equal(new Set(combined.items.map((item) => item.question)).size, combined.items.length);
 });
@@ -95,7 +95,7 @@ test("diagnóstico de experiences é somente leitura e expõe o inventário soli
 test("primeira sessão representa 09/08/2026 às 17h em Brasília", () => {
   assert.equal(sessionLocalToIso("2026-08-09T17:00"), "2026-08-09T20:00:00.000Z");
   assert.match(migration, /make_timestamptz\(2026, 8, 9, 17, 0, 0, 'America\/Sao_Paulo'\)/);
-  assert.match(migration, /\n\s*90,\n\s*7000,\n\s*28,\n\s*'OPEN'::public\.session_status/);
+  assert.match(migration, /\r?\n\s*90,\r?\n\s*7000,\r?\n\s*28,\r?\n\s*'OPEN'::public\.session_status/);
 });
 
 test("metadata dinâmica publica canonical por slug", () => {
