@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Instagram, Mail } from "lucide-react";
+import { Instagram, Mail, MessageCircle } from "lucide-react";
+
+import { CONTACT_EMAIL, EMAIL_LINK, WHATSAPP_LINK } from "@/lib/contact";
 
 export function Footer() {
   return (
@@ -36,7 +38,22 @@ export function Footer() {
             </p>
             <div className="flex flex-col gap-3 text-sm text-white/75">
               <span className="inline-flex items-center gap-2"><Instagram className="size-4" /> Instagram</span>
-              <span className="inline-flex items-center gap-2"><Mail className="size-4" /> Fale com a gente</span>
+              <a
+                href={WHATSAPP_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Conversar no WhatsApp com a Alma Azul Academy"
+                className="inline-flex items-center gap-2 transition-colors hover:text-white"
+              >
+                <MessageCircle className="size-4" /> WhatsApp
+              </a>
+              <a
+                href={EMAIL_LINK}
+                aria-label={`Enviar e-mail para ${CONTACT_EMAIL}`}
+                className="inline-flex items-center gap-2 transition-colors hover:text-white"
+              >
+                <Mail className="size-4" /> {CONTACT_EMAIL}
+              </a>
             </div>
           </div>
         </div>

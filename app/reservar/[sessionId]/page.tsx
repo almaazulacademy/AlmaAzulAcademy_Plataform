@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
+import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { ReservationForm } from "@/components/reservation/reservation-form";
 import { getBookingSession } from "@/lib/reservations/data";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -29,6 +30,7 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
         )}
       </div>
       <Footer />
+      <WhatsappFloatButton />
     </main>
   );
 }

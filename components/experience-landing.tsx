@@ -8,6 +8,7 @@ import { Gallery } from "@/components/gallery";
 import { Hero } from "@/components/hero";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
+import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { Section } from "@/components/section";
 import { SessionsLoading, SessionsSection } from "@/components/sessions-section";
 import type { PublicExperience } from "@/lib/editorial/experience";
@@ -83,6 +84,7 @@ export function ExperienceLanding({ experience }: { experience: PublicExperience
         </div>
       </section>
       <Footer />
+      <WhatsappFloatButton />
     </main>
   );
 }

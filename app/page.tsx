@@ -5,6 +5,7 @@ import { ArrowRight, Building2, Moon, Store, SunMedium, Waves } from "lucide-rea
 import { ExperienceCard } from "@/components/experience-card";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
+import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { Section } from "@/components/section";
 import { buttonVariants } from "@/components/ui/button";
 import { listPublishedExperiences } from "@/lib/editorial/data";
@@ -161,6 +162,7 @@ export default async function HomePage() {
       </section>
 
       <Footer />
+      <WhatsappFloatButton />
     </main>
   );
 }

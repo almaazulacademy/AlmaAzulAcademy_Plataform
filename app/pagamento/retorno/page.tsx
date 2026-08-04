@@ -4,6 +4,7 @@ import { CheckCircle2, Clock3 } from "lucide-react";
 
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
+import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { buttonVariants } from "@/components/ui/button";
 import { confirmPayment } from "@/lib/reservations/payment-confirmation";
 
@@ -48,6 +49,7 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
         </div>
       </div>
       <Footer />
+      <WhatsappFloatButton />
     </main>
   );
 }
