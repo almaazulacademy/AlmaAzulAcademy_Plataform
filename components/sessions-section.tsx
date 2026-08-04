@@ -18,7 +18,7 @@ function EmptyState({ error = false }: { error?: boolean }) {
   return (
     <div className="rounded-4xl border border-white/15 bg-white/[0.06] px-6 py-14 text-center sm:px-12">
       <CalendarDays className="mx-auto size-7 text-sand" />
-      <h3 className="mt-5 text-2xl font-medium">{error ? "Não foi possível carregar as datas agora." : "Novas datas serão abertas em breve."}</h3>
+      <h3 className="mt-5 text-2xl font-medium">{error ? "Não foi possível carregar as datas agora." : "Novas datas serão anunciadas em breve."}</h3>
       <p className="mx-auto mt-3 max-w-lg leading-7 text-white/60">
         {error ? "Tente novamente em alguns instantes. A experiência continua por aqui." : "Estamos preparando as próximas sessões. Volte em breve para encontrar sua data."}
       </p>

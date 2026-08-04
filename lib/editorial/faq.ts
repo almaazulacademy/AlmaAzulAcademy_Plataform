@@ -55,18 +55,23 @@ function questionKey(question: string) {
 }
 
 export function resolveExperienceFaq(specific?: ExperienceEditorial["faq"]): EditorialFaq {
-  const questions = new Set(DEFAULT_EXPERIENCE_FAQ_ITEMS.map((item) => questionKey(item.question)));
-  const additional = (specific?.items ?? []).filter((item) => {
+  const items = [...DEFAULT_EXPERIENCE_FAQ_ITEMS];
+  const questions = new Map(items.map((item, index) => [questionKey(item.question), index]));
+  for (const item of specific?.items ?? []) {
     const key = questionKey(item.question);
-    if (questions.has(key)) return false;
-    questions.add(key);
-    return true;
-  });
+    const sharedIndex = questions.get(key);
+    if (sharedIndex !== undefined) {
+      items[sharedIndex] = item;
+    } else {
+      questions.set(key, items.length);
+      items.push(item);
+    }
+  }
 
   return {
     eyebrow: specific?.eyebrow || "Dúvidas frequentes",
     title: specific?.title || "Antes de entrar na água.",
     locationLabel: specific?.locationLabel,
-    items: [...DEFAULT_EXPERIENCE_FAQ_ITEMS, ...additional],
+    items,
   };
 }
