@@ -488,7 +488,7 @@ select
   'Uma experiência de 1h30 pelo lado mais preservado do Lago Paranoá.',
   'Uma experiência de 1h30 pelo lado mais preservado do Lago Paranoá.',
   90, 'Lago Paranoá, Brasília - DF',
-  '/images/experiences/imersao-paranoa/grupos/img-3964.webp',
+  '/images/backgrounds/hero-alma-azul-lago.webp',
   '[]'::jsonb, '[]'::jsonb, true,
   'Uma experiência de 1h30 pelo lado mais preservado do Lago Paranoá.',
   'PUBLISHED', now(), now()

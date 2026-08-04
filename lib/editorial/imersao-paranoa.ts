@@ -32,11 +32,11 @@ export const imersaoParanoaEditorial: ExperienceEditorial = {
     description: "Registros reais da Alma Azul. Sem banco de imagens, sem cenário montado.",
     images: [
       { src: "/images/experiences/imersao-paranoa/corredor-corrego-do-torto/img-2074.webp", alt: "Canoas navegando sob a mata do Córrego do Torto" },
-      { src: "/images/experiences/imersao-paranoa/lago/alma-azul-original.webp", alt: "Participantes tomando banho no Lago Paranoá" },
+      { src: "/images/experiences/imersao-paranoa/lago/alma-azul-original.webp", alt: "Participantes vistos de costas remando no Córrego do Torto" },
       { src: "/images/experiences/imersao-paranoa/corredor-corrego-do-torto/img-1956.webp", alt: "Grupo remando no corredor natural" },
-      { src: "/images/experiences/imersao-paranoa/grupos/img-3964.webp", alt: "Grupo reunido entre canoas" },
+      { src: "/images/experiences/imersao-paranoa/grupos/img-3964.webp", alt: "Grupo visto de costas em canoas sob a mata do Córrego do Torto" },
       { src: "/images/experiences/imersao-paranoa/corredor-corrego-do-torto/img-2672.webp", alt: "Paisagem aberta entre o córrego e a vegetação" },
-      { src: "/images/experiences/imersao-paranoa/lago/img-4363.webp", alt: "Grupo celebrando a chegada ao lago com os remos erguidos" },
+      { src: "/images/experiences/imersao-paranoa/lago/img-4363.webp", alt: "Participantes vistos de costas remando sob a mata" },
     ],
   },
   steps: {

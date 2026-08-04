@@ -31,3 +31,9 @@ next-env.d.ts
 # local working artifacts
 /work/
 /outputs/
+
+# local database backups (may contain reservation PII/payment payloads)
+/backups/
+/supabase/backups/
+*.reservation-backup.*
+*.prelaunch-backup.*

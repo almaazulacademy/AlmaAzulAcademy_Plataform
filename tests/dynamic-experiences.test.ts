@@ -74,10 +74,10 @@ test("Home usa catálogo publicado e não importa a fonte editorial local", () =
 
 test("Home prioriza hero.image e usa image_url apenas como fallback legado", () => {
   const experience = structuredClone(imersaoParanoaFallback);
-  experience.imageUrl = "/images/experiences/imersao-paranoa/grupos/IMG_3964.webp";
+  experience.imageUrl = "/images/legacy-card.webp";
   assert.deepEqual(resolveExperienceCardMedia(experience), {
-    src: "/images/experiences/imersao-paranoa/corredor-corrego-do-torto/img-3977.webp",
-    alt: "Grupo em canoas dentro do Córrego do Torto, cercado pela mata",
+    src: "/images/backgrounds/hero-alma-azul-lago.webp",
+    alt: "Canoas da Alma Azul no Lago Paranoá vistas de cima",
   });
 
   experience.slug = "outra-experiencia";
