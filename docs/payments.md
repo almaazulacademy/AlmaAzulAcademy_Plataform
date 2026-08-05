@@ -186,6 +186,45 @@ Consulte a lista completa em [deployment.md](deployment.md).
 - Definir processo para pagamento após expiração e estorno.
 - Definir política de privacidade/retenção de payloads e dados pessoais.
 
+## Runbook: pagamento aprovado que não confirmou
+
+### 1. Onde olhar
+
+| Fonte | O quê |
+| --- | --- |
+| Vercel → Logs → Functions | Filtrar por `[payments]`. Cada linha traz `requestId`, `stage`, `outcome`, `orderId` mascarado e `errorCode`. |
+| Supabase → SQL Editor | Rodar `supabase/diagnostics/payment_confirmation_report.sql` (somente leitura). |
+| Painel da InfinitePay | Confirmar que a transação existe, está aprovada e anotar o `transaction_nsu`. |
+
+Etapas registradas em `stage`: `webhook_received`, `webhook_rejected`, `payment_check`,
+`confirmation`, `reconciliation`, `return_page`, `admin_verification`.
+
+### 2. Eventos gravados em `payment_events`
+
+| `event_type` | Significado |
+| --- | --- |
+| `PAYMENT_WEBHOOK_RECEIVED` | Chegou notificação. Gravado **antes** de qualquer verificação. |
+| `PAYMENT_CONFIRMED` | Caminho feliz: pré-reserva válida e paga. |
+| `PAYMENT_CONFIRMED_RECONCILED` | Pago fora do prazo e recuperado porque ainda havia vaga. |
+| `PAYMENT_NOT_CONFIRMED` | `payment_check` respondeu que ainda não está pago. |
+| `PAYMENT_AMOUNT_MISMATCH` | Valor cobrado diferente de `total_cents`. |
+| `PAYMENT_AFTER_EXPIRATION` | Legado: pago fora do prazo, sem recuperação. |
+| `PAYMENT_AFTER_EXPIRATION_NO_CAPACITY` | Pago fora do prazo e a sessão lotou. Exige decisão humana. |
+| `PAYMENT_CONFIRMED_MANUAL` | Confirmação manual pelo painel, sem consultar o gateway. |
+
+### 3. Como corrigir
+
+1. No painel administrativo, abra a reserva pendente e use **Verificar pagamento**.
+   A ação consulta o `payment_check` da InfinitePay e só confirma se o gateway
+   responder pago. O resultado aparece na notificação.
+2. Se retornar `NO_CAPACITY`, a sessão lotou: decida entre realocar para outra data
+   ou estornar. Nada é confirmado automaticamente para não gerar overbooking.
+3. **Confirmar pagamento** (manual) continua existindo, mas confia no julgamento do
+   operador e não consulta o gateway. Use só quando a verificação automática não
+   for possível, e sempre com justificativa.
+
+Nenhum `payment_event` é apagado em qualquer um desses caminhos.
+
 ## Cuidados de segurança
 
 - Nunca expor `SUPABASE_SERVICE_ROLE_KEY` no frontend.

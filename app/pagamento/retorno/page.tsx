@@ -6,6 +6,7 @@ import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { buttonVariants } from "@/components/ui/button";
+import { normalizeCaptureMethod } from "@/lib/payments/webhook-payload";
 import { confirmPayment } from "@/lib/reservations/payment-confirmation";
 
 export const metadata: Metadata = { title: "Retorno do pagamento", robots: { index: false, follow: false } };
@@ -21,17 +22,24 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
   const query = await searchParams;
   const orderId = single(query.order_nsu);
   const transactionId = single(query.transaction_nsu);
-  const invoiceSlug = single(query.slug);
+  const invoiceSlug = single(query.slug) || single(query.invoice_slug);
   let confirmed = false;
-  if (orderId && transactionId && invoiceSlug) {
+
+  // Fallback, não fonte de verdade: os parâmetros da URL só apontam qual pedido
+  // consultar. Quem decide se está pago é o payment_check server-to-server dentro
+  // de confirmPayment. Se o cliente nunca voltar, o webhook confirma sozinho.
+  if (orderId) {
     try {
-      confirmed = await confirmPayment({
+      const confirmation = await confirmPayment({
         orderId,
         transactionId,
         invoiceSlug,
+        captureMethod: normalizeCaptureMethod(single(query.capture_method)),
         receiptUrl: single(query.receipt_url),
         payload: Object.fromEntries(Object.entries(query).map(([key, value]) => [key, single(value)])),
+        stage: "return_page",
       });
+      confirmed = confirmation.confirmed;
     } catch (error) {
       console.error("Falha no retorno do pagamento:", error instanceof Error ? error.message : "erro desconhecido");
     }

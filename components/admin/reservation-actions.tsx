@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CheckCircle2, Copy, ExternalLink, Mail, MessageCircle, RotateCcw, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, Mail, MessageCircle, RotateCcw, SearchCheck, XCircle } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
 import { useToast } from "@/components/admin/toast-provider";
@@ -12,6 +12,7 @@ import type { ReservationStatus } from "@/lib/reservations/types";
 
 type Action = "confirm" | "cancel" | null;
 type ApiPayload = { message?: string };
+type VerifyPayload = { success?: boolean; outcome?: string; message?: string };
 
 export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false }: {
   reservationId: string;
@@ -26,6 +27,30 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   const router = useRouter();
   const { notify } = useToast();
   const [action, setAction] = useState<Action>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  const verifyPayment = async () => {
+    setVerifying(true);
+    try {
+      const response = await fetch(`/api/admin/reservations/${reservationId}/verify-payment`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json().catch(() => ({})) as VerifyPayload;
+      const description = payload.message ?? "Não foi possível verificar o pagamento agora.";
+      notify({
+        title: payload.success ? "Pagamento confirmado" : "Pagamento não confirmado",
+        description,
+        variant: payload.success ? undefined : "error",
+      });
+      if (payload.success) router.refresh();
+    } catch {
+      notify({ title: "Falha na verificação", description: "Não foi possível falar com a InfinitePay.", variant: "error" });
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const copy = async (value: string, label: string) => {
     try {
@@ -63,6 +88,11 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   return (
     <>
       <div className="flex flex-wrap gap-2">
+        {status !== "CONFIRMED" && status !== "CANCELLED" ? (
+          <Button type="button" size="sm" variant="ghost" disabled={verifying} onClick={verifyPayment}>
+            <SearchCheck className="size-4" /> {verifying ? "Verificando…" : "Verificar pagamento"}
+          </Button>
+        ) : null}
         {status !== "CONFIRMED" && status !== "CANCELLED" ? (
           <Button type="button" size="sm" variant="ghost" onClick={() => setAction("confirm")}><CheckCircle2 className="size-4" /> Confirmar pagamento</Button>
         ) : null}

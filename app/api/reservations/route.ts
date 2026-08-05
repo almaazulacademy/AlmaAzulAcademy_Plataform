@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getPaymentProvider } from "@/lib/payments";
 import { validateReservationInput } from "@/lib/reservations/validation";
+import { SITE_URL } from "@/lib/site";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
 type CreatedReservation = {
@@ -23,10 +24,31 @@ function isCreatedReservation(value: unknown): value is CreatedReservation {
     && Number.isInteger(Number(item.totalCents));
 }
 
-function publicOrigin(request: Request) {
+/**
+ * Origem usada em redirect_url e webhook_url do checkout.
+ *
+ * A InfinitePay precisa alcançar o webhook de fora, então a origem tem que ser
+ * pública e HTTPS. NEXT_PUBLIC_SITE_URL tem prioridade, mas se estiver ausente,
+ * inválida, apontando para localhost ou para um preview, caímos no domínio
+ * oficial — nunca na origem da requisição, que num preview geraria um
+ * webhook_url de deployment temporário e o pagamento nunca seria confirmado
+ * no banco de produção.
+ */
+function publicOrigin() {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (configured) return new URL(configured).origin;
-  return new URL(request.url).origin;
+  if (configured) {
+    try {
+      const url = new URL(configured);
+      const usable = url.protocol === "https:"
+        && !/^(localhost|127\.|0\.0\.0\.0|\[::1\])/i.test(url.hostname)
+        && !/\.vercel\.app$/i.test(url.hostname);
+      if (usable) return url.origin;
+      console.warn("[payments] NEXT_PUBLIC_SITE_URL inadequada para webhook; usando o domínio oficial.");
+    } catch {
+      console.warn("[payments] NEXT_PUBLIC_SITE_URL inválida; usando o domínio oficial.");
+    }
+  }
+  return SITE_URL;
 }
 
 function reservationError(message: string) {
@@ -68,7 +90,7 @@ export async function POST(request: Request) {
 
   try {
     const provider = getPaymentProvider();
-    const origin = publicOrigin(request);
+    const origin = publicOrigin();
     const checkout = await provider.createCheckout({
       orderId: created.reservationId,
       description: created.experienceTitle || "Experiência Alma Azul Academy",

@@ -60,7 +60,7 @@ export class InfinitePayProvider implements PaymentProvider {
           phone_number: request.customer.phone,
         },
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(8_000),
     });
     const payload = await parseResponse(response);
     const checkoutUrl = validHttpsUrl(payload.url ?? payload.checkout_url ?? payload.link);
@@ -82,10 +82,11 @@ export class InfinitePayProvider implements PaymentProvider {
         transaction_nsu: request.transactionId,
         slug: request.invoiceSlug,
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(8_000),
     });
     const payload = await parseResponse(response);
-    const amountCents = Number(payload.amount);
+    // A InfinitePay já devolveu `amount` e `paid_amount` conforme o tipo de captura.
+    const amountCents = Number(payload.amount ?? payload.paid_amount);
     const paid = payload.success === true && payload.paid === true;
     if (!Number.isInteger(amountCents) || amountCents < 0) {
       throw new PaymentProviderError("Valor retornado pela InfinitePay é inválido.", "INVALID_PAYMENT_AMOUNT");
