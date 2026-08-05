@@ -11,6 +11,10 @@ export const imersaoParanoaEditorial: ExperienceEditorial = {
     secondaryCta: { label: "Conheça o percurso", href: "#sobre" },
     details: ["Brasília, DF", "1h30 de experiência", "Nível iniciante"],
   },
+  cardImage: {
+    src: "/images/experiences/imersao-paranoa/imersao-paranoa-corrego-mata.webp",
+    alt: "Canoas da Alma Azul navegando dentro do Córrego do Torto, cercadas pela mata fechada",
+  },
   quickFacts: [
     { label: "Onde", value: "Lago Paranoá" },
     { label: "Formato", value: "Em grupo" },

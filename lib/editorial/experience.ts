@@ -20,6 +20,12 @@ export type ExperienceEditorial = {
     secondaryCta?: EditorialCta;
     details: string[];
   };
+  /**
+   * Imagem exclusiva do card público da experiência. Opcional: quando ausente,
+   * o card continua usando hero.image. Existe para permitir que o card e o Hero
+   * da página individual usem fotos diferentes sem duplicar conteúdo editorial.
+   */
+  cardImage?: EditorialImage;
   quickFacts: Array<{ label: string; value: string }>;
   about: {
     eyebrow: string;

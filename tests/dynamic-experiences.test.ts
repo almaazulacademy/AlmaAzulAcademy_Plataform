@@ -72,8 +72,18 @@ test("Home usa catálogo publicado e não importa a fonte editorial local", () =
   assert.doesNotMatch(home, /from "@\/lib\/experiences"/);
 });
 
+test("card usa cardImage quando existe e não altera o Hero da experiência", () => {
+  const experience = structuredClone(imersaoParanoaFallback);
+  assert.deepEqual(resolveExperienceCardMedia(experience), {
+    src: "/images/experiences/imersao-paranoa/imersao-paranoa-corrego-mata.webp",
+    alt: "Canoas da Alma Azul navegando dentro do Córrego do Torto, cercadas pela mata fechada",
+  });
+  assert.equal(experience.editorial.hero.image.src, "/images/backgrounds/hero-alma-azul-lago.webp");
+});
+
 test("Home prioriza hero.image e usa image_url apenas como fallback legado", () => {
   const experience = structuredClone(imersaoParanoaFallback);
+  experience.editorial.cardImage = undefined;
   experience.imageUrl = "/images/legacy-card.webp";
   assert.deepEqual(resolveExperienceCardMedia(experience), {
     src: "/images/backgrounds/hero-alma-azul-lago.webp",
