@@ -16,7 +16,7 @@ Permitir que a equipe opere experiências, sessões e reservas sem acessar diret
 | --- | --- |
 | `/login` | Autenticação com email e senha do Supabase Auth |
 | `/admin` | Indicadores operacionais e acesso a nova sessão |
-| `/admin/sessoes` | Criar, editar, duplicar, abrir, fechar e excluir sessões sem histórico |
+| `/admin/sessoes` | Criar, editar, duplicar, abrir, fechar, excluir sessões sem histórico e arquivar/restaurar sessões com histórico |
 | `/admin/reservas` | Listar e filtrar reservas |
 | `/admin/reservas/[reservationId]` | Ver dados, pagamento e ações de uma reserva |
 | `/admin/experiencias` | Criar, editar, publicar, arquivar e ordenar experiências |
@@ -86,11 +86,21 @@ Regras protegidas no banco:
 - novas sessões precisam estar no futuro;
 - capacidade não pode ficar abaixo de confirmadas e pré-reservas válidas;
 - experiência associada não pode mudar depois que a sessão recebe uma reserva;
-- sessões com histórico de reservas não podem ser excluídas;
+- sessões sem nenhuma reserva vinculada são excluídas definitivamente;
+- sessões com histórico de reservas são arquivadas em vez de excluídas — nenhuma reserva, pagamento ou participante é apagado;
 - abrir e fechar reservas altera o status real lido pela landing pública;
 - todas as mutações geram auditoria.
 
 Duplicar apenas preenche um novo formulário. A criação continua passando pela mesma validação e RPC.
+
+### Arquivamento de sessões
+
+Ao clicar em excluir uma sessão que já tem reservas, o painel arquiva a sessão (status `ARCHIVED`) em vez de bloquear a ação:
+
+- a sessão some da agenda pública, do site (landing e link direto de reserva) e não aceita novas reservas — as mesmas regras que hoje só liberam sessões com status `OPEN` já cobrem isso automaticamente;
+- reservas, pagamentos e relatórios continuam intactos e acessíveis normalmente em `/admin/reservas` e no dashboard;
+- a lista de sessões tem um filtro **Ativas** / **Arquivadas** / **Todas** (`/admin/sessoes?filtro=`);
+- uma sessão arquivada pode ser restaurada, o que falha se a data já passou ou se colide com outra sessão ativa da mesma experiência no mesmo horário.
 
 ## Experiências
 

@@ -10,7 +10,8 @@ import type {
   ExperienceStatus,
   PaymentStatus,
   PlatformSettings,
-  SessionStatus,
+  SessionFilter,
+  SessionLifecycleStatus,
 } from "@/lib/admin/types";
 import type { ReservationStatus } from "@/lib/reservations/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
@@ -147,8 +148,8 @@ export async function listAdminExperiences(actorUserId: string): Promise<AdminEx
   }); });
 }
 
-export async function listAdminSessions(actorUserId: string): Promise<AdminSession[]> {
-  const result = await adminClient().rpc("admin_list_sessions", { p_actor_id: actorUserId });
+export async function listAdminSessions(actorUserId: string, filter: SessionFilter = "ACTIVE"): Promise<AdminSession[]> {
+  const result = await adminClient().rpc("admin_list_sessions", { p_actor_id: actorUserId, p_filter: filter });
   if (result.error) throw new Error(result.error.message);
   return asRows(result.data).map((row) => ({
     id: asString(row.id),
@@ -160,7 +161,7 @@ export async function listAdminSessions(actorUserId: string): Promise<AdminSessi
     capacity: asNumber(row.capacity),
     remainingSpots: asNumber(row.remaining_spots),
     reservationsCount: asNumber(row.reservations_count),
-    status: asString(row.status) as SessionStatus,
+    status: asString(row.status) as SessionLifecycleStatus,
     internalNotes: nullableString(row.internal_notes),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
@@ -201,6 +202,15 @@ export async function updateAdminSession(actorUserId: string, sessionId: string,
 
 export async function deleteAdminSession(actorUserId: string, sessionId: string) {
   const result = await adminClient().rpc("admin_delete_session", {
+    p_actor_id: actorUserId,
+    p_session_id: sessionId,
+  });
+  if (result.error) throw new Error(result.error.message);
+  return asBoolean(result.data);
+}
+
+export async function restoreAdminSession(actorUserId: string, sessionId: string) {
+  const result = await adminClient().rpc("admin_restore_session", {
     p_actor_id: actorUserId,
     p_session_id: sessionId,
   });

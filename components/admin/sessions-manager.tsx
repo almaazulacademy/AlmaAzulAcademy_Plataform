@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { CalendarPlus, Copy, Lock, Pencil, Plus, Trash2, Unlock, X } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarPlus, Copy, Lock, Pencil, Plus, Trash2, Unlock, X } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
 import { fieldErrorClass, inputClass, labelClass, textareaClass } from "@/components/admin/form-styles";
@@ -11,9 +12,16 @@ import { StatusBadge } from "@/components/admin/status-badge";
 import { AdminEmptyState } from "@/components/admin/states";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
-import type { AdminExperience, AdminSession, SessionStatus } from "@/lib/admin/types";
+import { cn } from "@/lib/utils";
+import type { AdminExperience, AdminSession, SessionFilter, SessionStatus } from "@/lib/admin/types";
 import { formatCurrency } from "@/lib/admin/format";
 import { formatSessionDateTime, sessionLocalToIso, toSessionDateTimeLocal } from "@/lib/sessions/date-time";
+
+const FILTER_TABS: Array<{ value: SessionFilter; param: string; label: string }> = [
+  { value: "ACTIVE", param: "ativas", label: "Ativas" },
+  { value: "ARCHIVED", param: "arquivadas", label: "Arquivadas" },
+  { value: "ALL", param: "todas", label: "Todas" },
+];
 
 type FormState = {
   experienceId: string;
@@ -44,15 +52,19 @@ function fromSession(session: AdminSession): FormState {
     durationMinutes: String(session.durationMinutes),
     price: (session.priceCents / 100).toFixed(2),
     capacity: String(session.capacity),
-    status: session.status,
+    // ARCHIVED não é uma opção do formulário: arquivar e restaurar têm
+    // ações e regras próprias, então uma sessão arquivada duplicada nasce
+    // como Aberta.
+    status: session.status === "ARCHIVED" ? "OPEN" : session.status,
     internalNotes: session.internalNotes ?? "",
   };
 }
 
-export function SessionsManager({ sessions, experiences, initiallyOpen }: {
+export function SessionsManager({ sessions, experiences, initiallyOpen, filter }: {
   sessions: AdminSession[];
   experiences: AdminExperience[];
   initiallyOpen: boolean;
+  filter: SessionFilter;
 }) {
   const router = useRouter();
   const { notify } = useToast();
@@ -63,6 +75,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState<AdminSession | null>(null);
+  const [restoring, setRestoring] = useState<AdminSession | null>(null);
 
   const openNew = () => {
     setEditingId(null);
@@ -144,13 +157,30 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
     }
   };
 
+  const willArchive = Boolean(deleting && deleting.reservationsCount > 0);
+
   const confirmDelete = async () => {
     if (!deleting) return;
+    const archiving = deleting.reservationsCount > 0;
     const response = await fetch(`/api/admin/sessions/${deleting.id}`, { method: "DELETE" });
     const payload = await response.json().catch(() => ({})) as ApiPayload;
-    if (!response.ok) throw new Error(payload.message ?? "Não foi possível excluir a sessão.");
-    notify({ title: "Sessão excluída", description: "A sessão sem histórico foi removida." });
+    if (!response.ok) throw new Error(payload.message ?? (archiving ? "Não foi possível arquivar a sessão." : "Não foi possível excluir a sessão."));
+    notify(
+      archiving
+        ? { title: "Sessão arquivada", description: "Ela saiu das agendas e páginas públicas. O histórico de reservas e pagamentos foi preservado." }
+        : { title: "Sessão excluída", description: "A sessão sem histórico foi removida." },
+    );
     setDeleting(null);
+    router.refresh();
+  };
+
+  const confirmRestore = async () => {
+    if (!restoring) return;
+    const response = await fetch(`/api/admin/sessions/${restoring.id}/restore`, { method: "POST" });
+    const payload = await response.json().catch(() => ({})) as ApiPayload;
+    if (!response.ok) throw new Error(payload.message ?? "Não foi possível restaurar a sessão.");
+    notify({ title: "Sessão restaurada", description: "Ela voltou a aparecer nas agendas e páginas públicas." });
+    setRestoring(null);
     router.refresh();
   };
 
@@ -162,6 +192,21 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
         description="Crie e organize datas para qualquer experiência da Alma Azul. Horários são exibidos no fuso de Brasília."
         action={<Button type="button" onClick={openNew}><Plus className="size-4" /> Nova sessão</Button>}
       />
+
+      <nav className="mt-6 flex flex-wrap gap-2" aria-label="Filtro de sessões">
+        {FILTER_TABS.map((tab) => (
+          <Link
+            key={tab.value}
+            href={`/admin/sessoes?filtro=${tab.param}`}
+            className={cn(
+              "rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+              filter === tab.value ? "bg-ink text-white" : "bg-ink/5 text-ink/60 hover:bg-ink/10",
+            )}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
 
       {formOpen ? (
         <section className="mt-8 rounded-3xl border border-lake/20 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="session-form-title">
@@ -195,7 +240,13 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
       ) : null}
 
       <section className="mt-8 space-y-4" aria-label="Lista de sessões">
-        {sessions.length === 0 ? <AdminEmptyState title="Nenhuma sessão cadastrada" description="Crie a primeira data para começar a organizar a agenda." action={<Button type="button" size="sm" onClick={openNew}><Plus className="size-4" /> Criar sessão</Button>} /> : sessions.map((session) => {
+        {sessions.length === 0 ? (
+          filter === "ARCHIVED" ? (
+            <AdminEmptyState title="Nenhuma sessão arquivada" description="Sessões com histórico de reservas aparecem aqui quando são arquivadas." />
+          ) : (
+            <AdminEmptyState title="Nenhuma sessão cadastrada" description="Crie a primeira data para começar a organizar a agenda." action={<Button type="button" size="sm" onClick={openNew}><Plus className="size-4" /> Criar sessão</Button>} />
+          )
+        ) : sessions.map((session) => {
           const occupied = session.capacity - session.remainingSpots;
           const occupancy = session.capacity ? Math.round((occupied / session.capacity) * 100) : 0;
           return (
@@ -213,10 +264,22 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
                 <div><dt className="text-xs text-ink/45">Duração</dt><dd className="mt-1 text-sm font-semibold">{session.durationMinutes} min</dd></div>
               </dl>
               <div className="flex flex-wrap gap-2 xl:justify-end">
-                <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(session)}><Pencil className="size-4" /> Editar</Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => openDuplicate(session)}><Copy className="size-4" /> Duplicar</Button>
-                {session.status === "OPEN" ? <Button type="button" size="sm" variant="ghost" onClick={() => changeStatus(session, "CLOSED")}><Lock className="size-4" /> Fechar</Button> : <Button type="button" size="sm" variant="ghost" onClick={() => changeStatus(session, "OPEN")}><Unlock className="size-4" /> Abrir</Button>}
-                <Button type="button" size="sm" variant="ghost" className="text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => setDeleting(session)}><Trash2 className="size-4" /> Excluir</Button>
+                {session.status === "ARCHIVED" ? (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => openDuplicate(session)}><Copy className="size-4" /> Duplicar</Button>
+                ) : (
+                  <>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(session)}><Pencil className="size-4" /> Editar</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => openDuplicate(session)}><Copy className="size-4" /> Duplicar</Button>
+                    {session.status === "OPEN" ? <Button type="button" size="sm" variant="ghost" onClick={() => changeStatus(session, "CLOSED")}><Lock className="size-4" /> Fechar</Button> : <Button type="button" size="sm" variant="ghost" onClick={() => changeStatus(session, "OPEN")}><Unlock className="size-4" /> Abrir</Button>}
+                  </>
+                )}
+                {session.status === "ARCHIVED" ? (
+                  <Button type="button" size="sm" variant="ghost" className="text-forest hover:bg-forest/10" onClick={() => setRestoring(session)}><ArchiveRestore className="size-4" /> Restaurar</Button>
+                ) : session.reservationsCount > 0 ? (
+                  <Button type="button" size="sm" variant="ghost" className="text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => setDeleting(session)}><Archive className="size-4" /> Arquivar</Button>
+                ) : (
+                  <Button type="button" size="sm" variant="ghost" className="text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => setDeleting(session)}><Trash2 className="size-4" /> Excluir</Button>
+                )}
               </div>
             </div>
             <div className="mt-5 border-t border-ink/10 pt-5">
@@ -231,11 +294,24 @@ export function SessionsManager({ sessions, experiences, initiallyOpen }: {
 
       <ConfirmationDialog
         open={Boolean(deleting)}
-        title="Excluir esta sessão?"
-        description="A exclusão só será permitida se não existir nenhuma reserva vinculada. Sessões com histórico permanecem preservadas."
-        confirmLabel="Excluir sessão"
+        title={willArchive ? "Arquivar esta sessão?" : "Excluir esta sessão?"}
+        description={
+          willArchive
+            ? "Esta sessão possui reservas vinculadas. Ela será arquivada e deixará de aparecer nas agendas e páginas públicas, mas o histórico de reservas e pagamentos será preservado."
+            : "Esta sessão não possui reservas vinculadas e será excluída definitivamente."
+        }
+        confirmLabel={willArchive ? "Arquivar sessão" : "Excluir sessão"}
         onClose={() => setDeleting(null)}
         onConfirm={confirmDelete}
+      />
+
+      <ConfirmationDialog
+        open={Boolean(restoring)}
+        title="Restaurar esta sessão?"
+        description="Ela volta a aparecer nas agendas e páginas públicas, desde que a data ainda esteja no futuro e não conflite com outra sessão ativa da mesma experiência."
+        confirmLabel="Restaurar sessão"
+        onClose={() => setRestoring(null)}
+        onConfirm={confirmRestore}
       />
     </div>
   );

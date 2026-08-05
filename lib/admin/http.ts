@@ -59,6 +59,18 @@ export function adminMutationError(error: unknown) {
   if (message.includes("SESSION_HAS_RESERVATIONS")) {
     return { status: 409, message: "Sessões com histórico de reservas não podem ser excluídas." };
   }
+  if (message.includes("SESSION_ALREADY_ARCHIVED")) {
+    return { status: 409, message: "Esta sessão já está arquivada." };
+  }
+  if (message.includes("SESSION_NOT_ARCHIVED")) {
+    return { status: 409, message: "Esta sessão não está arquivada." };
+  }
+  if (message.includes("SESSION_RESTORE_PAST")) {
+    return { status: 409, message: "Não é possível restaurar uma sessão cuja data já passou." };
+  }
+  if (message.includes("SESSION_RESTORE_CONFLICT")) {
+    return { status: 409, message: "Já existe outra sessão ativa da mesma experiência nesse horário." };
+  }
   if (message.includes("SESSION_MUST_BE_FUTURE")) {
     return { status: 400, message: "A nova sessão precisa estar no futuro." };
   }

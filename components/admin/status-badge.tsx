@@ -22,7 +22,7 @@ const labels: Record<string, string> = {
   CANCELLED: "Cancelada",
   DRAFT: "Rascunho",
   PUBLISHED: "Ativa",
-  ARCHIVED: "Inativa",
+  ARCHIVED: "Arquivada",
   PRE_RESERVED: "Pré-reserva",
   CONFIRMED: "Confirmada",
   EXPIRED: "Expirada",

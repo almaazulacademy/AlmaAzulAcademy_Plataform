@@ -41,6 +41,7 @@ Para o banco legado específico, a cópia operacional está em `supabase/bootstr
 - `OPEN`
 - `CLOSED`
 - `CANCELLED`
+- `ARCHIVED` (adicionado pela migration `202608040001_session_archived_status.sql`; sessão com histórico de reservas removida pelo admin em vez de excluída — some das páginas públicas e da agenda padrão, mas reservas, pagamentos e relatórios permanecem intactos)
 
 O status de `experiences` é `text` com check para `DRAFT`, `PUBLISHED` ou `ARCHIVED`.
 

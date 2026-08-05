@@ -1,0 +1,13 @@
+-- Adiciona o estado ARCHIVED ao enum de status de sessões.
+-- Migration isolada e reversível: apenas estende o enum, sem alterar dados
+-- ou objetos existentes. Sessões arquivadas já ficam automaticamente fora
+-- das regras que hoje filtram por status = 'OPEN' (RLS pública,
+-- list_open_sessions e create_pre_reservation).
+--
+-- Reversão manual, caso necessário (só é possível se nenhuma linha usar o
+-- valor 'ARCHIVED'; Postgres não permite remover um valor de enum em uso):
+--   update public.sessions set status = 'CLOSED' where status = 'ARCHIVED';
+--   -- remover o valor do enum exige recriar o tipo; não é uma operação
+--   -- reversível de forma trivial, por isso sessões arquivadas devem ser
+--   -- restauradas (ou fechadas) antes de reverter esta migration.
+alter type public.session_status add value if not exists 'ARCHIVED';

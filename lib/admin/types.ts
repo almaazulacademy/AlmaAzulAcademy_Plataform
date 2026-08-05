@@ -4,6 +4,16 @@ import type { ExperienceEditorial } from "@/lib/editorial/experience";
 export const SESSION_STATUSES = ["OPEN", "CLOSED", "CANCELLED"] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
+// Estado de exibição de uma sessão, incluindo ARCHIVED. Não usar para o
+// formulário de criação/edição: arquivar e restaurar têm RPCs próprias
+// com suas regras de negócio, então o status de arquivamento nunca deve
+// ser enviado pelo formulário genérico.
+export const SESSION_LIFECYCLE_STATUSES = [...SESSION_STATUSES, "ARCHIVED"] as const;
+export type SessionLifecycleStatus = (typeof SESSION_LIFECYCLE_STATUSES)[number];
+
+export const SESSION_FILTERS = ["ACTIVE", "ARCHIVED", "ALL"] as const;
+export type SessionFilter = (typeof SESSION_FILTERS)[number];
+
 export const EXPERIENCE_STATUSES = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
 export type ExperienceStatus = (typeof EXPERIENCE_STATUSES)[number];
 
@@ -74,7 +84,7 @@ export type AdminSession = {
   capacity: number;
   remainingSpots: number;
   reservationsCount: number;
-  status: SessionStatus;
+  status: SessionLifecycleStatus;
   internalNotes: string | null;
   createdAt: string;
   updatedAt: string;
