@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Instagram, Mail, MessageCircle } from "lucide-react";
 
-import { CONTACT_EMAIL, EMAIL_LINK, WHATSAPP_LINK } from "@/lib/contact";
+import { CONTACT_EMAIL, EMAIL_LINK, INSTAGRAM_HANDLE, INSTAGRAM_LINK, WHATSAPP_LINK } from "@/lib/contact";
 
 export function Footer() {
   return (
@@ -37,7 +37,15 @@ export function Footer() {
               Conecte-se
             </p>
             <div className="flex flex-col gap-3 text-sm text-white/75">
-              <span className="inline-flex items-center gap-2"><Instagram className="size-4" /> Instagram</span>
+              <a
+                href={INSTAGRAM_LINK}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Abrir Instagram da Alma Azul Academy"
+                className="inline-flex items-center gap-2 transition-colors hover:text-white"
+              >
+                <Instagram className="size-4" /> {INSTAGRAM_HANDLE}
+              </a>
               <a
                 href={WHATSAPP_LINK}
                 target="_blank"

@@ -53,3 +53,7 @@ export function buildWhatsappReservationHelpLink(experienceTitle?: string) {
 export const CONTACT_EMAIL = "almaazulacademy@gmail.com";
 
 export const EMAIL_LINK = `mailto:${CONTACT_EMAIL}`;
+
+export const INSTAGRAM_HANDLE = "@almaazulacademy";
+
+export const INSTAGRAM_LINK = "https://www.instagram.com/almaazulacademy/";
