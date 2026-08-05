@@ -38,6 +38,29 @@ export async function listOpenSessions(client: SupabaseClient, experienceSlug: s
   return (Array.isArray(result.data) ? result.data : []).map((row) => mapBookingSession(row as Row));
 }
 
+/**
+ * Título da experiência de uma reserva. Usado só para personalizar a mensagem de
+ * contato após o pagamento — nenhum dado pessoal é lido aqui.
+ * Devolve string vazia quando a reserva não existe ou a leitura falha.
+ */
+export async function getReservationExperienceTitle(client: SupabaseClient, reservationId: string) {
+  const reservation = await client
+    .from("reservations")
+    .select("experience_id")
+    .eq("id", reservationId)
+    .maybeSingle();
+  const experienceId = asString(reservation.data?.experience_id);
+  if (reservation.error || !experienceId) return "";
+
+  const experience = await client
+    .from("experiences")
+    .select("title")
+    .eq("id", experienceId)
+    .maybeSingle();
+  if (experience.error) return "";
+  return asString(experience.data?.title);
+}
+
 export async function getBookingSession(client: SupabaseClient, sessionId: string) {
   const result = await client.rpc("get_booking_session", { p_session_id: sessionId });
   if (result.error) throw new Error(result.error.message);
