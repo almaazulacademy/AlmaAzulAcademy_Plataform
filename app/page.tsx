@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Building2, Moon, Store, SunMedium, Waves } from "lucide-react";
+import { ArrowRight, PersonStanding, Sailboat, Store, Users, Waves } from "lucide-react";
 
 import { ExperienceCard } from "@/components/experience-card";
 import { Footer } from "@/components/layout/footer";
@@ -8,14 +8,15 @@ import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { Section } from "@/components/section";
 import { buttonVariants } from "@/components/ui/button";
+import { WHATSAPP_UPCOMING_ACTIVITIES_LINK } from "@/lib/contact";
 import { listPublishedExperiences } from "@/lib/editorial/data";
 import { resolveExperienceCardLocation, resolveExperienceCardMedia } from "@/lib/editorial/image";
 
 const futureFormats = [
-  { label: "Lua Cheia", icon: Moon },
-  { label: "Sunset", icon: SunMedium },
-  { label: "Aulas", icon: Waves },
-  { label: "Team Building", icon: Building2 },
+  { label: "SUP Race", icon: PersonStanding },
+  { label: "Surfski", icon: Sailboat },
+  { label: "Aulas de canoa", icon: Waves },
+  { label: "Team Building", icon: Users },
   { label: "Loja", icon: Store },
 ];
 
@@ -64,7 +65,7 @@ export default async function HomePage() {
               Experiências para sair do automático e encontrar um novo jeito de estar presente.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link href={`${featured.href}#reservas`} className={buttonVariants({ variant: "light", size: "lg" })}>
+              <Link href="/agenda" className={buttonVariants({ variant: "light", size: "lg" })}>
                 Reservar minha vaga
                 <ArrowRight className="size-4" />
               </Link>
@@ -132,11 +133,25 @@ export default async function HomePage() {
         <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {futureFormats.map(({ label, icon: Icon }) => (
             <div key={label} className="flex min-h-36 flex-col justify-between rounded-3xl border border-ink/10 bg-white/65 p-5">
-              <Icon className="size-5 text-lake" />
+              <Icon className="size-5 text-lake" aria-hidden="true" />
               <p className="font-semibold">{label}</p>
             </div>
           ))}
         </div>
+        <p className="mt-8 max-w-2xl text-sm leading-7 text-ink/60">
+          <span className="font-semibold text-ink">Em breve no site.</span>{" "}
+          Para saber mais sobre essas atividades,{" "}
+          <a
+            href={WHATSAPP_UPCOMING_ACTIVITIES_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Falar com a Alma Azul pelo WhatsApp sobre as atividades que chegam em breve"
+            className="font-semibold text-lake underline underline-offset-4 transition-colors hover:text-forest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lake focus-visible:ring-offset-2"
+          >
+            fale com a Alma Azul pelo WhatsApp
+          </a>
+          .
+        </p>
       </Section>
 
       <section className="relative isolate min-h-[620px] overflow-hidden bg-ink text-white">
