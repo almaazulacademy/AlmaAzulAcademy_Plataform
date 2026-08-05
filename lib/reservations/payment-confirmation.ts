@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { getPaymentProvider } from "@/lib/payments";
 import {
   logPayment,
@@ -47,6 +49,45 @@ export type ConfirmationResult = {
 };
 
 const TRANSIENT_PROVIDER_CODES = new Set(["PROVIDER_RESPONSE_ERROR", "MISSING_CONFIGURATION"]);
+
+/**
+ * Grava uma tentativa de pagamento sem nunca interromper o fluxo.
+ *
+ * O builder do supabase-js é *thenable*, não uma Promise: tem `.then`, mas não
+ * `.catch`. Por isso o registro precisa de try/catch de verdade, e o erro de
+ * negócio vem no campo `error` da resposta, não como exceção. Falhar aqui é
+ * ruído de observabilidade — jamais deve impedir a verificação ou a confirmação
+ * do pagamento.
+ */
+async function recordAttempt(
+  admin: SupabaseClient,
+  requestId: string,
+  args: {
+    reservationId: string;
+    provider: string;
+    providerEventId: string;
+    eventType: string;
+    payload: Record<string, unknown>;
+  },
+) {
+  try {
+    const { error } = await admin.rpc("record_payment_attempt", {
+      p_reservation_id: args.reservationId,
+      p_provider: args.provider,
+      p_provider_event_id: args.providerEventId,
+      p_event_type: args.eventType,
+      p_amount_cents: 0,
+      p_payload: args.payload,
+    });
+    if (error) {
+      logPayment({ requestId, stage: "confirmation", outcome: "failed", errorCode: "RECORD_ATTEMPT_REJECTED" });
+    }
+  } catch {
+    // Nunca propaga: sem rede, sem RPC aplicada ou sem permissão, o pagamento
+    // ainda precisa seguir para verificação.
+    logPayment({ requestId, stage: "confirmation", outcome: "failed", errorCode: "RECORD_ATTEMPT_UNAVAILABLE" });
+  }
+}
 
 function result(outcome: ConfirmationOutcome): ConfirmationResult {
   return {
@@ -101,19 +142,18 @@ export async function confirmPayment(notification: PaymentNotification): Promise
   // Deixa rastro do que chegou antes de qualquer verificação. Sem isso, um webhook
   // que falha some sem deixar histórico — foi exatamente o que impediu o diagnóstico
   // dos casos anteriores.
-  await admin.rpc("record_payment_attempt", {
-    p_reservation_id: reservation.id,
-    p_provider: provider.name,
-    p_provider_event_id: `${notification.transactionId || notification.invoiceSlug || requestId}:received`,
-    p_event_type: "PAYMENT_WEBHOOK_RECEIVED",
-    p_amount_cents: 0,
-    p_payload: {
+  await recordAttempt(admin, requestId, {
+    reservationId: reservation.id,
+    provider: provider.name,
+    providerEventId: `${notification.transactionId || notification.invoiceSlug || requestId}:received`,
+    eventType: "PAYMENT_WEBHOOK_RECEIVED",
+    payload: {
       ...sanitizedPayload,
       stage,
       request_id: requestId,
       capture_method: notification.captureMethod ?? "",
     },
-  }).catch(() => undefined);
+  });
 
   let verified;
   const startedAt = Date.now();
@@ -139,14 +179,13 @@ export async function confirmPayment(notification: PaymentNotification): Promise
     });
 
     if (mismatch) {
-      await admin.rpc("record_payment_attempt", {
-        p_reservation_id: reservation.id,
-        p_provider: provider.name,
-        p_provider_event_id: `${notification.transactionId || requestId}:mismatch`,
-        p_event_type: "PAYMENT_AMOUNT_MISMATCH",
-        p_amount_cents: 0,
-        p_payload: { ...sanitizedPayload, request_id: requestId, expected_cents: reservation.total_cents },
-      }).catch(() => undefined);
+      await recordAttempt(admin, requestId, {
+        reservationId: reservation.id,
+        provider: provider.name,
+        providerEventId: `${notification.transactionId || requestId}:mismatch`,
+        eventType: "PAYMENT_AMOUNT_MISMATCH",
+        payload: { ...sanitizedPayload, request_id: requestId, expected_cents: reservation.total_cents },
+      });
       return result("AMOUNT_MISMATCH");
     }
 
@@ -168,14 +207,13 @@ export async function confirmPayment(notification: PaymentNotification): Promise
   });
 
   if (!verified.paid) {
-    await admin.rpc("record_payment_attempt", {
-      p_reservation_id: reservation.id,
-      p_provider: provider.name,
-      p_provider_event_id: `${notification.transactionId || requestId}:unpaid`,
-      p_event_type: "PAYMENT_NOT_CONFIRMED",
-      p_amount_cents: 0,
-      p_payload: { ...sanitizedPayload, request_id: requestId },
-    }).catch(() => undefined);
+    await recordAttempt(admin, requestId, {
+      reservationId: reservation.id,
+      provider: provider.name,
+      providerEventId: `${notification.transactionId || requestId}:unpaid`,
+      eventType: "PAYMENT_NOT_CONFIRMED",
+      payload: { ...sanitizedPayload, request_id: requestId },
+    });
     return result("NOT_PAID");
   }
 
