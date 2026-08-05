@@ -49,7 +49,7 @@ export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "S
       <div className="mt-7 flex flex-col gap-3 sm:flex-row">
         {!expired && checkoutUrl && <a href={checkoutUrl} className={buttonVariants({ size: "lg" })}>Pagar agora</a>}
         <Link href="/acompanhar-reserva" className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>Acompanhar reserva</Link>
-        {expired && <Link href="/imersao-paranoa#reservas" className={buttonVariants({ size: "lg" })}>Ver novas datas</Link>}
+        {expired && <Link href="/agenda" className={buttonVariants({ size: "lg" })}>Ver novas datas</Link>}
       </div>
     </div>
   );

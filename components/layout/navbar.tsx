@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { label: "Experiências", href: "/#experiencias" },
   { label: "Sobre", href: "/#sobre" },
-  { label: "Imersão Paranoá", href: "/imersao-paranoa" },
+  { label: "Imersão Paranoá", href: "/experiencias/imersao-paranoa" },
   { label: "Acompanhar reserva", href: "/acompanhar-reserva" },
 ];
 
@@ -95,7 +95,7 @@ export function Navbar({ overlay = false }: NavbarProps) {
             </Link>
           ))}
           <Link
-            href="/imersao-paranoa#reservas"
+            href="/experiencias/imersao-paranoa#reservas"
             className={buttonVariants({ variant: overlay && !scrolled ? "light" : "default", size: "sm" })}
           >
             Reservar vaga
@@ -142,7 +142,7 @@ export function Navbar({ overlay = false }: NavbarProps) {
           ))}
         </nav>
         <Link
-          href="/imersao-paranoa#reservas"
+          href="/experiencias/imersao-paranoa#reservas"
           onClick={() => setOpen(false)}
           className={cn(buttonVariants({ size: "lg" }), "mt-auto")}
         >

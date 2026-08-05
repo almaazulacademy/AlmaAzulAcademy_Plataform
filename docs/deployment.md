@@ -212,7 +212,7 @@ Preview deployments de outras branches dependem da configuração do projeto Ver
 ## Checklist pós-deploy
 
 - Build concluído sem erro.
-- Home e `/imersao-paranoa` renderizam com imagens.
+- Home e `/experiencias/imersao-paranoa` renderizam com imagens; `/imersao-paranoa` responde 308.
 - Sessões futuras aparecem e exibem preço/vagas corretos.
 - Pré-reserva cria código e validade de 2 horas.
 - Checkout abre no domínio HTTPS da InfinitePay.

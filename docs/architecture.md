@@ -68,7 +68,8 @@ docs/                        documentação técnica e de produto
 | Rota | Tipo | Estado e responsabilidade |
 | --- | --- | --- |
 | `/` | Estática | Home institucional e catálogo editorial |
-| `/imersao-paranoa` | Dinâmica | Landing da primeira experiência e leitura das sessões |
+| `/agenda` | Dinâmica | Agenda geral com as sessões abertas de todas as experiências publicadas |
+| `/imersao-paranoa` | Redirect | 308 permanente para `/experiencias/imersao-paranoa`, definido em `next.config.ts` |
 | `/reservar/[sessionId]` | Dinâmica | Carrega uma sessão aberta e apresenta formulário/resumo |
 | `/acompanhar-reserva` | Estática com interação cliente | Consulta por CPF + código e retoma pagamento quando possível |
 | `/pagamento/retorno` | Dinâmica | Verifica os parâmetros de retorno e tenta confirmar o pagamento |

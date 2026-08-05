@@ -8,7 +8,7 @@ import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { buttonVariants } from "@/components/ui/button";
 import { confirmPayment } from "@/lib/reservations/payment-confirmation";
 
-export const metadata: Metadata = { title: "Retorno do pagamento" };
+export const metadata: Metadata = { title: "Retorno do pagamento", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;

@@ -9,7 +9,7 @@ import { ReservationForm } from "@/components/reservation/reservation-form";
 import { getBookingSession } from "@/lib/reservations/data";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Reservar experiência" };
+export const metadata: Metadata = { title: "Reservar experiência", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function ReservePage({ params }: { params: Promise<{ sessionId: string }> }) {
@@ -24,9 +24,9 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
     <main className="min-h-screen bg-paper pt-24">
       <Navbar />
       <div className="container py-12 sm:py-16 lg:py-24">
-        <Link href="/imersao-paranoa#reservas" className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-forest"><ArrowLeft className="size-4" />Voltar para as datas</Link>
+        <Link href="/agenda" className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-forest"><ArrowLeft className="size-4" />Voltar para as datas</Link>
         {session ? <ReservationForm session={session} /> : (
-          <div className="rounded-4xl bg-white p-10 text-center sm:p-16"><h1 className="text-4xl font-medium tracking-[-0.05em]">Sessão indisponível</h1><p className="mx-auto mt-4 max-w-lg leading-7 text-ink/55">A data pode ter esgotado ou não estar mais aberta. Confira as próximas sessões disponíveis.</p><Link href="/imersao-paranoa#reservas" className="mt-7 inline-flex font-semibold text-forest">Ver próximas datas</Link></div>
+          <div className="rounded-4xl bg-white p-10 text-center sm:p-16"><h1 className="text-4xl font-medium tracking-[-0.05em]">Sessão indisponível</h1><p className="mx-auto mt-4 max-w-lg leading-7 text-ink/55">A data pode ter esgotado ou não estar mais aberta. Confira as próximas sessões disponíveis.</p><Link href="/agenda" className="mt-7 inline-flex font-semibold text-forest">Ver próximas datas</Link></div>
         )}
       </div>
       <Footer />

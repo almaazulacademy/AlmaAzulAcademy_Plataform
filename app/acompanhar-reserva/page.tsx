@@ -5,7 +5,10 @@ import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { ReservationLookup } from "@/components/reservation/reservation-lookup";
 
-export const metadata: Metadata = { title: "Acompanhar reserva" };
+export const metadata: Metadata = {
+  title: "Acompanhar reserva",
+  alternates: { canonical: "/acompanhar-reserva" },
+};
 
 export default function TrackReservationPage() {
   return (

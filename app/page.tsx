@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, PersonStanding, Sailboat, Store, Users, Waves } from "lucide-react";
@@ -21,6 +22,8 @@ const futureFormats = [
 ];
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default async function HomePage() {
   const published = await listPublishedExperiences();

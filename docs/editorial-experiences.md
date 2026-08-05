@@ -20,7 +20,7 @@ Esta Sprint não usa Supabase Storage. Cada imagem contém `src`, `alt` e `credi
 ## Rotas
 
 - `/experiencias/[slug]`: landing pública dinâmica; retorna 404 para slug inexistente, rascunho ou arquivado.
-- `/imersao-paranoa`: alias compatível que usa o mesmo renderer e o mesmo conteúdo editorial.
+- `/imersao-paranoa`: rota legada; redireciona permanentemente (308) para `/experiencias/imersao-paranoa`, que é a URL canônica.
 - `/preview/experiencias/[experienceId]`: preview protegido por autenticação administrativa, inclusive para rascunhos.
 
 ## Painel

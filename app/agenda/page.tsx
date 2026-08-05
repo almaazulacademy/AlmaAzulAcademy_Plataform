@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   title: "Agenda geral",
   description:
     "Todas as próximas datas das experiências da Alma Azul Academy em um só lugar. Escolha o dia, veja qual experiência acontece em cada horário e reserve sua vaga.",
+  alternates: { canonical: "/agenda" },
 };
 
 export default function AgendaPage() {

@@ -31,7 +31,9 @@ Não presuma que reservas ou pagamentos estejam ativos em produção sem confirm
 | Rota | Finalidade |
 | --- | --- |
 | `/` | Home institucional |
-| `/imersao-paranoa` | Landing e próximas sessões |
+| `/agenda` | Agenda geral com as próximas sessões de todas as experiências |
+| `/experiencias/[slug]` | Landing pública da experiência e próximas sessões |
+| `/imersao-paranoa` | Redirect permanente (308) para `/experiencias/imersao-paranoa` |
 | `/reservar/[sessionId]` | Formulário e resumo da sessão |
 | `/acompanhar-reserva` | Recuperação segura por CPF + código |
 | `/pagamento/retorno` | Retorno e verificação do checkout |

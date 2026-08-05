@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import test from "node:test";
 
@@ -113,10 +113,13 @@ test("componente esconde alt quebrado e mantém fallback e overlay", () => {
   assert.match(data, /row\.image_url/);
 });
 
-test("Imersão preserva conteúdo e as duas rotas usam o mesmo renderer", () => {
-  const legacy = source("app/imersao-paranoa/page.tsx");
+test("Imersão preserva conteúdo e a rota legada redireciona para a canônica", () => {
+  const config = source("next.config.ts");
   const dynamic = source("app/experiencias/[slug]/page.tsx");
-  assert.match(legacy, /ExperienceLanding/);
+  assert.equal(existsSync(new URL("../app/imersao-paranoa/page.tsx", import.meta.url)), false);
+  assert.match(config, /source: "\/imersao-paranoa"/);
+  assert.match(config, /destination: "\/experiencias\/imersao-paranoa"/);
+  assert.match(config, /permanent: true/);
   assert.match(dynamic, /ExperienceLanding/);
   assert.equal(imersaoParanoaEditorial.about.paragraphs[0], "Uma experiência de 1h30 navegando pelo Lago Paranoá por um dos lugares mais preservados e belos de Brasília: o Córrego do Torto.");
   assert.equal(imersaoParanoaEditorial.gallery?.images.length, 6);
