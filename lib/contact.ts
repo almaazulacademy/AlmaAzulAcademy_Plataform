@@ -1,9 +1,18 @@
 export const WHATSAPP_NUMBER = "5561992682522";
 
+function buildWhatsappLink(message: string) {
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+}
+
 export const WHATSAPP_MESSAGE =
   "Olá! Encontrei a Alma Azul pelo site e gostaria de mais informações sobre as experiências.";
 
-export const WHATSAPP_LINK = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`;
+export const WHATSAPP_LINK = buildWhatsappLink(WHATSAPP_MESSAGE);
+
+export const WHATSAPP_RESERVATION_CODE_MESSAGE =
+  "Olá! Esqueci meu código de reserva. Poderia me enviar novamente, por favor?";
+
+export const WHATSAPP_RESERVATION_CODE_LINK = buildWhatsappLink(WHATSAPP_RESERVATION_CODE_MESSAGE);
 
 export const CONTACT_EMAIL = "almaazulacademy@gmail.com";
 

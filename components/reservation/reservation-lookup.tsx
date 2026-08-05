@@ -3,11 +3,12 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Search, XCircle } from "lucide-react";
+import { CheckCircle2, MessageCircle, Search, XCircle } from "lucide-react";
 
 import { ReservationHold } from "@/components/reservation/reservation-hold";
 import { ReservationSummary } from "@/components/reservation/reservation-summary";
 import { Button } from "@/components/ui/button";
+import { WHATSAPP_RESERVATION_CODE_LINK } from "@/lib/contact";
 import type { ReservationDetails } from "@/lib/reservations/types";
 import { formatCpf, validateLookupInput } from "@/lib/reservations/validation";
 
@@ -75,6 +76,17 @@ export function ReservationLookup() {
       </div>
       {(message || errors.form) && <p role="alert" className="mt-5 rounded-2xl bg-red-50 p-4 text-sm text-red-800">{message || errors.form}</p>}
       <Button type="submit" size="lg" className="mt-7 w-full" disabled={pending}>{pending ? "Consultando..." : "Buscar reserva"}</Button>
+      <div className="mt-5 text-center">
+        <a
+          href={WHATSAPP_RESERVATION_CODE_LINK}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Esqueci meu código de reserva — falar no WhatsApp com a Alma Azul Academy"
+          className="inline-flex items-center gap-2 text-sm font-medium text-ink/55 transition-colors hover:text-forest"
+        >
+          <MessageCircle className="size-4" /> Esqueci meu código de reserva
+        </a>
+      </div>
     </form>
   );
 }
