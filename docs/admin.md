@@ -105,6 +105,19 @@ A tela usa o mesmo cartão de filtros de `/admin/reservas`, com estado preservad
 
 `admin_list_sessions` não muda: a RPC é chamada uma única vez com o recorte de arquivamento (`ACTIVE`, `ARCHIVED` ou `ALL`) e os demais filtros são aplicados em `lib/admin/session-filters.ts`, no servidor, sem consulta adicional.
 
+### Agenda de setembro de 2026
+
+`supabase/migrations/202608090001_september_2026_schedule.sql` cria as 44 sessões do mês (Imersão Paranoá 28, Remada do Nascer do Sol 8, Remada Sunset 8) sem cadastro manual:
+
+- sextas 05:30 Nascer do Sol, 09:00 Imersão, 17:00 Sunset; sábados 06:00 Nascer do Sol e 09:00/12:00/15:00 Imersão; domingos 09:00/12:00/15:00 Imersão e 17:00 Sunset;
+- 90 minutos, R$ 70,00 (`price_cents` 7000), status `OPEN` e capacidade lida de `experiences.default_capacity`;
+- as datas saem do calendário (`generate_series` + `isodow`) e os horários viram `timestamptz` via `make_timestamptz(..., 'America/Sao_Paulo')`, sem soma manual de fuso;
+- experiências resolvidas por slug — `imersao-paranoa`, `remada-nascer-do-sol`, `remada-sunset` —, nunca por UUID fixo;
+- tudo dentro de um único bloco `do`: qualquer pré-requisito ausente aborta antes de inserir, sem inserção parcial;
+- idempotente por `experience_id` + `starts_at`: uma sessão já cadastrada é preservada como está, sem `UPDATE` e sem `DELETE`.
+
+Ordem de aplicação manual no Supabase: `supabase/diagnostics/september_2026_schedule_preflight.sql` (somente leitura, mostra conflitos e a impressão digital das sessões de outros meses), depois a migration, depois `supabase/diagnostics/september_2026_schedule_postcheck.sql`, que confirma a agenda final, as contagens por experiência e por dia da semana, a ausência de duplicatas e que agosto e outubro continuam intactos.
+
 ### Arquivamento de sessões
 
 Ao clicar em excluir uma sessão que já tem reservas, o painel arquiva a sessão (status `ARCHIVED`) em vez de bloquear a ação:
