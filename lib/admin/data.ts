@@ -6,6 +6,7 @@ import type {
   AdminReservationDetails,
   AdminReservationFilters,
   AdminSession,
+  AdminSessionFilters,
   AdminSessionInput,
   ExperienceStatus,
   PaymentStatus,
@@ -14,6 +15,7 @@ import type {
   SessionLifecycleStatus,
 } from "@/lib/admin/types";
 import type { ReservationStatus } from "@/lib/reservations/types";
+import { applySessionFilters, sessionListFilterFor } from "@/lib/admin/session-filters";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { emptyExperienceEditorial, validateExperienceEditorial } from "@/lib/editorial/experience";
 
@@ -167,6 +169,15 @@ export async function listAdminSessions(actorUserId: string, filter: SessionFilt
     updatedAt: asString(row.updated_at),
     participants: asRows(row.participants).map((item) => ({ id: asString(item.id), name: asString(item.name), quantity: asNumber(item.quantity), status: mapReservationStatus(item.status) })),
   }));
+}
+
+// Busca e filtros da tela de sessões. A RPC só recorta arquivamento, então
+// ela é chamada uma única vez com o recorte mais estreito possível e o
+// restante (experiência, período, busca e ordenação) é aplicado aqui, sem
+// consulta adicional.
+export async function listAdminSessionsFiltered(actorUserId: string, filters: AdminSessionFilters): Promise<AdminSession[]> {
+  const sessions = await listAdminSessions(actorUserId, sessionListFilterFor(filters.status));
+  return applySessionFilters(sessions, filters);
 }
 
 export async function createAdminSession(actorUserId: string, input: AdminSessionInput) {

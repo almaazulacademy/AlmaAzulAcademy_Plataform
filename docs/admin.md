@@ -93,13 +93,25 @@ Regras protegidas no banco:
 
 Duplicar apenas preenche um novo formulário. A criação continua passando pela mesma validação e RPC.
 
+### Busca e filtros
+
+A tela usa o mesmo cartão de filtros de `/admin/reservas`, com estado preservado na URL (a seleção sobrevive ao recarregar e ao salvar uma sessão):
+
+- busca (`busca`) por nome da experiência, data e horário, sem acento e sem caixa; identificadores técnicos não entram na busca;
+- status (`filtro`): `ativas`, `abertas`, `fechadas`, `canceladas`, `arquivadas`, `todas`;
+- experiência (`experiencia`), preenchida com o que estiver cadastrado em `experiences`;
+- data (`periodo`): `todas`, `proximas`, `passadas`, `hoje`, mais o intervalo personalizado `de` e `ate`;
+- ordenação (`ordem`): `proximas` (padrão), `recentes`, `antigas`.
+
+`admin_list_sessions` não muda: a RPC é chamada uma única vez com o recorte de arquivamento (`ACTIVE`, `ARCHIVED` ou `ALL`) e os demais filtros são aplicados em `lib/admin/session-filters.ts`, no servidor, sem consulta adicional.
+
 ### Arquivamento de sessões
 
 Ao clicar em excluir uma sessão que já tem reservas, o painel arquiva a sessão (status `ARCHIVED`) em vez de bloquear a ação:
 
 - a sessão some da agenda pública, do site (landing e link direto de reserva) e não aceita novas reservas — as mesmas regras que hoje só liberam sessões com status `OPEN` já cobrem isso automaticamente;
 - reservas, pagamentos e relatórios continuam intactos e acessíveis normalmente em `/admin/reservas` e no dashboard;
-- a lista de sessões tem um filtro **Ativas** / **Arquivadas** / **Todas** (`/admin/sessoes?filtro=`);
+- a lista de sessões continua com o recorte **Ativas** / **Arquivadas** / **Todas** (`/admin/sessoes?filtro=`), agora dentro do cartão de filtros;
 - uma sessão arquivada pode ser restaurada, o que falha se a data já passou ou se colide com outra sessão ativa da mesma experiência no mesmo horário.
 
 ## Experiências

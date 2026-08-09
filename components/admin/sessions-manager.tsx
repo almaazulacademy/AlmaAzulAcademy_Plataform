@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Archive, ArchiveRestore, CalendarPlus, Copy, Lock, Pencil, Plus, Trash2, Unlock, X } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
@@ -11,17 +11,11 @@ import { AdminPageHeader } from "@/components/admin/page-header";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { AdminEmptyState } from "@/components/admin/states";
 import { useToast } from "@/components/admin/toast-provider";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import type { AdminExperience, AdminSession, SessionFilter, SessionStatus } from "@/lib/admin/types";
+import { Button, buttonVariants } from "@/components/ui/button";
+import type { AdminExperience, AdminSession, AdminSessionFilters, SessionStatus } from "@/lib/admin/types";
+import { hasSessionFilters, sessionSearchParams } from "@/lib/admin/session-filters";
 import { formatCurrency } from "@/lib/admin/format";
 import { formatSessionDateTime, sessionLocalToIso, toSessionDateTimeLocal } from "@/lib/sessions/date-time";
-
-const FILTER_TABS: Array<{ value: SessionFilter; param: string; label: string }> = [
-  { value: "ACTIVE", param: "ativas", label: "Ativas" },
-  { value: "ARCHIVED", param: "arquivadas", label: "Arquivadas" },
-  { value: "ALL", param: "todas", label: "Todas" },
-];
 
 type FormState = {
   experienceId: string;
@@ -60,13 +54,18 @@ function fromSession(session: AdminSession): FormState {
   };
 }
 
-export function SessionsManager({ sessions, experiences, initiallyOpen, filter }: {
+export function SessionsManager({ sessions, experiences, initiallyOpen, filters, filtersSlot }: {
   sessions: AdminSession[];
   experiences: AdminExperience[];
   initiallyOpen: boolean;
-  filter: SessionFilter;
+  filters: AdminSessionFilters;
+  filtersSlot: ReactNode;
 }) {
   const router = useRouter();
+  const search = sessionSearchParams(filters);
+  // Salvar uma sessão não pode descartar a busca e os filtros em uso.
+  const listUrl = search ? `/admin/sessoes?${search}` : "/admin/sessoes";
+  const hasFilters = hasSessionFilters(filters);
   const { notify } = useToast();
   const [formOpen, setFormOpen] = useState(initiallyOpen);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -132,7 +131,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filter }
       notify({ title: editingId ? "Sessão atualizada" : "Sessão criada", description: "A agenda administrativa foi atualizada." });
       setFormOpen(false);
       setEditingId(null);
-      router.replace("/admin/sessoes");
+      router.replace(listUrl);
       router.refresh();
     } catch (error) {
       notify({ title: "Sessão não salva", description: error instanceof Error ? error.message : "Tente novamente.", variant: "error" });
@@ -193,20 +192,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filter }
         action={<Button type="button" onClick={openNew}><Plus className="size-4" /> Nova sessão</Button>}
       />
 
-      <nav className="mt-6 flex flex-wrap gap-2" aria-label="Filtro de sessões">
-        {FILTER_TABS.map((tab) => (
-          <Link
-            key={tab.value}
-            href={`/admin/sessoes?filtro=${tab.param}`}
-            className={cn(
-              "rounded-full px-4 py-2 text-sm font-semibold transition-colors",
-              filter === tab.value ? "bg-ink text-white" : "bg-ink/5 text-ink/60 hover:bg-ink/10",
-            )}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      {filtersSlot}
 
       {formOpen ? (
         <section className="mt-8 rounded-3xl border border-lake/20 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="session-form-title">
@@ -240,9 +226,14 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filter }
       ) : null}
 
       <section className="mt-8 space-y-4" aria-label="Lista de sessões">
+        <p className="text-sm text-ink/50" aria-live="polite">{sessions.length} {sessions.length === 1 ? "sessão encontrada" : "sessões encontradas"}</p>
         {sessions.length === 0 ? (
-          filter === "ARCHIVED" ? (
-            <AdminEmptyState title="Nenhuma sessão arquivada" description="Sessões com histórico de reservas aparecem aqui quando são arquivadas." />
+          hasFilters ? (
+            <AdminEmptyState
+              title="Nenhuma sessão encontrada com esses filtros."
+              description={filters.status === "ARCHIVED" ? "Sessões com histórico de reservas aparecem aqui quando são arquivadas." : "Ajuste ou remova os filtros para ampliar a busca."}
+              action={<Link href="/admin/sessoes" className={buttonVariants({ variant: "outline", size: "sm" })}>Limpar filtros</Link>}
+            />
           ) : (
             <AdminEmptyState title="Nenhuma sessão cadastrada" description="Crie a primeira data para começar a organizar a agenda." action={<Button type="button" size="sm" onClick={openNew}><Plus className="size-4" /> Criar sessão</Button>} />
           )

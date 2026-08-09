@@ -14,6 +14,28 @@ export type SessionLifecycleStatus = (typeof SESSION_LIFECYCLE_STATUSES)[number]
 export const SESSION_FILTERS = ["ACTIVE", "ARCHIVED", "ALL"] as const;
 export type SessionFilter = (typeof SESSION_FILTERS)[number];
 
+// Filtros da listagem administrativa de sessões. O status vai além de
+// SESSION_FILTERS (usado pela RPC) porque a tela também recorta por status
+// operacional; a conversão para o filtro da RPC fica em session-filters.ts.
+export const SESSION_STATUS_FILTERS = ["ACTIVE", "OPEN", "CLOSED", "CANCELLED", "ARCHIVED", "ALL"] as const;
+export type SessionStatusFilter = (typeof SESSION_STATUS_FILTERS)[number];
+
+export const SESSION_PERIOD_FILTERS = ["ALL", "UPCOMING", "PAST", "TODAY"] as const;
+export type SessionPeriodFilter = (typeof SESSION_PERIOD_FILTERS)[number];
+
+export const SESSION_SORTS = ["UPCOMING", "RECENT", "OLDEST"] as const;
+export type SessionSort = (typeof SESSION_SORTS)[number];
+
+export type AdminSessionFilters = {
+  query: string;
+  status: SessionStatusFilter;
+  experienceId: string;
+  period: SessionPeriodFilter;
+  from: string;
+  to: string;
+  sort: SessionSort;
+};
+
 export const EXPERIENCE_STATUSES = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
 export type ExperienceStatus = (typeof EXPERIENCE_STATUSES)[number];
 
