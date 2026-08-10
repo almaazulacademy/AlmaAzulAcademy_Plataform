@@ -141,6 +141,48 @@ test("as sessões nascem com 90 minutos, R$ 70 e capacidade padrão da experiên
   assert.doesNotMatch(migration, /\n\s*28,/);
 });
 
+test("a coluna legada spots_available é preenchida com a capacidade da sessão", () => {
+  // Em produção spots_available é NOT NULL e sem default; em um schema limpo ela
+  // não existe. O INSERT é montado em tempo de execução para cobrir os dois casos.
+  assert.match(migration, /column_name = 'spots_available'/);
+  assert.match(migration, /legacy_columns := ', spots_available';/);
+  assert.match(migration, /legacy_values := ', plan\.capacity';/);
+  assert.match(migration, /execute format\(\$insert\$/);
+  assert.match(migration, /status%1\$s/);
+  assert.match(migration, /'OPEN'::public\.session_status%2\$s/);
+  assert.match(migration, /get diagnostics inserted_total = row_count;/);
+  // A lista fixa de colunas do INSERT continua sem spots_available: ela só entra
+  // pela parte dinâmica, então o schema limpo insere exatamente o mesmo de antes.
+  assert.doesNotMatch(migration, /capacity,\n\s*status,\n\s*spots_available/);
+  assert.equal((migration.match(/insert into public\.sessions/g) ?? []).length, 1);
+});
+
+test("qualquer outra coluna obrigatória sem default continua abortando a migration", () => {
+  assert.match(migration, /and not \(column_name = any \(mapped_columns\)\)/);
+  assert.match(migration, /and not \(legacy_spots_type is not null and column_name = 'spots_available'\)/);
+  assert.match(migration, /SESSIONS_REQUIRED_COLUMNS_UNSUPPORTED/);
+  assert.match(migration, /SESSIONS_SPOTS_AVAILABLE_TYPE_UNSUPPORTED/);
+  assert.match(migration, /numeric_types constant text\[\] := array\['smallint', 'integer', 'bigint', 'numeric', 'real', 'double precision'\]/);
+  // O tipo da coluna legada é verificado antes de qualquer escrita.
+  assert.ok(migration.indexOf("SESSIONS_SPOTS_AVAILABLE_TYPE_UNSUPPORTED") < migration.indexOf("insert into public.sessions"));
+});
+
+test("preflight e postcheck leem spots_available sem quebrar em schema sem a coluna", () => {
+  for (const diagnostic of [preflight, postcheck]) {
+    assert.match(diagnostic, /to_jsonb\(session\.\*\) ->> 'spots_available'/);
+    assert.doesNotMatch(diagnostic, /\bselect[^;]*\bsession\.spots_available\b/i);
+    // O cast só acontece quando o valor legado é mesmo numérico, então um schema
+    // inesperado não derruba o diagnóstico antes de ele mostrar o schema real.
+    assert.ok(diagnostic.includes("~ '^-?[0-9]+(\\.[0-9]+)?$'"));
+  }
+  assert.match(preflight, /pg_get_triggerdef/);
+  assert.match(preflight, /pg_get_constraintdef/);
+  assert.match(postcheck, /REVISAR_SNAPSHOT_LEGADO_SPOTS_AVAILABLE/);
+  assert.match(postcheck, /sessions_with_wrong_legacy_snapshot/);
+  // O veredito só cobra o snapshot em sessões sem reserva válida.
+  assert.match(postcheck, /public\.available_spots\(session\.id\) = session\.capacity\n\s*and \(to_jsonb\(session\.\*\) ->> 'spots_available'\)::numeric <> session\.capacity::numeric/);
+});
+
 test("os três slugs reais são resolvidos por slug, sem UUID fixo", () => {
   assert.match(migration, /required_slugs constant text\[\] := array\['imersao-paranoa', 'remada-nascer-do-sol', 'remada-sunset'\]/);
   assert.match(migration, /join public\.experiences experience on experience\.slug = slots\.slug/);

@@ -5,6 +5,11 @@
 -- Este script não insere, não atualiza e não apaga nada.
 -- Ele devolve apenas agregados, metadados de schema, IDs técnicos de sessão e
 -- dados operacionais da agenda. Nenhum dado pessoal de participante é retornado.
+--
+-- As seções 3.x descrevem o schema real de public.sessions, incluindo a coluna
+-- legada spots_available (NOT NULL e sem default no banco de produção). A
+-- migration a preenche com a capacidade da sessão, que é o mesmo valor que
+-- public.available_spots(id) devolve para uma sessão sem nenhuma reserva.
 
 -- 1. Contexto e pré-requisitos.
 select
@@ -35,7 +40,8 @@ from unnest(array['imersao-paranoa', 'remada-nascer-do-sol', 'remada-sunset']) a
 order by required.slug;
 
 -- 3. Colunas obrigatórias sem default em public.sessions. A migration preenche
---    experience_id, starts_at, duration_minutes, price_cents, capacity e status.
+--    experience_id, starts_at, duration_minutes, price_cents, capacity, status e,
+--    quando a coluna legada existe, spots_available.
 --    Qualquer outra linha aqui é inconsistência grave e aborta a aplicação.
 select
   column_name,
@@ -50,9 +56,67 @@ where table_schema = 'public'
   and is_identity = 'NO'
   and is_generated = 'NEVER'
   and not (column_name = any (array[
-    'experience_id', 'starts_at', 'duration_minutes', 'price_cents', 'capacity', 'status'
+    'experience_id', 'starts_at', 'duration_minutes', 'price_cents', 'capacity', 'status', 'spots_available'
   ]))
 order by ordinal_position;
+
+-- 3.1. Retrato completo de public.sessions: origem, tipo, nulabilidade e default
+--      de cada coluna, incluindo a legada spots_available.
+select
+  column_name,
+  data_type,
+  is_nullable,
+  column_default,
+  col_description('public.sessions'::regclass, ordinal_position::integer) as column_comment,
+  case
+    when column_name = any (array['experience_id', 'starts_at', 'duration_minutes', 'price_cents', 'capacity', 'status'])
+      then 'PREENCHIDA_PELA_MIGRATION'
+    when column_name = 'spots_available' then 'LEGADA_PREENCHIDA_COM_A_CAPACIDADE'
+    when column_default is not null then 'DEFAULT_DO_BANCO'
+    when is_nullable = 'YES' then 'OPCIONAL_FICA_NULA'
+    else 'BLOQUEIA_A_MIGRATION'
+  end as handling
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'sessions'
+order by ordinal_position;
+
+-- 3.2. Restrições CHECK e triggers de public.sessions. Servem para confirmar que
+--      spots_available = capacity é aceito em uma sessão nova e para revelar
+--      qualquer automação legada que já preencha a coluna.
+select
+  conname as constraint_name,
+  pg_get_constraintdef(oid) as definition
+from pg_constraint
+where conrelid = 'public.sessions'::regclass
+  and contype in ('c', 'u', 'p')
+order by conname;
+
+select
+  tgname as trigger_name,
+  pg_get_triggerdef(oid) as definition
+from pg_trigger
+where tgrelid = 'public.sessions'::regclass
+  and not tgisinternal
+order by tgname;
+
+-- 3.3. Coerência atual do snapshot legado nas sessões que já existem.
+--      spots_available deveria acompanhar public.available_spots(id).
+--      A leitura por to_jsonb funciona mesmo em um schema que não tenha a coluna.
+select
+  count(*) as sessions_checked,
+  count(*) filter (where legacy_spots is null) as without_legacy_column_value,
+  count(*) filter (where legacy_spots is not null and legacy_spots = canonical_spots) as legacy_matches_canonical,
+  count(*) filter (where legacy_spots is not null and legacy_spots <> canonical_spots) as legacy_diverges_from_canonical
+from (
+  select
+    case
+      when to_jsonb(session.*) ->> 'spots_available' ~ '^-?[0-9]+(\.[0-9]+)?$'
+        then (to_jsonb(session.*) ->> 'spots_available')::numeric
+    end as legacy_spots,
+    public.available_spots(session.id)::numeric as canonical_spots
+  from public.sessions session
+) snapshot;
 
 -- 4. Sessões que já existem em setembro/2026, no fuso de Brasília.
 select
@@ -66,7 +130,9 @@ select
   session.status,
   session.capacity,
   session.price_cents,
-  session.duration_minutes
+  session.duration_minutes,
+  to_jsonb(session.*) ->> 'spots_available' as legacy_spots_available,
+  public.available_spots(session.id) as canonical_remaining_spots
 from public.sessions session
 join public.experiences experience on experience.id = session.experience_id
 where session.starts_at >= make_timestamptz(2026, 9, 1, 0, 0, 0, 'America/Sao_Paulo')

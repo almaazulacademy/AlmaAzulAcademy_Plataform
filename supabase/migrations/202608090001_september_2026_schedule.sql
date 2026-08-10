@@ -25,14 +25,33 @@
 --
 -- A conversão para UTC é feita pelo banco, com make_timestamptz e o fuso
 -- America/Sao_Paulo. Nenhuma hora é somada ou subtraída manualmente.
+--
+-- Coluna legada spots_available: o banco de produção herdou de public.sessions,
+-- antes destas migrations, uma coluna NOT NULL e sem default que guarda o
+-- snapshot de vagas disponíveis. Ela nunca é lida pelo produto — a fonte
+-- canônica é public.available_spots(id) = capacity menos reservas confirmadas e
+-- pré-reservas válidas —, mas continua obrigatória no INSERT. Como uma sessão
+-- nova nasce sem nenhuma reserva, available_spots(id) é igual a capacity; então
+-- o snapshot legado nasce com o mesmo valor da capacidade da sessão.
+-- A coluna só é preenchida quando existe: em um schema limpo (que não a tem) a
+-- migration insere exatamente as mesmas colunas canônicas de antes. Qualquer
+-- OUTRA coluna obrigatória sem default continua abortando a migration, porque o
+-- valor correto dela não pode ser adivinhado.
 
 do $september_2026$
 declare
   required_slugs constant text[] := array['imersao-paranoa', 'remada-nascer-do-sol', 'remada-sunset'];
+  mapped_columns constant text[] := array[
+    'experience_id', 'starts_at', 'duration_minutes', 'price_cents', 'capacity', 'status'
+  ];
+  numeric_types constant text[] := array['smallint', 'integer', 'bigint', 'numeric', 'real', 'double precision'];
   expected_total constant integer := 44;
   missing_slugs text;
   unsupported_required_columns text;
   invalid_capacity text;
+  legacy_spots_type text;
+  legacy_columns text := '';
+  legacy_values text := '';
   planned_total integer;
   existing_total integer;
   inserted_total integer;
@@ -66,7 +85,30 @@ begin
       hint = 'Aplique as migrations das experiências antes desta agenda.';
   end if;
 
-  -- 2. Colunas obrigatórias sem default que esta migration não preenche. Um schema
+  -- 2. Coluna legada spots_available: existe no banco de produção, não existe em
+  --    uma instalação limpa. Quando existe, entra no INSERT com o valor da
+  --    capacidade, que é o mesmo que available_spots(id) devolve para uma sessão
+  --    recém-criada (sem nenhuma reserva).
+  select data_type
+  into legacy_spots_type
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'sessions'
+    and column_name = 'spots_available';
+
+  if legacy_spots_type is not null then
+    if not (legacy_spots_type = any (numeric_types)) then
+      raise exception using
+        message = 'SESSIONS_SPOTS_AVAILABLE_TYPE_UNSUPPORTED',
+        detail = format('public.sessions.spots_available é %s; esperado um tipo numérico.', legacy_spots_type),
+        hint = 'Revise o schema legado de public.sessions antes de criar a agenda.';
+    end if;
+
+    legacy_columns := ', spots_available';
+    legacy_values := ', plan.capacity';
+  end if;
+
+  -- 3. Colunas obrigatórias sem default que esta migration não preenche. Um schema
   --    fora do esperado é inconsistência grave: aborta sem inserção parcial.
   select string_agg(column_name, ', ' order by ordinal_position)
   into unsupported_required_columns
@@ -77,9 +119,8 @@ begin
     and column_default is null
     and is_identity = 'NO'
     and is_generated = 'NEVER'
-    and not (column_name = any (array[
-      'experience_id', 'starts_at', 'duration_minutes', 'price_cents', 'capacity', 'status'
-    ]));
+    and not (column_name = any (mapped_columns))
+    and not (legacy_spots_type is not null and column_name = 'spots_available');
 
   if unsupported_required_columns is not null then
     raise exception using
@@ -88,7 +129,7 @@ begin
       hint = 'Revise o schema de public.sessions antes de criar a agenda.';
   end if;
 
-  -- 3. Capacidade padrão vem da experiência, não de um número fixo na migration.
+  -- 4. Capacidade padrão vem da experiência, não de um número fixo na migration.
   select string_agg(format('%s = %s', experience.slug, coalesce(experience.default_capacity::text, 'null')), ', ' order by experience.slug)
   into invalid_capacity
   from public.experiences experience
@@ -102,7 +143,7 @@ begin
       hint = 'Corrija default_capacity da experiência antes de criar a agenda.';
   end if;
 
-  -- 4. O plano é derivado do calendário real de setembro/2026 (isodow 5 = sexta,
+  -- 5. O plano é derivado do calendário real de setembro/2026 (isodow 5 = sexta,
   --    6 = sábado, 7 = domingo). Nenhuma data é digitada à mão.
   --    A tabela é temporária e some no commit; nada dela persiste no schema.
   create temporary table september_2026_plan on commit drop as
@@ -156,7 +197,7 @@ begin
       hint = 'Revise o calendário e a tabela de horários antes de aplicar.';
   end if;
 
-  -- 5. Conflitos: qualquer sessão já cadastrada para a mesma experiência e horário
+  -- 6. Conflitos: qualquer sessão já cadastrada para a mesma experiência e horário
   --    é preservada exatamente como está.
   select count(*)
   into existing_total
@@ -168,28 +209,33 @@ begin
       and session.starts_at = plan.starts_at
   );
 
-  insert into public.sessions (
-    experience_id,
-    starts_at,
-    duration_minutes,
-    price_cents,
-    capacity,
-    status
-  )
-  select
-    plan.experience_id,
-    plan.starts_at,
-    90,
-    7000,
-    plan.capacity,
-    'OPEN'::public.session_status
-  from september_2026_plan plan
-  where not exists (
-    select 1
-    from public.sessions session
-    where session.experience_id = plan.experience_id
-      and session.starts_at = plan.starts_at
-  );
+  -- 7. O INSERT é montado em tempo de execução só para incluir spots_available
+  --    quando a coluna legada existe. A cláusula not exists é a mesma de sempre:
+  --    nenhuma linha existente é lida para escrita, atualizada ou removida.
+  execute format($insert$
+    insert into public.sessions (
+      experience_id,
+      starts_at,
+      duration_minutes,
+      price_cents,
+      capacity,
+      status%1$s
+    )
+    select
+      plan.experience_id,
+      plan.starts_at,
+      90,
+      7000,
+      plan.capacity,
+      'OPEN'::public.session_status%2$s
+    from september_2026_plan plan
+    where not exists (
+      select 1
+      from public.sessions session
+      where session.experience_id = plan.experience_id
+        and session.starts_at = plan.starts_at
+    )
+  $insert$, legacy_columns, legacy_values);
 
   get diagnostics inserted_total = row_count;
 
@@ -201,6 +247,11 @@ begin
 
   raise notice 'Agenda setembro/2026: % planejadas, % já existiam, % criadas agora.',
     planned_total, existing_total, inserted_total;
+  raise notice 'Coluna legada spots_available: %.',
+    case
+      when legacy_spots_type is null then 'ausente neste schema, nada a preencher'
+      else format('%s, preenchida com a capacidade da sessão', legacy_spots_type)
+    end;
 
   for summary in
     select

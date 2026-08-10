@@ -4,6 +4,10 @@
 --
 -- Este script não insere, não atualiza e não apaga nada.
 -- Nenhum dado pessoal de participante é retornado.
+--
+-- Além da agenda, confere o snapshot legado spots_available: nas sessões novas,
+-- que ainda não têm reserva, ele precisa ser igual à capacidade — o mesmo valor
+-- que public.available_spots(id) devolve.
 
 -- 1. Agenda final de setembro/2026, por data, horário e experiência.
 select
@@ -17,7 +21,8 @@ select
   session.capacity,
   session.price_cents,
   session.duration_minutes,
-  public.available_spots(session.id) as remaining_spots
+  public.available_spots(session.id) as remaining_spots,
+  to_jsonb(session.*) ->> 'spots_available' as legacy_spots_available
 from public.sessions session
 join public.experiences experience on experience.id = session.experience_id
 where session.starts_at >= make_timestamptz(2026, 9, 1, 0, 0, 0, 'America/Sao_Paulo')
@@ -66,6 +71,33 @@ where session.starts_at >= make_timestamptz(2026, 9, 1, 0, 0, 0, 'America/Sao_Pa
   and session.starts_at <  make_timestamptz(2026, 10, 1, 0, 0, 0, 'America/Sao_Paulo')
 group by 1, 2
 order by 1;
+
+-- 4.1. Snapshot legado spots_available nas sessões de setembro/2026.
+--      Sessões sem nenhuma reserva válida (remaining = capacity) precisam ter o
+--      snapshot igual à capacidade. Onde há reserva, o snapshot legado pode
+--      divergir por histórico e não é alterado por esta agenda.
+--      A leitura por to_jsonb funciona mesmo em um schema sem a coluna.
+select
+  coalesce(snapshot.legacy_column_present, false) as legacy_column_present,
+  count(*) as september_sessions,
+  count(*) filter (where snapshot.legacy_spots is null) as without_legacy_value,
+  count(*) filter (where snapshot.canonical_spots = snapshot.capacity and snapshot.legacy_spots = snapshot.capacity) as free_sessions_with_correct_snapshot,
+  count(*) filter (where snapshot.canonical_spots = snapshot.capacity and snapshot.legacy_spots is not null and snapshot.legacy_spots <> snapshot.capacity) as free_sessions_with_wrong_snapshot,
+  count(*) filter (where snapshot.canonical_spots <> snapshot.capacity) as sessions_with_reservations
+from (
+  select
+    to_jsonb(session.*) -> 'spots_available' is not null as legacy_column_present,
+    case
+      when to_jsonb(session.*) ->> 'spots_available' ~ '^-?[0-9]+(\.[0-9]+)?$'
+        then (to_jsonb(session.*) ->> 'spots_available')::numeric
+    end as legacy_spots,
+    session.capacity::numeric as capacity,
+    public.available_spots(session.id)::numeric as canonical_spots
+  from public.sessions session
+  where session.starts_at >= make_timestamptz(2026, 9, 1, 0, 0, 0, 'America/Sao_Paulo')
+    and session.starts_at <  make_timestamptz(2026, 10, 1, 0, 0, 0, 'America/Sao_Paulo')
+) snapshot
+group by 1;
 
 -- 5. Duplicatas: mesma experiência no mesmo horário. Zero linhas = agenda limpa.
 select
@@ -141,17 +173,32 @@ deviations as (
    and session.starts_at = plan.starts_at
   where session.duration_minutes <> 90
      or session.price_cents <> 7000
+),
+legacy_snapshot as (
+  -- Só as sessões do plano ainda sem nenhuma reserva válida: nelas o snapshot
+  -- legado tem de ser igual à capacidade. Onde a coluna não existe, não há o
+  -- que conferir.
+  select count(*) as wrong_snapshot
+  from plan
+  join public.sessions session
+    on session.experience_id = plan.experience_id
+   and session.starts_at = plan.starts_at
+  where to_jsonb(session.*) ->> 'spots_available' ~ '^-?[0-9]+(\.[0-9]+)?$'
+    and public.available_spots(session.id) = session.capacity
+    and (to_jsonb(session.*) ->> 'spots_available')::numeric <> session.capacity::numeric
 )
 select
   (select count(*) from plan) as planned_sessions,
   (select missing_count from missing) as planned_sessions_missing,
   (select duplicate_groups from duplicates) as duplicate_groups,
   (select deviating_sessions from deviations) as sessions_with_unexpected_price_or_duration,
+  (select wrong_snapshot from legacy_snapshot) as sessions_with_wrong_legacy_snapshot,
   case
     when (select count(*) from plan) <> 44 then 'PLANO_INESPERADO_REVISAR'
     when (select missing_count from missing) > 0 then 'AGENDA_INCOMPLETA_REAPLICAR_MIGRATION'
     when (select duplicate_groups from duplicates) > 0 then 'DUPLICATAS_ENCONTRADAS_REVISAR'
     when (select deviating_sessions from deviations) > 0 then 'REVISAR_PRECO_OU_DURACAO'
+    when (select wrong_snapshot from legacy_snapshot) > 0 then 'REVISAR_SNAPSHOT_LEGADO_SPOTS_AVAILABLE'
     else 'AGENDA_SETEMBRO_2026_COMPLETA'
   end as verdict;
 

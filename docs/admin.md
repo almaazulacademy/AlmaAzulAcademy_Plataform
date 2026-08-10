@@ -114,7 +114,8 @@ A tela usa o mesmo cartão de filtros de `/admin/reservas`, com estado preservad
 - as datas saem do calendário (`generate_series` + `isodow`) e os horários viram `timestamptz` via `make_timestamptz(..., 'America/Sao_Paulo')`, sem soma manual de fuso;
 - experiências resolvidas por slug — `imersao-paranoa`, `remada-nascer-do-sol`, `remada-sunset` —, nunca por UUID fixo;
 - tudo dentro de um único bloco `do`: qualquer pré-requisito ausente aborta antes de inserir, sem inserção parcial;
-- idempotente por `experience_id` + `starts_at`: uma sessão já cadastrada é preservada como está, sem `UPDATE` e sem `DELETE`.
+- idempotente por `experience_id` + `starts_at`: uma sessão já cadastrada é preservada como está, sem `UPDATE` e sem `DELETE`;
+- a coluna legada `spots_available` (NOT NULL e sem default no banco de produção, ausente em instalação limpa) é detectada em tempo de execução e preenchida com a capacidade da sessão — o mesmo valor que `available_spots(id)` devolve enquanto a sessão não tem reserva. Qualquer outra coluna obrigatória sem default continua abortando a migration, porque o valor correto dela não pode ser adivinhado.
 
 Ordem de aplicação manual no Supabase: `supabase/diagnostics/september_2026_schedule_preflight.sql` (somente leitura, mostra conflitos e a impressão digital das sessões de outros meses), depois a migration, depois `supabase/diagnostics/september_2026_schedule_postcheck.sql`, que confirma a agenda final, as contagens por experiência e por dia da semana, a ausência de duplicatas e que agosto e outubro continuam intactos.
 
