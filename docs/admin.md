@@ -117,6 +117,8 @@ A tela usa o mesmo cartão de filtros de `/admin/reservas`, com estado preservad
 - idempotente por `experience_id` + `starts_at`: uma sessão já cadastrada é preservada como está, sem `UPDATE` e sem `DELETE`;
 - a coluna legada `spots_available` (NOT NULL e sem default no banco de produção, ausente em instalação limpa) é detectada em tempo de execução e preenchida com a capacidade da sessão — o mesmo valor que `available_spots(id)` devolve enquanto a sessão não tem reserva. Qualquer outra coluna obrigatória sem default continua abortando a migration, porque o valor correto dela não pode ser adivinhado.
 
+A capacidade padrão da Imersão Paranoá ficou em 15 até `202608090002_imersao_paranoa_default_capacity.sql`: a experiência é anterior à coluna `default_capacity` e foi preenchida pelo backfill genérico `coalesce(default_capacity, 15)` da migration da Sprint 5, enquanto Sunset, Nascer do Sol e Lua Cheia já nasceram com 28. A correção mexe só nessa linha e só nessa coluna; `supabase/diagnostics/experiences_default_capacity_check.sql` confirma as três em 28.
+
 Ordem de aplicação manual no Supabase: `supabase/diagnostics/september_2026_schedule_preflight.sql` (somente leitura, mostra conflitos e a impressão digital das sessões de outros meses), depois a migration, depois `supabase/diagnostics/september_2026_schedule_postcheck.sql`, que confirma a agenda final, as contagens por experiência e por dia da semana, a ausência de duplicatas e que agosto e outubro continuam intactos.
 
 ### Arquivamento de sessões
