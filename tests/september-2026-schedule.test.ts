@@ -12,6 +12,7 @@ const migration = source("supabase/migrations/202608090001_september_2026_schedu
 const preflight = source("supabase/diagnostics/september_2026_schedule_preflight.sql");
 const preflightSummary = source("supabase/diagnostics/september_2026_schedule_preflight_summary.sql");
 const postcheck = source("supabase/diagnostics/september_2026_schedule_postcheck.sql");
+const postcheckSummary = source("supabase/diagnostics/september_2026_schedule_postcheck_summary.sql");
 
 // Remove comentários e literais para analisar só o SQL executável.
 function executableSql(sql: string) {
@@ -258,6 +259,56 @@ test("o preflight resumido cobre todos os checks e usa o mesmo plano da migratio
   assert.match(preflightSummary, /colunas obrigatórias sem default não mapeadas: %s/);
   assert.match(preflightSummary, /a migration só preenche tipos numéricos/);
   assert.match(preflightSummary, /default_capacity inválida em imersao-paranoa/);
+});
+
+test("o postcheck resumido é um único SELECT somente leitura", () => {
+  const executable = executableSql(postcheckSummary);
+  assert.equal((executable.match(/;/g) ?? []).length, 1);
+  assert.match(postcheckSummary.trimEnd(), /;$/);
+  assert.doesNotMatch(executable, /\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|call|merge|copy|vacuum|analyze)\b/i);
+  assert.doesNotMatch(executable, /\bdo\s*\$/i);
+  assert.doesNotMatch(postcheckSummary, /full_name|cpf|phone|email|checkout_url|provider_reference/i);
+  assert.ok(postcheckSummary.includes("~ '^-?[0-9]+(\\.[0-9]+)?$'"));
+});
+
+test("o postcheck resumido cobre todos os checks com os números esperados", () => {
+  assert.deepEqual(slotsBlock(postcheckSummary), WEEKLY_SLOTS);
+  const checks = [
+    "september_total_sessions",
+    "planned_sessions_found",
+    "imersao_paranoa_sessions",
+    "nascer_do_sol_sessions",
+    "sunset_sessions",
+    "friday_sessions",
+    "saturday_sessions",
+    "sunday_sessions",
+    "sessions_with_capacity_not_28",
+    "sessions_with_price_not_7000",
+    "sessions_with_duration_not_90",
+    "sessions_with_status_not_open",
+    "duplicate_experience_start_times",
+    "spots_available_inconsistent",
+    "sessions_outside_september_2026",
+    "sessions_outside_september_fingerprint",
+    "AGENDA_SETEMBRO_2026_COMPLETA",
+  ];
+  for (const [index, check] of checks.entries()) {
+    assert.match(postcheckSummary, new RegExp(`select ${index + 1}(?: as ord)?,\\n\\s*'${check}'`));
+  }
+  assert.equal((postcheckSummary.match(/union all/g) ?? []).length, checks.length - 1);
+  // Números esperados da agenda e linha de base das sessões de outros meses.
+  assert.match(postcheckSummary, /facts\.total_sessions = 44/);
+  assert.match(postcheckSummary, /facts\.imersao_sessions = 28/);
+  assert.match(postcheckSummary, /facts\.nascer_sessions = 8/);
+  assert.match(postcheckSummary, /facts\.sunset_sessions = 8/);
+  assert.match(postcheckSummary, /facts\.friday_sessions = 12/);
+  assert.match(postcheckSummary, /facts\.saturday_sessions = 16/);
+  assert.match(postcheckSummary, /facts\.sunday_sessions = 16/);
+  assert.match(postcheckSummary, /42::bigint as expected_outside_total/);
+  assert.match(postcheckSummary, /'56bb25691790418d2e8fd0f232edf2fa'::text as expected_outside_fingerprint/);
+  for (const zero of ["capacity_wrong", "price_wrong", "duration_wrong", "status_wrong", "duplicate_groups", "legacy_spots_wrong"]) {
+    assert.match(postcheckSummary, new RegExp(`facts\\.${zero} = 0 then 'OK'`));
+  }
 });
 
 test("preflight mostra conflitos e postcheck confirma a agenda final", () => {
