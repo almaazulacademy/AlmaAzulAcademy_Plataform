@@ -10,7 +10,13 @@ function source(path: string) {
 
 const migration = source("supabase/migrations/202608090001_september_2026_schedule.sql");
 const preflight = source("supabase/diagnostics/september_2026_schedule_preflight.sql");
+const preflightSummary = source("supabase/diagnostics/september_2026_schedule_preflight_summary.sql");
 const postcheck = source("supabase/diagnostics/september_2026_schedule_postcheck.sql");
+
+// Remove comentários e literais para analisar só o SQL executável.
+function executableSql(sql: string) {
+  return sql.replace(/--[^\n]*/g, "").replace(/'(?:[^']|'')*'/g, "''");
+}
 
 // Padrão semanal aprovado, em horário local de Brasília. isodow: 5 sexta, 6 sábado, 7 domingo.
 const WEEKLY_SLOTS: Array<[number, string, string]> = [
@@ -202,6 +208,56 @@ test("preflight e postcheck são somente leitura e sem dados pessoais", () => {
     assert.doesNotMatch(diagnostic, /\b(drop|truncate|alter)\s+table\b/i);
     assert.doesNotMatch(diagnostic, /full_name|cpf|phone|email|checkout_url|provider_reference/i);
   }
+});
+
+test("o preflight resumido é um único SELECT, sem escrita e sem bloco anônimo", () => {
+  const executable = executableSql(preflightSummary);
+  // Um único comando: o SQL Editor do Supabase mostra apenas o último result set.
+  assert.equal((executable.match(/;/g) ?? []).length, 1);
+  assert.match(preflightSummary.trimEnd(), /;$/);
+  assert.doesNotMatch(executable, /\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|call|merge|copy|vacuum|analyze)\b/i);
+  assert.doesNotMatch(executable, /\bdo\s*\$/i);
+  assert.doesNotMatch(preflightSummary, /full_name|cpf|phone|email|checkout_url|provider_reference/i);
+  // A coluna legada só é consultada por metadados, então roda sem ela no schema.
+  assert.doesNotMatch(executable, /\bsession\.spots_available\b/i);
+  assert.match(preflightSummary, /information_schema\.columns[\s\S]*?column_name = 'spots_available'/);
+});
+
+test("o preflight resumido cobre todos os checks e usa o mesmo plano da migration", () => {
+  assert.deepEqual(slotsBlock(preflightSummary), WEEKLY_SLOTS);
+  const checks = [
+    "spots_available_exists",
+    "spots_available_data_type",
+    "spots_available_nullable",
+    "spots_available_default",
+    "spots_available_comment",
+    "sessions_triggers",
+    "unsupported_required_columns",
+    "planned_sessions",
+    "existing_planned_sessions",
+    "sessions_to_create",
+    "existing_september_sessions",
+    "duplicate_planned_sessions",
+    "imersao_paranoa_exists",
+    "remada_nascer_do_sol_exists",
+    "remada_sunset_exists",
+    "imersao_default_capacity",
+    "nascer_do_sol_default_capacity",
+    "sunset_default_capacity",
+    "sessions_outside_september_2026",
+    "sessions_outside_september_fingerprint",
+    "READY_TO_CREATE_SEPTEMBER_SCHEDULE",
+  ];
+  for (const [index, check] of checks.entries()) {
+    assert.match(preflightSummary, new RegExp(`select ${index + 1}(?: as ord)?,\\n\\s*'${check}'`));
+  }
+  assert.equal((preflightSummary.match(/union all/g) ?? []).length, checks.length - 1);
+  assert.match(preflightSummary, /'REVIEW_REQUIRED'/);
+  // O veredito final considera slugs, total planejado, duplicatas, colunas e capacidade.
+  assert.match(preflightSummary, /planned_sessions = %s, esperado 44/);
+  assert.match(preflightSummary, /colunas obrigatórias sem default não mapeadas: %s/);
+  assert.match(preflightSummary, /a migration só preenche tipos numéricos/);
+  assert.match(preflightSummary, /default_capacity inválida em imersao-paranoa/);
 });
 
 test("preflight mostra conflitos e postcheck confirma a agenda final", () => {
