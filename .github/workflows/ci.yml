@@ -1,0 +1,76 @@
+name: CI
+
+# Verificação de qualidade. Não aplica migrations, não fala com o Supabase,
+# não chama a InfinitePay e não faz deploy — só instala, verifica e compila.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Somente leitura do repositório: o workflow não escreve nada.
+permissions:
+  contents: read
+
+# Um push novo na mesma ref cancela a execução anterior ainda em andamento.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  verify:
+    name: Lint, tipos, testes e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node 24 é a mesma linha usada na validação local. O runner de testes
+      # depende de --experimental-strip-types para ler os .ts direto.
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # O Corepack instala exatamente a versão de pnpm fixada em
+      # package.json > packageManager, que é a que gerou o pnpm-lock.yaml.
+      - name: Habilitar Corepack
+        run: corepack enable
+
+      - name: Conferir versões
+        run: |
+          node --version
+          pnpm --version
+
+      - name: Localizar store do pnpm
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache do store do pnpm
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      # --frozen-lockfile falha se package.json e pnpm-lock.yaml divergirem.
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Checagem de tipos
+        run: pnpm exec tsc --noEmit
+
+      - name: Testes
+        run: pnpm test
+
+      # O build não precisa de credenciais: sem Supabase configurado a aplicação
+      # cai nos estados de "configuração ausente" e compila normalmente.
+      - name: Build
+        run: pnpm run build

@@ -35,6 +35,24 @@ O `.dng` não deve ser usado diretamente no site.
 3. Fotos com rosto de cliente claramente reconhecível não vão para o site. O
    critério e o histórico estão em [prelaunch-image-privacy-audit.md](prelaunch-image-privacy-audit.md).
 4. Formato de saída: WebP. Nome de arquivo em minúsculas, sem espaços e descritivo.
+5. **Originais (HEIC, DNG, JPG de câmera) não ficam em `public/`.** Tudo dentro de
+   `public/` é servido publicamente pela web e entra inteiro no deploy. O original
+   vive no Google Drive; o repositório guarda apenas o derivado WebP otimizado.
+   O histórico Git preserva os originais que já estiveram versionados — nada foi
+   apagado do Drive nem reescrito no histórico.
+
+## Originais fora de `public/` (Sprint 6.0)
+
+Até o Sprint 6.0, `public/images/experiences/imersao-paranoa/originals/` guardava
+13 arquivos brutos (12 HEIC/JPG e um DNG de 18 MB), somando 68 MB — todos servidos
+publicamente e sem nenhuma referência no código, nas migrations ou no conteúdo
+editorial. Foram removidos do diretório público.
+
+Para recuperar um original: buscar no Google Drive ou, se necessário, no histórico
+Git (`git log --all -- public/images/experiences/imersao-paranoa/originals`).
+
+Ao converter um novo original, o fluxo é: baixar do Drive para fora do repositório,
+converter para WebP, versionar **apenas** o WebP em `public/images/`.
 
 ## Campos de imagem por experiência
 

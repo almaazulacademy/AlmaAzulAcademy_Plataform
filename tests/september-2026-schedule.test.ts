@@ -118,12 +118,16 @@ test("a migration repete exatamente o padrão semanal aprovado", () => {
 });
 
 test("a migration é aditiva, idempotente e não altera nada existente", () => {
+  // As proibições valem para o SQL executável: um comentário que *descreve* a
+  // regra ("sem on conflict do update") não pode reprovar a migration que a cumpre.
+  const executable = executableSql(migration);
   assert.equal((migration.match(/insert into public\.sessions/g) ?? []).length, 1);
   assert.match(migration, /where not exists \([\s\S]*?session\.experience_id = plan\.experience_id[\s\S]*?session\.starts_at = plan\.starts_at[\s\S]*?\)/);
-  assert.doesNotMatch(migration, /\bdelete\s+from\b/i);
-  assert.doesNotMatch(migration, /\bupdate\s+public\./i);
-  assert.doesNotMatch(migration, /on conflict/i);
-  assert.doesNotMatch(migration, /\btruncate\b/i);
+  assert.doesNotMatch(executable, /\bdelete\s+from\b/i);
+  assert.doesNotMatch(executable, /\bupdate\s+public\./i);
+  assert.doesNotMatch(executable, /on\s+conflict\b/i);
+  assert.doesNotMatch(executable, /on\s+conflict\b[\s\S]*?\bdo\s+update\b/i);
+  assert.doesNotMatch(executable, /\btruncate\b/i);
   // Só public.sessions recebe escrita; nenhuma outra tabela é tocada.
   assert.deepEqual([...new Set((migration.match(/insert into public\.\w+/g) ?? []))], ["insert into public.sessions"]);
   assert.doesNotMatch(migration, /public\.(reservations|payment_events|admin_users|platform_settings|admin_audit_log)/);

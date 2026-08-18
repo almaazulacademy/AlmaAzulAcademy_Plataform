@@ -37,3 +37,13 @@ next-env.d.ts
 /supabase/backups/
 *.reservation-backup.*
 *.prelaunch-backup.*
+
+# mídia bruta em public/ (ver docs/media-library.md)
+# Originais vivem no Google Drive. Tudo dentro de public/ é servido publicamente
+# e entra no deploy, então formatos de câmera nunca devem voltar para cá.
+# Os derivados .webp e .png publicados continuam versionados normalmente.
+/public/images/**/originals/
+/public/images/**/*.heic
+/public/images/**/*.HEIC
+/public/images/**/*.dng
+/public/images/**/*.DNG

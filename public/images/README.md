@@ -18,5 +18,6 @@ Fonte: pasta oficial aprovada no Google Drive (`18mkunV4wjs7sgDhCRPi2H65WAv8c6Qc
 - WebPs usam nomes minúsculos, sem espaços ou acentos e com capitalização segura para Linux.
 - Nenhum rosto foi desfocado, retocado ou recortado artificialmente para ocultação.
 - Fotografias com rosto de cliente reconhecível foram substituídas ou removidas antes do lançamento.
-- Originais seguros podem permanecer em `originals/`; originais com rosto reconhecível ficam somente no Drive e no histórico Git, nunca expostos por `public/`.
+- Nenhum original (HEIC, DNG, JPG de câmera) fica em `public/`: tudo aqui é servido publicamente e entra no deploy. Os originais vivem no Google Drive e no histórico Git; `public/` guarda somente os derivados WebP otimizados.
 - O inventário e as decisões estão em `docs/prelaunch-image-privacy-audit.md`.
+- Auditoria de metadados (Sprint 6.0): nenhum dos 54 WebP/PNG publicados carrega chunk EXIF ou XMP — logo, nenhum carrega GPS.

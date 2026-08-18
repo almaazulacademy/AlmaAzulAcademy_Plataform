@@ -27,7 +27,7 @@ function FinalReservation({ reservation }: { reservation: ReservationDetails }) 
         <p className="mt-7 text-xs font-semibold uppercase tracking-[0.18em] text-lake">Reserva {reservation.publicCode}</p>
         <h2 className="mt-4 text-4xl font-medium tracking-[-0.05em]">{confirmed ? "Reserva confirmada." : reservation.status === "EXPIRED" ? "Pré-reserva expirada." : "Reserva cancelada."}</h2>
         <p className="mt-5 leading-7 text-ink/60">{confirmed ? `Tudo certo, ${reservation.fullName.split(" ")[0]}. Sua participação está garantida.` : "Esta reserva não bloqueia mais vagas. Você pode escolher uma nova sessão quando quiser."}</p>
-        {!confirmed && <Link href={`/${reservation.session.experienceSlug}#reservas`} className="mt-7 inline-flex font-semibold text-forest">Escolher uma nova data</Link>}
+        {!confirmed && <Link href="/agenda" className="mt-7 inline-flex font-semibold text-forest">Escolher uma nova data</Link>}
       </div>
       <ReservationSummary session={reservation.session} quantity={reservation.quantity} />
     </div>
