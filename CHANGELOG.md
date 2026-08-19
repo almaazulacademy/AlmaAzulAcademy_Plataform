@@ -1,5 +1,18 @@
 # Changelog
 
+## Sprint 6.1 — Planilha operacional das turmas
+
+- Sincroniza reservas confirmadas com uma Planilha Google nativa para montagem dos grupos de WhatsApp.
+- Concentra a sincronização em um ponto único, alcançado por webhook, retorno do pagamento, verificação e ações administrativas.
+- Cria fila durável `integration_sync_jobs` com idempotência por entidade, tentativas contadas e código de erro sanitizado.
+- Garante que uma falha do Google não desfaz pagamento, reserva, vaga nem resposta do webhook.
+- Expande uma reserva de N pessoas em N vagas, com o valor total gravado uma única vez.
+- Preserva histórico no cancelamento: a reserva permanece com status Cancelada e as vagas saem da lista por exclusão lógica.
+- Impõe o recorte de privacidade no banco: as RPCs de snapshot não devolvem CPF, e-mail, endereço nem payload de pagamento.
+- Acrescenta ações administrativas de sincronizar reserva e reconstruir a lista da sessão, além do script idempotente de preparação da planilha.
+- Não altera regras de disponibilidade, capacidade, pré-reserva, pagamento, InfinitePay, CPF, autenticação ou cancelamento.
+- Não adiciona nenhuma dependência: usa a Sheets API v4 por REST com JWT de conta de serviço assinado por `node:crypto`.
+
 ## Sprint 5.2 — Experiências dinâmicas
 
 - Adiciona contrato editorial JSONB versionado e validado no servidor.

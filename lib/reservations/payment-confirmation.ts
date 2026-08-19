@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { syncReservationAfterChange } from "@/lib/integrations/google-sheets/service";
 import { getPaymentProvider } from "@/lib/payments";
 import {
   logPayment,
@@ -104,8 +105,25 @@ function result(outcome: ConfirmationOutcome): ConfirmationResult {
  *
  * A confirmação nunca se apoia no payload recebido: o valor e o status "pago"
  * sempre vêm de uma consulta server-to-server ao payment_check da InfinitePay.
+ *
+ * Depois de confirmada, a reserva é espelhada na planilha operacional. A
+ * sincronização é deliberadamente o último passo e não pode alterar o resultado:
+ * quando o Google falha, a reserva segue CONFIRMED, o pagamento segue
+ * confirmado e o webhook segue respondendo 200 — só o job fica pendente.
  */
 export async function confirmPayment(notification: PaymentNotification): Promise<ConfirmationResult> {
+  const confirmation = await runConfirmation(notification);
+
+  if (confirmation.confirmed) {
+    // Também sincroniza em ALREADY_CONFIRMED: um webhook repetido vira, de
+    // graça, uma nova tentativa de sincronizar o que ficou pendente antes.
+    await syncReservationAfterChange(notification.orderId, "CONFIRMED");
+  }
+
+  return confirmation;
+}
+
+async function runConfirmation(notification: PaymentNotification): Promise<ConfirmationResult> {
   const requestId = notification.requestId ?? newRequestId();
   const stage: PaymentStage = notification.stage ?? "confirmation";
   const admin = getSupabaseAdminClient();

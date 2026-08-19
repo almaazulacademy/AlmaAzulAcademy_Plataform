@@ -16,6 +16,7 @@ import type {
 } from "@/lib/admin/types";
 import type { ReservationStatus } from "@/lib/reservations/types";
 import { applySessionFilters, sessionListFilterFor } from "@/lib/admin/session-filters";
+import { syncReservationAfterChange } from "@/lib/integrations/google-sheets/service";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { emptyExperienceEditorial, validateExperienceEditorial } from "@/lib/editorial/experience";
 
@@ -304,6 +305,9 @@ export async function getAdminReservation(actorUserId: string, reservationId: st
   };
 }
 
+// Confirmação e cancelamento administrativos passam pela mesma sincronização do
+// webhook. A planilha é atualizada depois que o Supabase decidiu — e uma falha
+// do Google não desfaz nem a confirmação nem o cancelamento.
 export async function confirmAdminReservation(actorUserId: string, reservationId: string, reason: string) {
   const result = await adminClient().rpc("admin_confirm_reservation", {
     p_actor_id: actorUserId,
@@ -311,7 +315,9 @@ export async function confirmAdminReservation(actorUserId: string, reservationId
     p_reason: reason,
   });
   if (result.error) throw new Error(result.error.message);
-  return asBoolean(result.data);
+  const confirmed = asBoolean(result.data);
+  if (confirmed) await syncReservationAfterChange(reservationId, "ADMIN");
+  return confirmed;
 }
 
 export async function cancelAdminReservation(actorUserId: string, reservationId: string, reason: string) {
@@ -321,7 +327,11 @@ export async function cancelAdminReservation(actorUserId: string, reservationId:
     p_reason: reason,
   });
   if (result.error) throw new Error(result.error.message);
-  return asBoolean(result.data);
+  const cancelled = asBoolean(result.data);
+  // Não apaga o histórico: a linha da reserva permanece, com status Cancelada,
+  // e as vagas dela saem da lista operacional da turma.
+  if (cancelled) await syncReservationAfterChange(reservationId, "CANCELLED");
+  return cancelled;
 }
 
 export async function getPlatformSettings(): Promise<PlatformSettings> {

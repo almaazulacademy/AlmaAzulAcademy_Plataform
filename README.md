@@ -155,6 +155,7 @@ O push não comprova sozinho que o deployment terminou. Verifique o dashboard, l
 - [docs/roadmap.md](docs/roadmap.md) — entregas concluídas e planejadas
 - [docs/admin.md](docs/admin.md) — autenticação, operação e ativação do painel
 - [docs/payments.md](docs/payments.md) — pré-reserva, InfinitePay e pendências
+- [docs/google-sheets-integration.md](docs/google-sheets-integration.md) — sincronização das reservas confirmadas com a planilha operacional
 
 ## Contribuição
 

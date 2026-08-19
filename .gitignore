@@ -47,3 +47,4 @@ next-env.d.ts
 /public/images/**/*.HEIC
 /public/images/**/*.dng
 /public/images/**/*.DNG
+.vercel

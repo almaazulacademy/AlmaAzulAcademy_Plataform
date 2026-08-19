@@ -5,6 +5,7 @@ import { AdminErrorState } from "@/components/admin/states";
 import { requireAdmin } from "@/lib/admin/auth";
 import { listAdminExperiences, listAdminSessionsFiltered } from "@/lib/admin/data";
 import { sessionFiltersFrom } from "@/lib/admin/session-filters";
+import { isSheetSyncEnabled } from "@/lib/integrations/google-sheets/service";
 
 export const metadata = { title: "Sessões" };
 
@@ -26,6 +27,7 @@ export default async function AdminSessionsPage({ searchParams }: { searchParams
         initiallyOpen={params.novo === "1"}
         filters={filters}
         filtersSlot={<SessionFilters filters={filters} experiences={experiences} />}
+        sheetSyncEnabled={isSheetSyncEnabled()}
       />
     );
   } catch {
