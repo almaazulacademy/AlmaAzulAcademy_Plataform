@@ -14,6 +14,21 @@
  *
  * Sincronizar a mesma reserva vinte vezes reescreve as mesmas linhas vinte
  * vezes e termina com exatamente um registro de cada.
+ *
+ * ## Por que não existe `append` aqui
+ *
+ * A primeira versão usava `values.append` com `insertDataOption=INSERT_ROWS`.
+ * Em produção isso inseriu as linhas *acima* do cabeçalho em duas das três
+ * abas: `Sessões` ficou com o dado na linha 1 e o cabeçalho na linha 2, e
+ * `Reservas do Site` acumulou cinco registros antes do cabeçalho. O `append`
+ * decide sozinho onde fica a "tabela" dentro do intervalo informado, e essa
+ * heurística não é algo em que valha a pena confiar para uma planilha
+ * operacional.
+ *
+ * Agora a posição de cada linha é calculada aqui, a partir da leitura que já
+ * fazemos da coluna-chave, e escrita com um intervalo explícito. A linha 1 é
+ * inalcançável por construção — `assertDataRow` recusa qualquer destino acima
+ * da primeira linha de dados.
  */
 
 import {
@@ -41,14 +56,13 @@ import {
 /**
  * Superfície mínima da API do Google Sheets usada pela sincronização.
  *
- * Três operações mapeiam um-para-um em `values.batchGet`, `values.batchUpdate`
- * e `values.append`. É o suficiente para tudo, e é pequeno o bastante para ser
- * substituído por um dublê nos testes.
+ * Duas operações, que mapeiam um-para-um em `values.batchGet` e
+ * `values.batchUpdate`. Nenhuma delas move linhas: toda escrita vai para um
+ * intervalo que este módulo calculou.
  */
 export type SheetsGateway = {
   batchGet(ranges: string[]): Promise<string[][][]>;
   batchUpdate(updates: Array<{ range: string; values: SheetValue[][] }>): Promise<void>;
-  append(range: string, values: SheetValue[][]): Promise<void>;
 };
 
 export type SyncReport = {
@@ -61,23 +75,39 @@ export type SyncReport = {
 
 type KeyedRow = { key: string; values: SheetValue[] };
 
-type PendingWrite = {
+type SheetPlan = {
   updates: Array<{ range: string; values: SheetValue[][] }>;
-  appends: Map<string, SheetValue[][]>;
+  appended: number;
 };
 
-function emptyWrite(): PendingWrite {
-  return { updates: [], appends: new Map() };
+/**
+ * Onde cada chave já mora e qual é a próxima linha livre da aba.
+ * `nextRow` nunca é menor que `FIRST_DATA_ROW`, mesmo com a aba vazia.
+ */
+type TabCursor = {
+  index: Map<string, number[]>;
+  nextRow: number;
+};
+
+/**
+ * Invariante central desta correção: nada é escrito na linha do cabeçalho.
+ * Se algum cálculo de posição regredir, a sincronização falha aqui em vez de
+ * corromper a planilha em silêncio.
+ */
+function assertDataRow(rowNumber: number, tab: string) {
+  if (!Number.isInteger(rowNumber) || rowNumber < FIRST_DATA_ROW) {
+    throw new Error(`HEADER_ROW_WRITE_BLOCKED:${tab}:${rowNumber}`);
+  }
+  return rowNumber;
 }
 
-function queueAppend(write: PendingWrite, tab: string, values: SheetValue[]) {
-  const existing = write.appends.get(tab);
-  if (existing) existing.push(values);
-  else write.appends.set(tab, [values]);
-}
-
-/** Índice `chave → números de linha`, na ordem em que aparecem na planilha. */
-function indexByKey(column: string[][]) {
+/**
+ * Índice `chave → números de linha` a partir da coluna-chave lida da planilha.
+ *
+ * O `batchGet` corta as linhas vazias do fim, então o comprimento devolvido é
+ * exatamente a extensão usada da aba — e a primeira linha livre vem dele.
+ */
+function readCursor(column: string[][]): TabCursor {
   const index = new Map<string, number[]>();
   column.forEach((row, offset) => {
     const key = (row[0] ?? "").trim();
@@ -87,52 +117,58 @@ function indexByKey(column: string[][]) {
     if (positions) positions.push(rowNumber);
     else index.set(key, [rowNumber]);
   });
-  return index;
+  return { index, nextRow: FIRST_DATA_ROW + column.length };
 }
 
 /**
- * Escreve as linhas na posição que já ocupam, ou enfileira uma nova.
+ * Escreve as linhas na posição que já ocupam, ou na primeira linha livre.
  *
- * Se a mesma chave aparecer mais de uma vez — o que só acontece se duas
- * sincronizações da mesma entidade se cruzarem no exato instante do append —
- * a primeira linha recebe o dado e as demais são neutralizadas. A planilha se
- * conserta sozinha na sincronização seguinte, sem intervenção manual.
+ * Se a mesma chave aparecer mais de uma vez — linha colada à mão, ou duas
+ * sincronizações que se cruzaram — a primeira recebe o dado e as demais são
+ * neutralizadas. A planilha se conserta sozinha na sincronização seguinte,
+ * sem intervenção manual e sem apagar nada.
  */
 function planUpsert(
-  write: PendingWrite,
+  plan: SheetPlan,
   tab: string,
   width: number,
   rows: KeyedRow[],
-  index: Map<string, number[]>,
+  cursor: TabCursor,
   deactivateColumn?: number,
 ) {
   let deactivated = 0;
 
   for (const row of rows) {
-    const positions = index.get(row.key) ?? [];
+    const positions = cursor.index.get(row.key) ?? [];
+
     if (positions.length === 0) {
-      queueAppend(write, tab, row.values);
+      const target = assertDataRow(cursor.nextRow, tab);
+      plan.updates.push({ range: rowRange(tab, target, width), values: [row.values] });
+      // Registra a posição recém-ocupada: se a mesma chave voltar neste mesmo
+      // lote, ela atualiza a linha em vez de consumir outra.
+      cursor.index.set(row.key, [target]);
+      cursor.nextRow = target + 1;
+      plan.appended += 1;
       continue;
     }
 
-    write.updates.push({ range: rowRange(tab, positions[0], width), values: [row.values] });
+    plan.updates.push({
+      range: rowRange(tab, assertDataRow(positions[0], tab), width),
+      values: [row.values],
+    });
 
     for (const duplicate of positions.slice(1)) {
       const neutralized = [...row.values];
       if (deactivateColumn) neutralized[deactivateColumn - 1] = ACTIVE_NO;
-      write.updates.push({ range: rowRange(tab, duplicate, width), values: [neutralized] });
+      plan.updates.push({
+        range: rowRange(tab, assertDataRow(duplicate, tab), width),
+        values: [neutralized],
+      });
       deactivated += 1;
     }
   }
 
   return deactivated;
-}
-
-async function flush(gateway: SheetsGateway, write: PendingWrite) {
-  if (write.updates.length) await gateway.batchUpdate(write.updates);
-  for (const [tab, values] of write.appends) {
-    if (values.length) await gateway.append(a1(tab, "A1"), values);
-  }
 }
 
 /**
@@ -157,49 +193,48 @@ export async function syncSnapshot(
     a1(SPOTS_TAB, `A${FIRST_DATA_ROW}:C`),
   ]);
 
-  const write = emptyWrite();
+  const plan: SheetPlan = { updates: [], appended: 0 };
 
   planUpsert(
-    write,
+    plan,
     SESSIONS_TAB,
     SESSION_HEADERS.length,
     [{ key: session.id, values: sessionRow(session, syncedAt) }],
-    indexByKey(sessionKeys),
+    readCursor(sessionKeys),
   );
 
   planUpsert(
-    write,
+    plan,
     RESERVATIONS_TAB,
     RESERVATION_HEADERS.length,
     reservations.map((reservation) => ({
       key: reservation.id,
       values: reservationRow(reservation, session, syncedAt),
     })),
-    indexByKey(reservationKeys),
+    readCursor(reservationKeys),
   );
 
   const spots = reservations.flatMap((reservation) => spotRows(reservation, session, syncedAt));
-  const spotIndex = indexByKey(spotRowsRead);
   let spotsDeactivated = planUpsert(
-    write,
+    plan,
     SPOTS_TAB,
     SPOT_HEADERS.length,
     spots,
-    spotIndex,
+    readCursor(spotRowsRead),
     SPOT_COLUMN.active,
   );
 
   if (options.reconcileSession) {
-    spotsDeactivated += planDeactivateOrphans(write, spotRowsRead, session.id, new Set(spots.map((spot) => spot.key)));
+    spotsDeactivated += planDeactivateOrphans(plan, spotRowsRead, session.id, new Set(spots.map((spot) => spot.key)));
   }
 
-  await flush(gateway, write);
+  if (plan.updates.length) await gateway.batchUpdate(plan.updates);
 
   return {
     sessionId: session.id,
     reservations: reservations.length,
-    rowsUpdated: write.updates.length,
-    rowsAppended: [...write.appends.values()].reduce((total, rows) => total + rows.length, 0),
+    rowsUpdated: plan.updates.length - plan.appended,
+    rowsAppended: plan.appended,
     spotsDeactivated,
   };
 }
@@ -210,7 +245,7 @@ export async function syncSnapshot(
  * resquício de importação. Só toca na coluna "Ativo": nada é apagado.
  */
 function planDeactivateOrphans(
-  write: PendingWrite,
+  plan: SheetPlan,
   spotRowsRead: string[][],
   sessionId: string,
   knownKeys: Set<string>,
@@ -223,8 +258,8 @@ function planDeactivateOrphans(
     const rowSessionId = (row[2] ?? "").trim();
     if (!key || rowSessionId !== sessionId || knownKeys.has(key)) return;
 
-    const rowNumber = offset + FIRST_DATA_ROW;
-    write.updates.push({ range: a1(SPOTS_TAB, `${column}${rowNumber}`), values: [[ACTIVE_NO]] });
+    const rowNumber = assertDataRow(offset + FIRST_DATA_ROW, SPOTS_TAB);
+    plan.updates.push({ range: a1(SPOTS_TAB, `${column}${rowNumber}`), values: [[ACTIVE_NO]] });
     deactivated += 1;
   });
 

@@ -3,8 +3,12 @@
  *
  * Escritas de dados usam `valueInputOption=RAW`: um nome que comece com "=" ou
  * um telefone entre parênteses é gravado como texto, e não interpretado como
- * fórmula. `USER_ENTERED` fica reservado ao setup, que precisa que as fórmulas
- * da `Lista da Sessão` sejam de fato fórmulas.
+ * fórmula. `USER_ENTERED` fica reservado ao setup e ao reparo, que precisam que
+ * as fórmulas da `Lista da Sessão` sejam de fato fórmulas.
+ *
+ * Não existe `append` aqui de propósito. `values.append` escolhe sozinho onde
+ * fica a "tabela" e, em produção, chegou a inserir linhas acima do cabeçalho.
+ * Toda escrita passa por um intervalo calculado por quem chama.
  *
  * Nada aqui roda no navegador. O token da conta de serviço só existe no
  * servidor e nunca é anexado a um log.
@@ -26,6 +30,8 @@ export type SheetsClient = SheetsGateway & {
   getSpreadsheet<T>(fields: string): Promise<T>;
   updateSpreadsheet(requests: unknown[]): Promise<void>;
   writeValues(range: string, values: SheetValue[][], input: ValueInputOption): Promise<void>;
+  /** Limpa valores de um intervalo. Usado só pelo reparo, nunca pela sincronização. */
+  clearValues(range: string): Promise<void>;
 };
 
 function asRows(value: unknown): string[][] {
@@ -74,9 +80,14 @@ export function createSheetsClient(config: GoogleSheetsConfig): SheetsClient {
     });
   }
 
+  async function clearValues(range: string) {
+    await call(`/values/${encodeURIComponent(range)}:clear`, { method: "POST", body: {} });
+  }
+
   return {
     call,
     writeValues,
+    clearValues,
 
     getSpreadsheet<T>(fields: string) {
       return call<T>(`?fields=${encodeURIComponent(fields)}`);
@@ -105,14 +116,6 @@ export function createSheetsClient(config: GoogleSheetsConfig): SheetsClient {
           data: updates.map((update) => ({ range: update.range, majorDimension: "ROWS", values: update.values })),
         },
       });
-    },
-
-    async append(range: string, values: SheetValue[][]) {
-      if (!values.length) return;
-      await call(
-        `/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-        { method: "POST", body: { range, majorDimension: "ROWS", values } },
-      );
     },
   };
 }

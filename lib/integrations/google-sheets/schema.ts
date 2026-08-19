@@ -150,6 +150,16 @@ export const LIST_SELECTOR_CELL = "B2";
 /** Célula técnica escondida que resolve o rótulo escolhido para o session_id. */
 export const LIST_SESSION_ID_CELL = "J1";
 
+/**
+ * Intervalo que alimenta o dropdown de sessão, no formato que a validação de
+ * dados espera. Começa na linha 2 porque a linha 1 é o cabeçalho: incluir a
+ * linha 1 colocaria a palavra "Rótulo" entre as opções.
+ */
+export function sessionLabelRange() {
+  const letter = columnLetter(SESSION_COLUMN.label);
+  return `='${SESSIONS_TAB}'!$${letter}$2:$${letter}$1000`;
+}
+
 /** Converte uma posição 1-based em letra de coluna: 1 → A, 27 → AA. */
 export function columnLetter(position: number) {
   let remaining = Math.max(1, Math.trunc(position));
