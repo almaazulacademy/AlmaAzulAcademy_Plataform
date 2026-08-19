@@ -9,6 +9,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { getAdminReservation } from "@/lib/admin/data";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency, formatMaskedCpf } from "@/lib/admin/format";
 import { isUuid } from "@/lib/admin/validation";
+import { getSheetSyncState, isSheetSyncEnabled } from "@/lib/integrations/google-sheets/service";
 import { formatSessionDateTime } from "@/lib/sessions/date-time";
 
 export const metadata = { title: "Detalhe da reserva" };
@@ -19,6 +20,13 @@ export default async function AdminReservationDetailPage({ params }: { params: P
   if (!isUuid(reservationId)) notFound();
   const reservation = await getAdminReservation(context.profile.userId, reservationId);
   if (!reservation) notFound();
+
+  // Estado da integração com a planilha. Puramente informativo: se a integração
+  // estiver desligada ou o estado indisponível, o detalhe da reserva continua
+  // funcionando normalmente.
+  const sheetEnabled = isSheetSyncEnabled();
+  const sheetSync = sheetEnabled ? await getSheetSyncState("RESERVATION", reservation.id) : null;
+  const sheetStatus = sheetSync?.status ?? "NEVER_SYNCED";
 
   const fields = [
     ["Nome", reservation.fullName],
@@ -55,8 +63,25 @@ export default async function AdminReservationDetailPage({ params }: { params: P
       </dl>
       <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Pagamento</h2><dl className="mt-4 grid gap-4 sm:grid-cols-2"><div><dt className="text-xs text-ink/45">Provedor</dt><dd className="mt-1 text-sm font-medium">{reservation.paymentProvider ?? "Não associado"}</dd></div><div><dt className="text-xs text-ink/45">Referência</dt><dd className="mt-1 break-all text-sm font-medium">{reservation.providerReference ?? "Sem referência"}</dd></div></dl></section>
       <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Timeline</h2><ol className="mt-5 space-y-0">{timeline.map((event, index) => <li key={event.label} className="relative flex gap-4 pb-6 last:pb-0"><span className={`relative z-10 mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-xs ${event.done ? "bg-lake text-white" : "bg-mist text-ink/35"}`}>{event.done ? "✓" : index + 1}</span>{index < timeline.length - 1 ? <span className="absolute left-[11px] top-6 h-full w-px bg-ink/10" /> : null}<div><p className="text-sm font-semibold">{event.label}</p><p className="mt-1 text-xs text-ink/45">{event.done && event.at ? formatAdminDateTime(event.at) : "Pendente"}</p></div></li>)}</ol></section>
+      {sheetEnabled ? (
+        <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">Planilha</h2>
+            <StatusBadge status={sheetStatus} />
+          </div>
+          <p className="mt-3 text-sm leading-6 text-ink/60">
+            {sheetStatus === "SYNCED"
+              ? `Esta reserva está espelhada na planilha operacional desde ${formatAdminDateTime(sheetSync?.syncedAt ?? null)}.`
+              : sheetStatus === "FAILED"
+                ? `A última tentativa falhou (${sheetSync?.lastErrorCode ?? "erro desconhecido"}), após ${sheetSync?.attempts ?? 0} tentativa(s). A reserva e o pagamento não foram afetados.`
+                : sheetStatus === "PENDING"
+                  ? "A sincronização está pendente e será tentada de novo automaticamente."
+                  : "Esta reserva ainda não foi enviada para a planilha."}
+          </p>
+        </section>
+      ) : null}
       <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Observações</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/60">{reservation.notes ?? "Nenhuma observação informada."}</p></section>
-      <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Ações</h2><p className="mt-2 text-sm text-ink/50">A mensagem é apenas preparada; revise antes do envio.</p><div className="mt-5"><ReservationActions reservationId={reservation.id} status={reservation.status} fullName={reservation.fullName} phone={reservation.phone} email={reservation.email} publicCode={reservation.publicCode} checkoutUrl={reservation.checkoutUrl} showMessageButton /></div></section>
+      <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Ações</h2><p className="mt-2 text-sm text-ink/50">A mensagem é apenas preparada; revise antes do envio.</p><div className="mt-5"><ReservationActions reservationId={reservation.id} status={reservation.status} fullName={reservation.fullName} phone={reservation.phone} email={reservation.email} publicCode={reservation.publicCode} checkoutUrl={reservation.checkoutUrl} showMessageButton showSheetSync={sheetEnabled} /></div></section>
     </div>
   );
 }

@@ -14,6 +14,9 @@ const styles: Record<string, string> = {
   ARCHIVED: "bg-red-50 text-red-800 ring-red-600/15",
   EXPIRED: "bg-red-50 text-red-800 ring-red-600/15",
   PAID_AFTER_EXPIRATION: "bg-purple-50 text-purple-800 ring-purple-600/15",
+  SYNCED: "bg-emerald-50 text-emerald-800 ring-emerald-600/15",
+  FAILED: "bg-red-50 text-red-800 ring-red-600/15",
+  NEVER_SYNCED: "bg-slate-100 text-slate-700 ring-slate-500/15",
 };
 
 const labels: Record<string, string> = {
@@ -30,6 +33,9 @@ const labels: Record<string, string> = {
   PAID: "Pago",
   NOT_PAID: "Não pago",
   PAID_AFTER_EXPIRATION: "Pago após expirar",
+  SYNCED: "Sincronizado",
+  FAILED: "Erro",
+  NEVER_SYNCED: "Não sincronizado",
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {

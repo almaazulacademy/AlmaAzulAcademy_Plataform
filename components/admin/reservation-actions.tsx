@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CheckCircle2, Copy, ExternalLink, Mail, MessageCircle, RotateCcw, SearchCheck, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, Mail, MessageCircle, RotateCcw, SearchCheck, Sheet, XCircle } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
 import { useToast } from "@/components/admin/toast-provider";
@@ -13,8 +13,9 @@ import type { ReservationStatus } from "@/lib/reservations/types";
 type Action = "confirm" | "cancel" | null;
 type ApiPayload = { message?: string };
 type VerifyPayload = { success?: boolean; outcome?: string; message?: string };
+type SyncPayload = { success?: boolean; outcome?: string; errorCode?: string; message?: string };
 
-export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false }: {
+export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false, showSheetSync = false }: {
   reservationId: string;
   status: ReservationStatus;
   fullName: string;
@@ -23,11 +24,13 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   publicCode: string;
   checkoutUrl?: string | null;
   showMessageButton?: boolean;
+  showSheetSync?: boolean;
 }) {
   const router = useRouter();
   const { notify } = useToast();
   const [action, setAction] = useState<Action>(null);
   const [verifying, setVerifying] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const verifyPayment = async () => {
     setVerifying(true);
@@ -49,6 +52,26 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
       notify({ title: "Falha na verificação", description: "Não foi possível falar com a InfinitePay.", variant: "error" });
     } finally {
       setVerifying(false);
+    }
+  };
+
+  // Reenvia a reserva para a planilha operacional. Idempotente: repetir não
+  // duplica ninguém na lista da turma.
+  const syncSheet = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch(`/api/admin/reservations/${reservationId}/sync-sheet`, { method: "POST" });
+      const payload = await response.json().catch(() => ({})) as SyncPayload;
+      notify({
+        title: payload.success ? "Planilha sincronizada" : "Sincronização pendente",
+        description: payload.message ?? "Não foi possível falar com o Google Sheets agora.",
+        variant: payload.success ? undefined : "error",
+      });
+      router.refresh();
+    } catch {
+      notify({ title: "Falha na sincronização", description: "Não foi possível falar com o Google Sheets.", variant: "error" });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -98,6 +121,11 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
         ) : null}
         {status !== "CANCELLED" ? (
           <Button type="button" size="sm" variant="ghost" className="text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => setAction("cancel")}><XCircle className="size-4" /> Cancelar</Button>
+        ) : null}
+        {showSheetSync ? (
+          <Button type="button" size="sm" variant="ghost" disabled={syncing} onClick={syncSheet}>
+            <Sheet className="size-4" /> {syncing ? "Sincronizando…" : "Sincronizar planilha"}
+          </Button>
         ) : null}
         <Button type="button" size="sm" variant="ghost" onClick={() => copy(phone, "WhatsApp")}><MessageCircle className="size-4" /> Copiar WhatsApp</Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => copy(email, "Email")}><Mail className="size-4" /> Copiar email</Button>

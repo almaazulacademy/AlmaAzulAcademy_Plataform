@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Archive, ArchiveRestore, CalendarPlus, Copy, Lock, Pencil, Plus, Trash2, Unlock, X } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarPlus, Copy, Lock, Pencil, Plus, Sheet, Trash2, Unlock, X } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
 import { fieldErrorClass, inputClass, labelClass, textareaClass } from "@/components/admin/form-styles";
@@ -28,6 +28,7 @@ type FormState = {
 };
 
 type ApiPayload = { message?: string; errors?: Record<string, string> };
+type SyncPayload = { success?: boolean; message?: string };
 
 const emptyForm = (experienceId = ""): FormState => ({
   experienceId,
@@ -54,12 +55,13 @@ function fromSession(session: AdminSession): FormState {
   };
 }
 
-export function SessionsManager({ sessions, experiences, initiallyOpen, filters, filtersSlot }: {
+export function SessionsManager({ sessions, experiences, initiallyOpen, filters, filtersSlot, sheetSyncEnabled = false }: {
   sessions: AdminSession[];
   experiences: AdminExperience[];
   initiallyOpen: boolean;
   filters: AdminSessionFilters;
   filtersSlot: ReactNode;
+  sheetSyncEnabled?: boolean;
 }) {
   const router = useRouter();
   const search = sessionSearchParams(filters);
@@ -75,6 +77,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filters,
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState<AdminSession | null>(null);
   const [restoring, setRestoring] = useState<AdminSession | null>(null);
+  const [syncingSessionId, setSyncingSessionId] = useState<string | null>(null);
 
   const openNew = () => {
     setEditingId(null);
@@ -173,6 +176,25 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filters,
     router.refresh();
   };
 
+  // Reconstrói a lista daquela turma na planilha a partir do Supabase. É o
+  // fallback operacional: seguro repetir, e nunca altera reserva ou capacidade.
+  const syncSessionSheet = async (session: AdminSession) => {
+    setSyncingSessionId(session.id);
+    try {
+      const response = await fetch(`/api/admin/sessions/${session.id}/sync-sheet`, { method: "POST" });
+      const payload = await response.json().catch(() => ({})) as SyncPayload;
+      notify({
+        title: payload.success ? "Lista sincronizada" : "Sincronização pendente",
+        description: payload.message ?? "Não foi possível falar com o Google Sheets agora.",
+        variant: payload.success ? undefined : "error",
+      });
+    } catch {
+      notify({ title: "Falha na sincronização", description: "Não foi possível falar com o Google Sheets.", variant: "error" });
+    } finally {
+      setSyncingSessionId(null);
+    }
+  };
+
   const confirmRestore = async () => {
     if (!restoring) return;
     const response = await fetch(`/api/admin/sessions/${restoring.id}/restore`, { method: "POST" });
@@ -264,6 +286,11 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filters,
                     {session.status === "OPEN" ? <Button type="button" size="sm" variant="ghost" onClick={() => changeStatus(session, "CLOSED")}><Lock className="size-4" /> Fechar</Button> : <Button type="button" size="sm" variant="ghost" onClick={() => changeStatus(session, "OPEN")}><Unlock className="size-4" /> Abrir</Button>}
                   </>
                 )}
+                {sheetSyncEnabled ? (
+                  <Button type="button" size="sm" variant="ghost" disabled={syncingSessionId === session.id} onClick={() => syncSessionSheet(session)}>
+                    <Sheet className="size-4" /> {syncingSessionId === session.id ? "Sincronizando…" : "Sincronizar lista"}
+                  </Button>
+                ) : null}
                 {session.status === "ARCHIVED" ? (
                   <Button type="button" size="sm" variant="ghost" className="text-forest hover:bg-forest/10" onClick={() => setRestoring(session)}><ArchiveRestore className="size-4" /> Restaurar</Button>
                 ) : session.reservationsCount > 0 ? (
