@@ -21,8 +21,8 @@ import { createSheetsClient } from "../../lib/integrations/google-sheets/client.
 import { readGoogleSheetsConfig } from "../../lib/integrations/google-sheets/config.ts";
 import { GoogleSheetsError } from "../../lib/integrations/google-sheets/errors.ts";
 import {
-  sessionIdFormula,
-  sessionListFormula,
+  argumentSeparatorFor,
+  listFormulaCells,
   sessionLookupFormula,
   sessionRevenueFormula,
 } from "../../lib/integrations/google-sheets/formulas.ts";
@@ -36,7 +36,7 @@ import {
   LIST_MAX_SPOTS,
   LIST_TAB,
   RESERVATIONS_TAB,
-  SESSION_COLUMN,
+  sessionLabelRange,
   SESSIONS_TAB,
   SPOTS_TAB,
   SPREADSHEET_LOCALE,
@@ -85,22 +85,28 @@ function log(quiet: boolean, message: string) {
   if (!quiet) console.info(message);
 }
 
-/** Cabeçalho estático da `Lista da Sessão`, incluindo as fórmulas derivadas. */
-function listScaffold() {
+/**
+ * Cabeçalho estático da `Lista da Sessão`.
+ *
+ * O separador vem do idioma real da planilha: com vírgula em uma planilha
+ * `pt_BR` a fórmula é aceita pela API mas nunca avalia, e a célula exibe
+ * `#ERROR!`.
+ */
+function listScaffold(separator: string) {
   return [
     ["LISTA DA SESSÃO — ALMA AZUL ACADEMY", "", "", "", "", "", "", ""],
     ["Sessão", "", "", "", "", "", "", ""],
     [
-      "Experiência", sessionLookupFormula(2),
-      "Data", sessionLookupFormula(3),
-      "Horário", sessionLookupFormula(4),
-      "Status", sessionLookupFormula(8),
+      "Experiência", sessionLookupFormula(2, separator),
+      "Data", sessionLookupFormula(3, separator),
+      "Horário", sessionLookupFormula(4, separator),
+      "Status", sessionLookupFormula(8, separator),
     ],
     [
-      "Capacidade", sessionLookupFormula(5),
-      "Confirmados", sessionLookupFormula(6),
-      "Vagas restantes", sessionLookupFormula(7),
-      "Total arrecadado", sessionRevenueFormula(),
+      "Capacidade", sessionLookupFormula(5, separator),
+      "Confirmados", sessionLookupFormula(6, separator),
+      "Vagas restantes", sessionLookupFormula(7, separator),
+      "Total arrecadado", sessionRevenueFormula(separator),
     ],
     [...LIST_HEADERS],
   ];
@@ -132,10 +138,30 @@ async function main() {
   const wanted = [RESERVATIONS_TAB, SESSIONS_TAB, SPOTS_TAB, LIST_TAB];
   const missing = wanted.filter((tab) => !existing.has(tab));
 
+  // O setup escreve cabeçalho na linha 1. Se uma aba já existente tiver dado
+  // ali — o sintoma do bug de append que deslocava cabeçalhos — escrever
+  // apagaria esse registro. Aborta e manda usar o reparo, que preserva tudo.
+  const deslocadas: string[] = [];
+  for (const [tab, headers] of Object.entries(TAB_HEADERS)) {
+    if (!existing.has(tab)) continue;
+    const [rows] = await client.batchGet([a1(tab, `A1:${columnLetter(headers.length)}1`)]);
+    const first = rows[0] ?? [];
+    if (first.length && first[0] !== headers[0]) deslocadas.push(tab);
+  }
+  if (deslocadas.length) {
+    console.error(
+      `Cabeçalho fora da linha 1 em: ${deslocadas.join(", ")}.\n`
+      + "Rode `pnpm sheets:repair` antes do setup — ele recoloca os cabeçalhos preservando os dados.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   log(options.quiet, `Planilha: ${before.properties?.title ?? "(sem título)"}`);
   log(options.quiet, `Abas existentes: ${[...existing.keys()].join(", ") || "(nenhuma)"}`);
   log(options.quiet, `Abas a criar: ${missing.join(", ") || "(nenhuma)"}`);
   log(options.quiet, `Idioma/fuso: ${SPREADSHEET_LOCALE} · ${SPREADSHEET_TIME_ZONE}`);
+  log(options.quiet, `Separador de fórmulas: "${argumentSeparatorFor(SPREADSHEET_LOCALE)}" (idioma da planilha)`);
   log(options.quiet, `Colunas técnicas escondidas e aba "${SPOTS_TAB}" oculta.`);
   log(options.quiet, `Dropdown de sessão em ${LIST_TAB}!B2, lista de ${LIST_MAX_SPOTS} vagas.`);
 
@@ -244,14 +270,13 @@ async function main() {
   // própria sincronização mantém atualizada — nenhuma lista fixa para manter.
   const listSheetId = sheetIds.get(LIST_TAB);
   if (listSheetId !== undefined) {
-    const labelColumn = columnLetter(SESSION_COLUMN.label);
     requests.push({
       setDataValidation: {
         range: { sheetId: listSheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 1, endColumnIndex: 2 },
         rule: {
           condition: {
             type: "ONE_OF_RANGE",
-            values: [{ userEnteredValue: `='${SESSIONS_TAB}'!$${labelColumn}$2:$${labelColumn}$1000` }],
+            values: [{ userEnteredValue: sessionLabelRange() }],
           },
           showCustomUi: true,
           strict: false,
@@ -275,19 +300,23 @@ async function main() {
 
   // 4. Estrutura da `Lista da Sessão`. Reescrita inteira porque é derivada:
   //    não existe dado digitado ali para preservar.
-  const scaffold = listScaffold();
+  const separator = argumentSeparatorFor(SPREADSHEET_LOCALE);
   await client.writeValues(
     a1(LIST_TAB, `A1:${columnLetter(LIST_HEADERS.length)}${LIST_FIRST_DATA_ROW - 1}`),
-    scaffold,
+    listScaffold(separator),
     "USER_ENTERED",
   );
-  await client.writeValues(a1(LIST_TAB, "J1"), [[sessionIdFormula()]], "USER_ENTERED");
   await client.writeValues(
     a1(LIST_TAB, `A${LIST_FIRST_DATA_ROW}:A${LIST_FIRST_DATA_ROW + LIST_MAX_SPOTS - 1}`),
     Array.from({ length: LIST_MAX_SPOTS }, (_, index) => [index + 1]),
     "RAW",
   );
-  await client.writeValues(a1(LIST_TAB, `B${LIST_FIRST_DATA_ROW}`), [[sessionListFormula()]], "USER_ENTERED");
+  // As células fora do bloco do cabeçalho (o session_id técnico e o corpo da
+  // lista) vêm da mesma lista central que a verificação usa depois.
+  for (const { cell, formula } of listFormulaCells(separator)) {
+    if (!cell.startsWith("J") && cell !== `B${LIST_FIRST_DATA_ROW}`) continue;
+    await client.writeValues(a1(LIST_TAB, cell), [[formula]], "USER_ENTERED");
+  }
 
   log(options.quiet, "\nPlanilha preparada. Nenhuma linha de dados foi apagada.");
 }

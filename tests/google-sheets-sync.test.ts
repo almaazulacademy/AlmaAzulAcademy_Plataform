@@ -20,12 +20,20 @@ import {
   ACTIVE_YES,
   RESERVATION_HEADERS,
   RESERVATIONS_TAB,
+  SESSION_COLUMN,
   SESSION_HEADERS,
+  sessionLabelRange,
   SESSIONS_TAB,
   SPOT_HEADERS,
   SPOTS_TAB,
 } from "../lib/integrations/google-sheets/schema.ts";
-import { sessionListFormula, sessionRevenueFormula } from "../lib/integrations/google-sheets/formulas.ts";
+import {
+  argumentSeparatorFor,
+  DEFAULT_ARGUMENT_SEPARATOR,
+  listFormulaCells,
+  sessionListFormula,
+  sessionRevenueFormula,
+} from "../lib/integrations/google-sheets/formulas.ts";
 import { findForbiddenPublicKeys, readGoogleSheetsConfig } from "../lib/integrations/google-sheets/config.ts";
 import { sanitizeErrorCode } from "../lib/integrations/google-sheets/errors.ts";
 import { syncSnapshot, type SheetsGateway } from "../lib/integrations/google-sheets/sync.ts";
@@ -57,13 +65,25 @@ function parseRange(range: string) {
 
 type FakeSheets = SheetsGateway & {
   grid(tab: string): SheetValue[][];
+  headerRow(tab: string): SheetValue[];
   dataRows(tab: string): SheetValue[][];
   failNextCalls(count: number): void;
 };
 
+const SEEDED_TABS: Array<readonly [string, readonly string[]]> = [
+  [RESERVATIONS_TAB, RESERVATION_HEADERS],
+  [SESSIONS_TAB, SESSION_HEADERS],
+  [SPOTS_TAB, SPOT_HEADERS],
+];
+
 function createFakeSheets(): FakeSheets {
   const tabs = new Map<string, SheetValue[][]>();
   let failures = 0;
+
+  // A planilha falsa nasce como o setup deixa a real: cabeçalho na linha 1 e
+  // nenhuma linha de dado. Sem isso os testes não conseguiriam ver o cabeçalho
+  // sendo empurrado para baixo — que foi exatamente o bug de produção.
+  for (const [tab, headers] of SEEDED_TABS) tabs.set(tab, [[...headers]]);
 
   const grid = (tab: string) => {
     const existing = tabs.get(tab);
@@ -90,6 +110,7 @@ function createFakeSheets(): FakeSheets {
 
   return {
     grid,
+    headerRow: (tab: string) => grid(tab)[0] ?? [],
     dataRows: (tab: string) => grid(tab).slice(1).filter((row) => (row ?? []).some((cell) => cell !== "")),
     failNextCalls: (count: number) => { failures = count; },
 
@@ -120,21 +141,6 @@ function createFakeSheets(): FakeSheets {
             rows[target][startColumn + columnOffset] = value;
           });
         });
-      }
-    },
-
-    async append(range, values) {
-      guard();
-      const { tab } = parseRange(range);
-      const rows = grid(tab);
-      let cursor = lastUsedRow(tab) + 1;
-      // Espelha o comportamento real: a planilha nasce com a linha 1 de
-      // cabeçalho, então o primeiro append cai na linha 2.
-      if (cursor === 0) cursor = 1;
-      for (const value of values) {
-        while (rows.length <= cursor) rows.push([]);
-        rows[cursor] = [...value];
-        cursor += 1;
       }
     },
   };
@@ -596,11 +602,28 @@ test("a data e o horário da reserva seguem o fuso de Brasília", () => {
   assert.equal(row[column(RESERVATION_HEADERS, "Horário")], "09:00");
 });
 
-test("as fórmulas da lista usam só vírgula como separador e não têm literal de matriz", () => {
-  for (const formula of [sessionListFormula(), sessionRevenueFormula()]) {
+test("as fórmulas seguem o separador do idioma da planilha, não o do autor", () => {
+  // pt_BR usa vírgula como separador decimal, então argumentos vão com ";".
+  // Gravar com vírgula produz uma fórmula que a API aceita e o Sheets não avalia.
+  assert.equal(argumentSeparatorFor("pt_BR"), ";");
+  assert.equal(argumentSeparatorFor("pt-BR"), ";");
+  assert.equal(argumentSeparatorFor("es_ES"), ";");
+  assert.equal(argumentSeparatorFor("de_DE"), ";");
+  assert.equal(argumentSeparatorFor("en_US"), ",");
+  assert.equal(argumentSeparatorFor("en_GB"), ",");
+  assert.equal(argumentSeparatorFor(""), DEFAULT_ARGUMENT_SEPARATOR);
+  assert.equal(argumentSeparatorFor(undefined), DEFAULT_ARGUMENT_SEPARATOR);
+  assert.equal(DEFAULT_ARGUMENT_SEPARATOR, ";", "a planilha operacional é criada em pt_BR");
+
+  for (const { formula } of listFormulaCells(argumentSeparatorFor("pt_BR"))) {
     assert.match(formula, /^=/);
-    assert.doesNotMatch(formula, /[{}]/, "literal de matriz depende do idioma da planilha");
-    assert.doesNotMatch(formula, /;/, "o separador da API é a vírgula");
+    assert.doesNotMatch(formula, /[{}]/, "literal de matriz também depende do idioma");
+    // Nenhuma vírgula fora de texto entre aspas: em pt_BR ela quebra a fórmula.
+    assert.doesNotMatch(formula.replace(/"[^"]*"/g, ""), /,/, `vírgula como separador em pt_BR: ${formula}`);
+  }
+
+  for (const { formula } of listFormulaCells(argumentSeparatorFor("en_US"))) {
+    assert.doesNotMatch(formula.replace(/"[^"]*"/g, ""), /;/, "en_US usa vírgula");
   }
 
   // A lista filtra por session_id e por vaga ativa — nunca por nome.
@@ -652,4 +675,144 @@ test("nenhum teste alcança a rede: o motor de sincronização não conhece fetc
 
   // A CI não define nenhuma variável do Google.
   assert.doesNotMatch(source(".github/workflows/ci.yml"), /GOOGLE_/);
+});
+
+
+// --- Regressão dos bugs encontrados no primeiro uso em produção -------------
+//
+// 1. `values.append` inseriu linhas acima do cabeçalho: `Sessões` ficou com o
+//    dado na linha 1 e o cabeçalho na 2, `Reservas do Site` com cinco registros
+//    antes do cabeçalho.
+// 2. As fórmulas da `Lista da Sessão` foram gravadas com vírgula numa planilha
+//    pt_BR e nenhuma avaliava.
+
+function cabecalhoIntacto(sheets: FakeSheets, tab: string, headers: readonly string[]) {
+  assert.deepEqual(sheets.headerRow(tab), [...headers], `cabeçalho de "${tab}" saiu da linha 1`);
+}
+
+test("regressão 1: o cabeçalho permanece na linha 1 depois de sincronizar", async () => {
+  const sheets = createFakeSheets();
+  await sync(sheets, snapshot([reservation({ quantity: 3, totalCents: 21000 })]));
+
+  cabecalhoIntacto(sheets, SESSIONS_TAB, SESSION_HEADERS);
+  cabecalhoIntacto(sheets, RESERVATIONS_TAB, RESERVATION_HEADERS);
+  cabecalhoIntacto(sheets, SPOTS_TAB, SPOT_HEADERS);
+});
+
+test("regressão 2: a primeira sessão vai para a linha 2", async () => {
+  const sheets = createFakeSheets();
+  await sync(sheets, snapshot([reservation()]));
+
+  const linhas = sheets.grid(SESSIONS_TAB);
+  assert.equal(linhas[0][0], SESSION_HEADERS[0], "linha 1 é cabeçalho");
+  assert.equal(linhas[1][0], SESSION.id, "linha 2 é a sessão");
+  assert.equal(sheets.dataRows(SESSIONS_TAB).length, 1);
+});
+
+test("regressão 3: as reservas começam na linha 2, em ordem", async () => {
+  const sheets = createFakeSheets();
+  const reservas = ["a", "b", "c", "d", "e"].map((letra, i) => reservation({
+    id: `${i + 1}1110000-0000-4000-8000-00000000000${i + 1}`,
+    publicCode: `COD${letra.toUpperCase()}000000`,
+  }));
+  await sync(sheets, snapshot(reservas));
+
+  const linhas = sheets.grid(RESERVATIONS_TAB);
+  assert.equal(linhas[0][0], RESERVATION_HEADERS[0], "linha 1 é cabeçalho");
+  reservas.forEach((reserva, i) => {
+    assert.equal(linhas[i + 1][0], reserva.id, `reserva ${i + 1} deveria estar na linha ${i + 2}`);
+  });
+  assert.equal(sheets.dataRows(RESERVATIONS_TAB).length, 5);
+});
+
+test("regressão 4: uma nova sincronização não empurra os cabeçalhos", async () => {
+  const sheets = createFakeSheets();
+  const primeira = reservation({ id: "11110000-0000-4000-8000-000000000001" });
+  const segunda = reservation({ id: "22220000-0000-4000-8000-000000000002", publicCode: "BBB2222222", quantity: 2, totalCents: 14000 });
+
+  await sync(sheets, snapshot([primeira]));
+  await sync(sheets, snapshot([primeira, segunda]));
+  await sync(sheets, snapshot([primeira, segunda]));
+
+  cabecalhoIntacto(sheets, SESSIONS_TAB, SESSION_HEADERS);
+  cabecalhoIntacto(sheets, RESERVATIONS_TAB, RESERVATION_HEADERS);
+  cabecalhoIntacto(sheets, SPOTS_TAB, SPOT_HEADERS);
+  assert.equal(sheets.dataRows(RESERVATIONS_TAB).length, 2);
+  assert.equal(sheets.dataRows(SPOTS_TAB).length, 3);
+});
+
+test("regressão 5: o dropdown aponta para os rótulos reais em Sessões!J2:J1000", () => {
+  // Definição única, usada pelo setup, pelo reparo e pela verificação — não há
+  // como um deles configurar um intervalo e outro conferir intervalo diferente.
+  assert.equal(sessionLabelRange(), "='Sessões'!$J$2:$J$1000");
+
+  // Começa na linha 2 de propósito: incluir a linha 1 colocaria a palavra
+  // "Rótulo" entre as opções do dropdown.
+  assert.equal(SESSION_HEADERS[SESSION_COLUMN.label - 1], "Rótulo");
+  assert.doesNotMatch(sessionLabelRange(), /\$J\$1:/);
+
+  for (const script of ["setup.ts", "repair.ts", "verify.ts"]) {
+    const code = source(`scripts/google-sheets/${script}`);
+    assert.match(code, /sessionLabelRange\(\)/, `${script} precisa usar a definição única`);
+  }
+  assert.match(source("scripts/google-sheets/repair.ts"), /ONE_OF_RANGE/);
+});
+
+test("regressão 6: a verificação exige effectiveValue sem errorValue", () => {
+  const verify = source("scripts/google-sheets/verify.ts");
+
+  // Ler com valueRenderOption=FORMULA não basta: foi assim que dez fórmulas
+  // quebradas passaram por aprovadas. A verificação precisa ler o valor avaliado.
+  // O campo pedido à API precisa incluir o valor avaliado, não só a fórmula.
+  assert.match(verify, /effectiveValue\.errorValue\.type/);
+  assert.match(verify, /cell\.effectiveValue\?\.errorValue\?\.type/);
+  assert.match(verify, /comErro\.length === 0/);
+  assert.match(verify, /process\.exitCode = 1/);
+
+  // E a verificação não pode se apoiar em renderizar a fórmula: foi assim que
+  // dez fórmulas quebradas passaram por aprovadas.
+  const codigo = verify.split("\n").filter((line) => !line.trimStart().startsWith("*") && !line.trimStart().startsWith("//")).join("\n");
+  assert.doesNotMatch(codigo, /valueRenderOption=FORMULA/, "FORMULA sozinho não prova que a fórmula avalia");
+});
+
+test("regressão 7: reexecutar não duplica dados nem move linhas", async () => {
+  const sheets = createFakeSheets();
+  const data = snapshot([
+    reservation({ quantity: 3, totalCents: 21000 }),
+    reservation({ id: "22220000-0000-4000-8000-000000000002", publicCode: "BBB2222222", fullName: "Maria Souza" }),
+  ]);
+
+  await sync(sheets, data);
+  const depoisDaPrimeira = JSON.stringify([
+    sheets.grid(SESSIONS_TAB),
+    sheets.grid(RESERVATIONS_TAB),
+    sheets.grid(SPOTS_TAB),
+  ]);
+
+  for (let i = 0; i < 5; i += 1) await sync(sheets, data);
+
+  assert.equal(
+    JSON.stringify([sheets.grid(SESSIONS_TAB), sheets.grid(RESERVATIONS_TAB), sheets.grid(SPOTS_TAB)]),
+    depoisDaPrimeira,
+    "a planilha inteira precisa ficar byte a byte igual",
+  );
+  assert.equal(sheets.dataRows(RESERVATIONS_TAB).length, 2);
+  assert.equal(sheets.dataRows(SPOTS_TAB).length, 4);
+});
+
+test("o gateway não expõe mais append: toda escrita passa por intervalo calculado", () => {
+  const engine = source("lib/integrations/google-sheets/sync.ts");
+  const client = source("lib/integrations/google-sheets/client.ts");
+
+  assert.doesNotMatch(engine, /append\(/);
+  assert.doesNotMatch(client, /insertDataOption|:append/);
+  assert.match(engine, /assertDataRow/);
+  assert.match(engine, /HEADER_ROW_WRITE_BLOCKED/);
+});
+
+test("uma posição de linha inválida falha alto em vez de corromper a planilha", () => {
+  const engine = source("lib/integrations/google-sheets/sync.ts");
+  const guarda = engine.slice(engine.indexOf("function assertDataRow"), engine.indexOf("function readCursor"));
+  assert.match(guarda, /rowNumber < FIRST_DATA_ROW/);
+  assert.match(guarda, /throw new Error/);
 });

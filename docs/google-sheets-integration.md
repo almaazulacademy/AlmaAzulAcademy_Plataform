@@ -37,7 +37,7 @@ Camadas:
 | `lib/integrations/google-sheets/schema.ts` | Abas, cabeçalhos e posições de coluna |
 | `lib/integrations/google-sheets/formulas.ts` | Fórmulas derivadas da `Lista da Sessão` |
 | `lib/integrations/google-sheets/mapping.ts` | Snapshot → linhas (funções puras) |
-| `lib/integrations/google-sheets/sync.ts` | Convergência da planilha (sem rede, sem Supabase) |
+| `lib/integrations/google-sheets/sync.ts` | Convergência da planilha (sem rede, sem Supabase); calcula a posição de cada linha |
 | `lib/integrations/google-sheets/service.ts` | **Ponto central**: enfileira, sincroniza, drena, nunca lança |
 | `lib/integrations/google-sheets/observability.ts` | Logs sanitizados |
 | `lib/integrations/google-sheets/errors.ts` | Erros reduzidos a códigos curtos |
@@ -45,6 +45,12 @@ Camadas:
 ### Nenhuma dependência nova
 
 A integração usa a API oficial do Google Sheets v4 por REST e o fluxo oficial de *JWT bearer* da conta de serviço, assinado com `node:crypto`. `googleapis` traria uma árvore de dependências enorme para quatro chamadas HTTP; o projeto já resolve InfinitePay e Supabase Auth do mesmo jeito.
+
+### Posição das linhas
+
+Toda escrita vai para um intervalo calculado por `sync.ts` a partir da leitura da coluna-chave. Não se usa `values.append`: ele decide sozinho onde fica a "tabela" dentro do intervalo informado e, no primeiro uso em produção, inseriu linhas **acima** do cabeçalho em duas das três abas. `assertDataRow` recusa qualquer destino anterior à linha 2, então a linha do cabeçalho é inalcançável por construção.
+
+O preço é que dois syncs simultâneos da mesma aba podem calcular a mesma linha livre. O volume aqui é de poucas reservas por sessão e a drenagem da fila é serial, então a corrida é remota; quando acontecer, **Sincronizar lista** reconstrói a turma a partir do Supabase.
 
 ### Idempotência
 
@@ -282,6 +288,24 @@ O script cria as abas que faltam, escreve cabeçalhos, define idioma `pt_BR` e f
 
 **Ele nunca apaga nada.** Não há uma única requisição de exclusão no arquivo — nem de aba, nem de linha, nem de coluna. Só a `Lista da Sessão` é reescrita por inteiro, porque é derivada e não tem dado próprio a preservar.
 
+O setup também se recusa a rodar se encontrar cabeçalho fora da linha 1 em alguma aba de dados: escrever o cabeçalho nessa situação apagaria o registro que estiver ali. Nesse caso ele manda rodar o reparo primeiro.
+
+### Reparar uma planilha já em uso
+
+```bash
+pnpm sheets:repair
+```
+
+Dry-run por padrão; `--apply` executa. O reparo recoloca cabeçalhos na linha 1 preservando todas as linhas de dados na ordem em que estavam, reescreve as fórmulas com o separador correto e reconfigura o dropdown. Linhas com chave repetida são preservadas — quem as neutraliza é a sincronização seguinte.
+
+### Verificar
+
+```bash
+pnpm sheets:verify
+```
+
+Somente leitura, sai com código 1 se algo estiver errado. Confere cabeçalho na linha 1 nas três abas de dados, ausência de `errorValue` em toda célula com fórmula, e o dropdown apontando para `Sessões!J2:J1000`. Use depois de todo setup ou reparo.
+
 ### Preencher com o que já existe
 
 Para cada sessão ativa, use **Sincronizar lista da sessão** no painel (`/admin/sessoes`). Isso reconstrói a turma inteira a partir do Supabase.
@@ -357,15 +381,22 @@ O que **não** aparece em log: telefone, nome, CPF, credencial do Google, conte�
 | Job `FAILED` | `INVALID_PRIVATE_KEY` | PEM truncado ou `\n` não colado corretamente | Recole a `private_key` inteira |
 | Job `FAILED` | `TIMEOUT` / `HTTP_429` | Google lento ou limite de taxa | Retenta sozinho; ou use **Sincronizar planilha** |
 | Job `FAILED` | `SNAPSHOT_UNAVAILABLE` | Migration não aplicada | Aplique `202608180001` |
-| Fórmula aparece como texto na `Lista da Sessão` | — | Fórmula gravada com separador errado | Ver abaixo |
+| `#ERROR!` nas células da `Lista da Sessão` | — | Fórmula gravada com separador de outro idioma | `pnpm sheets:repair --apply`, depois `pnpm sheets:verify` |
+| Cabeçalho na linha 2 e dado na linha 1 | — | Planilha escrita por uma versão anterior, que usava `values.append` | `pnpm sheets:repair --apply` — preserva todas as linhas |
 | Lista vazia com sessão escolhida | — | `J1` não resolveu o rótulo | Confira se a aba `Sessões` tem a linha daquela sessão; use **Sincronizar lista** |
 | Pessoa duplicada na lista | — | Linha colada à mão | Rode **Sincronizar lista**: a duplicata é desativada sozinha |
 
 ### Sobre o separador das fórmulas
 
-As fórmulas são escritas com vírgula, que é a forma canônica da API, e a planilha as exibe com o separador do idioma configurado. Nenhuma fórmula usa literal de matriz (`{a,b}`), justamente porque o separador de colunas dentro de chaves depende do idioma — `CHOOSECOLS` faz o mesmo recorte só com vírgulas.
+`valueInputOption=USER_ENTERED` faz a API interpretar a fórmula como se alguém a tivesse digitado na interface — e na interface o separador de argumentos segue o idioma. Em `pt_BR`, onde a vírgula é o separador decimal, argumentos são separados por **ponto e vírgula**.
 
-Se, ainda assim, alguma fórmula aterrissar como texto, o conserto é um ponto só: `lib/integrations/google-sheets/formulas.ts` centraliza todas elas.
+A primeira versão gravou tudo com vírgula. A API aceitou (as células viraram fórmulas de verdade), mas nenhuma avaliava: `effectiveValue` voltava `errorValue: ERROR` e a planilha exibia `#ERROR!` nas dez células. O separador agora vem de `argumentSeparatorFor(locale)`, alimentado pelo idioma real da planilha.
+
+**Ler com `valueRenderOption=FORMULA` não é verificação suficiente.** Ele só prova que a célula guarda uma fórmula, não que ela calcula — foi exatamente assim que dez fórmulas quebradas passaram por aprovadas. A verificação válida lê `effectiveValue` e exige ausência de `errorValue`, e é isso que `pnpm sheets:verify` faz.
+
+Nenhuma fórmula usa literal de matriz (`{a,b}`), porque o separador de colunas dentro de chaves também depende do idioma. `CHOOSECOLS` faz o mesmo recorte sem esse risco. Nomes de função não são traduzidos pelo Google Sheets em nenhum idioma, então só o separador precisa de tratamento.
+
+Todas as fórmulas vivem em `lib/integrations/google-sheets/formulas.ts`.
 
 ## 16. Testes
 
