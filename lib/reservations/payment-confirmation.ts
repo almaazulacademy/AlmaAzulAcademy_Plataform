@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { syncReservationAfterChange } from "@/lib/integrations/google-sheets/service";
 import { getPaymentProvider } from "@/lib/payments";
+import { sendReservationConfirmationEmail } from "@/lib/reservations/confirmation-email-service";
 import {
   logPayment,
   newRequestId,
@@ -106,18 +107,21 @@ function result(outcome: ConfirmationOutcome): ConfirmationResult {
  * A confirmação nunca se apoia no payload recebido: o valor e o status "pago"
  * sempre vêm de uma consulta server-to-server ao payment_check da InfinitePay.
  *
- * Depois de confirmada, a reserva é espelhada na planilha operacional. A
- * sincronização é deliberadamente o último passo e não pode alterar o resultado:
- * quando o Google falha, a reserva segue CONFIRMED, o pagamento segue
- * confirmado e o webhook segue respondendo 200 — só o job fica pendente.
+ * Depois de confirmada, a reserva é espelhada na planilha operacional e o
+ * cliente recebe o e-mail de confirmação. Os dois são deliberadamente os
+ * últimos passos e não podem alterar o resultado: quando o Google ou o provedor
+ * de e-mail falham, a reserva segue CONFIRMED, o pagamento segue confirmado e o
+ * webhook segue respondendo 200 — só os jobs ficam pendentes.
  */
 export async function confirmPayment(notification: PaymentNotification): Promise<ConfirmationResult> {
   const confirmation = await runConfirmation(notification);
 
   if (confirmation.confirmed) {
-    // Também sincroniza em ALREADY_CONFIRMED: um webhook repetido vira, de
-    // graça, uma nova tentativa de sincronizar o que ficou pendente antes.
+    // Também dispara em ALREADY_CONFIRMED: um webhook repetido vira, de graça,
+    // uma nova tentativa do que ficou pendente antes. Não gera e-mail duplicado
+    // porque a reivindicação no banco só devolve job para envio ainda não feito.
     await syncReservationAfterChange(notification.orderId, "CONFIRMED");
+    await sendReservationConfirmationEmail(notification.orderId);
   }
 
   return confirmation;

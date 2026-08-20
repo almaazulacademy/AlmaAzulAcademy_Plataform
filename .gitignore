@@ -31,6 +31,7 @@ next-env.d.ts
 # local working artifacts
 /work/
 /outputs/
+/.preview/
 
 # local database backups (may contain reservation PII/payment payloads)
 /backups/
