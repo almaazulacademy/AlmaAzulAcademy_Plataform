@@ -12,6 +12,7 @@ import {
   type ConfirmationEmailDeps,
   type ReservationConfirmationData,
 } from "../lib/reservations/confirmation-email.ts";
+import { isAuthorizedCronRequest } from "../lib/cron/authorization.ts";
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -334,15 +335,62 @@ test("nenhum teste envia e-mail de verdade", () => {
 
 // --- Recuperação de falhas sem depender de nova confirmação -----------------
 
+const CRON_SECRET = "s3gr3d0-de-teste-com-32-caracteres";
+
+/** Requisição idêntica à que o Vercel Cron envia ao caminho agendado. */
+function vercelCronRequest(overrides: { secret?: string; header?: string; method?: string } = {}) {
+  const headers = new Headers({
+    // O Vercel acrescenta este cabeçalho sozinho quando CRON_SECRET existe.
+    authorization: overrides.header ?? `Bearer ${overrides.secret ?? CRON_SECRET}`,
+    "user-agent": "vercel-cron/1.0",
+    "x-vercel-cron-schedule": "0 12 * * *",
+  });
+  if (overrides.header === "") headers.delete("authorization");
+
+  return new Request("https://almaazulacademy.com.br/api/cron/confirmation-emails", {
+    method: overrides.method ?? "GET",
+    headers,
+  });
+}
+
+test("a chamada GET do Vercel Cron é autorizada com o CRON_SECRET", () => {
+  // Exatamente o que a plataforma envia: GET, sem corpo, com Bearer automático.
+  const request = vercelCronRequest();
+
+  assert.equal(request.method, "GET");
+  assert.equal(request.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
+  assert.equal(isAuthorizedCronRequest(request, CRON_SECRET), true);
+});
+
+test("a rotina recusa segredo errado, ausente ou sem o prefixo Bearer", () => {
+  assert.equal(isAuthorizedCronRequest(vercelCronRequest({ secret: "outro-segredo-qualquer-aqui" }), CRON_SECRET), false);
+  assert.equal(isAuthorizedCronRequest(vercelCronRequest({ header: "" }), CRON_SECRET), false);
+  assert.equal(isAuthorizedCronRequest(vercelCronRequest({ header: CRON_SECRET }), CRON_SECRET), false, "sem 'Bearer ' não passa");
+  assert.equal(isAuthorizedCronRequest(vercelCronRequest({ header: `Bearer ${CRON_SECRET}x` }), CRON_SECRET), false);
+
+  // Sem segredo configurado nada é autorizado, nem uma requisição sem cabeçalho.
+  assert.equal(isAuthorizedCronRequest(vercelCronRequest(), ""), false);
+  assert.equal(isAuthorizedCronRequest(vercelCronRequest(), undefined), false);
+});
+
+test("GET e POST passam pela mesma autenticação e pela mesma função interna", () => {
+  assert.equal(isAuthorizedCronRequest(vercelCronRequest({ method: "POST" }), CRON_SECRET), true);
+
+  const route = source("app/api/cron/confirmation-emails/route.ts");
+  // Os dois handlers delegam ao mesmo `run`, sem lógica própria.
+  assert.match(route, /export async function GET\(request: Request\) \{\s*\n\s*return run\(request\);\s*\n\}/);
+  assert.match(route, /export async function POST\(request: Request\) \{\s*\n\s*return run\(request\);\s*\n\}/);
+  assert.equal((route.match(/retryPendingConfirmationEmails\(\)/g) ?? []).length, 1, "uma única função interna");
+});
+
 test("a rotina agendada exige segredo e não vaza nada na resposta", () => {
   const route = source("app/api/cron/confirmation-emails/route.ts");
 
   assert.match(route, /process\.env\.CRON_SECRET/);
   assert.match(route, /status: 503/, "sem segredo configurado a rota não roda");
   assert.match(route, /status: 401/, "segredo errado é recusado");
-  // Comparação de tempo constante: `===` vazaria o segredo por temporização.
-  assert.match(route, /timingSafeEqual/);
-  assert.match(route, /retryPendingConfirmationEmails\(\)/);
+  assert.match(route, /isAuthorizedCronRequest/);
+  assert.match(source("lib/cron/authorization.ts"), /timingSafeEqual/);
 
   // A resposta é só contador — nenhum e-mail, nome ou código de reserva.
   const body = route.slice(route.indexOf("return NextResponse.json(\n    { outcome"));
@@ -391,12 +439,19 @@ test("job já concluído nunca é reivindicado de novo pela recuperação", () =
   assert.match(drain, /k\.status = 'FAILED'\s*\n\s*or k\.updated_at </);
 });
 
-test("o agendamento configurado é compatível com o plano atual", () => {
+test("vercel.json aponta para o caminho real da rota", () => {
   const vercel = JSON.parse(source("vercel.json")) as { crons?: Array<{ path: string; schedule: string }> };
   const cron = vercel.crons?.[0];
 
   assert.ok(cron, "vercel.json precisa declarar a rotina");
   assert.equal(cron.path, "/api/cron/confirmation-emails");
+
+  // O caminho tem que corresponder ao arquivo de rota que existe de fato: um
+  // caminho inexistente devolve 404 e a Vercel executa assim mesmo, em silêncio.
+  const arquivo = `app${cron.path}/route.ts`;
+  assert.doesNotThrow(() => source(arquivo), `${arquivo} precisa existir`);
+  assert.match(source(arquivo), /export async function GET/, "o Vercel Cron chama por GET");
+
   // Uma vez por dia: é o que o plano Hobby da Vercel permite.
   assert.match(cron.schedule, /^\d+ \d+ \* \* \*$/);
 });

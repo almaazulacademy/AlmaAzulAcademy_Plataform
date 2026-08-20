@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
 
+import { isAuthorizedCronRequest } from "@/lib/cron/authorization";
 import { retryPendingConfirmationEmails } from "@/lib/reservations/confirmation-email-service";
 
 export const runtime = "nodejs";
@@ -10,32 +10,29 @@ export const dynamic = "force-dynamic";
  * Rotina agendada de recuperação dos e-mails de confirmação.
  *
  * Existe para que um envio que falhou não fique esperando a próxima reserva
- * confirmada aparecer. Chamada pelo Vercel Cron, mas funciona com qualquer
- * agendador que envie o cabeçalho `Authorization: Bearer <CRON_SECRET>`.
+ * confirmada aparecer.
  *
- * Sem `CRON_SECRET` configurado a rota responde 503 e não faz nada: é o
- * comportamento correto para um endpoint sem como se autenticar.
+ * **GET é o método que importa**: é assim que o Vercel Cron invoca o caminho
+ * declarado em `vercel.json`, e o segredo chega sozinho no cabeçalho
+ * `Authorization: Bearer <CRON_SECRET>` assim que a variável existe no projeto.
+ * POST é aceito para acionamento manual e para agendadores externos que
+ * prefiram esse verbo — os dois passam pela mesma autenticação e chamam a mesma
+ * função interna.
  *
- * Não há risco de duplicidade mesmo se o agendador disparar duas vezes: quem
- * não reivindica o job não envia, e job concluído nunca é reivindicado.
+ * Sem `CRON_SECRET` configurado a rota responde 503 e não faz nada: um endpoint
+ * público sem como se autenticar não deve executar trabalho.
+ *
+ * A Vercel documenta que a entrega do cron é *best effort* — uma execução pode
+ * ser perdida ou repetida. Nada aqui depende de execução única: a reivindicação
+ * no banco é que decide quem envia, então rodar duas vezes não duplica e-mail
+ * nenhum.
  */
-function authorized(request: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return false;
-
-  const header = request.headers.get("authorization") ?? "";
-  const offered = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (offered.length !== secret.length) return false;
-
-  // Comparação de tempo constante: um `===` vazaria o segredo por temporização.
-  return timingSafeEqual(Buffer.from(offered), Buffer.from(secret));
-}
-
 async function run(request: Request) {
-  if (!process.env.CRON_SECRET?.trim()) {
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) {
     return NextResponse.json({ message: "Rotina não configurada." }, { status: 503 });
   }
-  if (!authorized(request)) {
+  if (!isAuthorizedCronRequest(request, secret)) {
     return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
   }
 
@@ -49,10 +46,12 @@ async function run(request: Request) {
   );
 }
 
+/** Chamada do Vercel Cron. */
 export async function GET(request: Request) {
   return run(request);
 }
 
+/** Acionamento manual ou por agendador externo. Mesma autenticação, mesma função. */
 export async function POST(request: Request) {
   return run(request);
 }

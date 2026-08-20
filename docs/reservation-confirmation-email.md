@@ -72,7 +72,7 @@ Três caminhos, para que um envio que falhou não fique refém de uma nova confi
 | Caminho | Quando | Lote |
 | --- | --- | --- |
 | Oportunista | Após um envio bem-sucedido | 2 |
-| Rotina agendada | `POST /api/cron/confirmation-emails` | 25 |
+| Rotina agendada | `GET /api/cron/confirmation-emails` | 25 |
 | Painel | Botão **Reenviar e-mail** na reserva | 1 |
 
 Regras comuns a todos:
@@ -92,7 +92,14 @@ Regras comuns a todos:
 
 Uma vez por dia é o limite do plano Hobby da Vercel. No plano Pro dá para subir para de hora em hora (`0 * * * *`) trocando só essa linha.
 
-A rota exige `Authorization: Bearer $CRON_SECRET`, com comparação de tempo constante, e responde 503 enquanto `CRON_SECRET` não existir. Funciona com qualquer agendador que envie esse cabeçalho — não é preciso ficar preso ao Vercel Cron.
+O Vercel Cron invoca o caminho por **GET**. Basta existir a variável `CRON_SECRET` no projeto: a plataforma acrescenta sozinha o cabeçalho `Authorization: Bearer <CRON_SECRET>` na chamada. Não há nada a configurar além da variável.
+
+A rota também aceita **POST**, para acionamento manual ou agendador externo. Os dois métodos passam pela mesma autenticação (`isAuthorizedCronRequest`, com comparação de tempo constante) e chamam a mesma função interna. Sem `CRON_SECRET` a rota responde 503.
+
+Dois comportamentos documentados da Vercel que valem lembrar:
+
+- **No plano Hobby a execução acontece em algum momento dentro da hora indicada** — `0 12 * * *` dispara entre 12:00 e 12:59 UTC, não às 12:00 em ponto.
+- **A entrega é *best effort*: uma execução pode ser perdida ou repetida, e a Vercel não repete invocação que falhou.** Nada aqui depende de execução única — quem decide o envio é a reivindicação no banco, então rodar duas vezes não duplica e-mail, e uma execução perdida é recuperada na seguinte.
 
 ### Botão no painel
 
@@ -188,6 +195,7 @@ Escopo `notifications.email`:
 | Job `SKIPPED` com `PAYLOAD_EMPTY` | — | Reserva sem e-mail válido | Corrija o cadastro e limpe o job |
 | E-mail não chega, job `SYNCED` | — | Entregue mas em spam, ou caixa recusou | Consulte os logs do Resend |
 | Rotina agendada devolve 503 | — | `CRON_SECRET` ausente | Configure a variável na Vercel |
+| Rotina agendada devolve 404 | — | `path` do `vercel.json` não corresponde à rota | A Vercel executa assim mesmo e só registra 404; confira o caminho |
 | Rotina agendada devolve 401 | — | Segredo diferente do configurado | Confira o cabeçalho `Authorization` |
 
 Para inspecionar a fila:
