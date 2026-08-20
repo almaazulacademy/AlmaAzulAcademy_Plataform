@@ -11,7 +11,7 @@ Envia automaticamente um e-mail ao cliente quando a reserva passa a `CONFIRMED`.
 | Abstração de provedor e cliente Resend | Implementados |
 | Template HTML responsivo e texto puro | Implementados |
 | Reivindicação exatamente-uma-vez | Implementada na migration `202608190001` |
-| Recuperação de pendências | Implementada, sem cron |
+| Recuperação de pendências | Implementada: oportunista, rotina agendada e botão no painel |
 | Migration aplicada no Supabase | **Pendente — aplicação manual** |
 | Domínio verificado no Resend | **Pendente** |
 | Variáveis configuradas na Vercel | **Pendente** |
@@ -67,11 +67,38 @@ Quando a cláusula `WHERE` não é satisfeita — job `SYNCED` ou `PENDING` — 
 
 ## Retry
 
-Depois de um envio bem-sucedido, a mesma execução tenta recuperar até 2 pendências (`OPPORTUNISTIC_EMAIL_DRAIN`). Sem cron, sem polling. A recuperação:
+Três caminhos, para que um envio que falhou não fique refém de uma nova confirmação aparecer.
 
-- só pega jobs parados há mais de 15 minutos (`STALE_EMAIL_MINUTES`), para não disputar um envio em andamento;
+| Caminho | Quando | Lote |
+| --- | --- | --- |
+| Oportunista | Após um envio bem-sucedido | 2 |
+| Rotina agendada | `POST /api/cron/confirmation-emails` | 25 |
+| Painel | Botão **Reenviar e-mail** na reserva | 1 |
+
+Regras comuns a todos:
+
+- job `FAILED` é retentado na hora; job `PENDING` só depois de 15 minutos (`STALE_EMAIL_MINUTES`), para a rotina agendada não disputar um envio em andamento e mandar duas vezes;
 - **confere de novo se a reserva ainda está `CONFIRMED`** — uma reserva cancelada depois da confirmação não recebe o e-mail numa tentativa posterior;
-- desiste após 3 tentativas (`MAX_EMAIL_ATTEMPTS`).
+- desiste após 3 tentativas (`MAX_EMAIL_ATTEMPTS`);
+- job `SYNCED` nunca volta para a fila, então nenhum dos três caminhos consegue duplicar.
+
+### Rotina agendada
+
+`vercel.json` declara o cron diário às 12:00 UTC (09:00 em Brasília):
+
+```json
+{ "crons": [{ "path": "/api/cron/confirmation-emails", "schedule": "0 12 * * *" }] }
+```
+
+Uma vez por dia é o limite do plano Hobby da Vercel. No plano Pro dá para subir para de hora em hora (`0 * * * *`) trocando só essa linha.
+
+A rota exige `Authorization: Bearer $CRON_SECRET`, com comparação de tempo constante, e responde 503 enquanto `CRON_SECRET` não existir. Funciona com qualquer agendador que envie esse cabeçalho — não é preciso ficar preso ao Vercel Cron.
+
+### Botão no painel
+
+Em `/admin/reservas/<id>`, **Reenviar e-mail**. A decisão de enviar continua sendo do banco: se o e-mail já foi enviado, a resposta diz exatamente isso e nada sai. Clicar dez vezes não gera dez e-mails.
+
+A mesma tela mostra o estado: **Enviado** (com a data), **Pendente**, **Erro** (com o código e o número de tentativas) ou **Não enviado**.
 
 ## Conteúdo
 
@@ -103,6 +130,7 @@ Trocar de provedor toca só em `lib/email/`: implemente `EmailProvider` e regist
 | `EMAIL_FROM` | sim | `Alma Azul Academy <reservas@almaazulacademy.com.br>` |
 | `EMAIL_REPLY_TO` | não | para onde vão as respostas |
 | `EMAIL_PROVIDER` | não | `RESEND` (padrão) ou `NONE` para desligar |
+| `CRON_SECRET` | para a rotina | string longa e aleatória; sem ela o cron responde 503 |
 
 **Nenhuma pode usar o prefixo `NEXT_PUBLIC_`.** O código recusa subir se detectar uma versão pública e registra `PUBLIC_ENV_FORBIDDEN`.
 
@@ -159,6 +187,8 @@ Escopo `notifications.email`:
 | Job `FAILED` | `TIMEOUT` / `HTTP_429` | Resend lento ou limite de taxa | Retenta sozinho na próxima confirmação |
 | Job `SKIPPED` com `PAYLOAD_EMPTY` | — | Reserva sem e-mail válido | Corrija o cadastro e limpe o job |
 | E-mail não chega, job `SYNCED` | — | Entregue mas em spam, ou caixa recusou | Consulte os logs do Resend |
+| Rotina agendada devolve 503 | — | `CRON_SECRET` ausente | Configure a variável na Vercel |
+| Rotina agendada devolve 401 | — | Segredo diferente do configurado | Confira o cabeçalho `Authorization` |
 
 Para inspecionar a fila:
 

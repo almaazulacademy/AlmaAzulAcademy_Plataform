@@ -331,3 +331,72 @@ test("nenhum teste envia e-mail de verdade", () => {
   assert.doesNotMatch(suite, /api\.resend\.com/);
   assert.doesNotMatch(source(".github/workflows/ci.yml"), /RESEND|EMAIL_FROM/);
 });
+
+// --- Recuperação de falhas sem depender de nova confirmação -----------------
+
+test("a rotina agendada exige segredo e não vaza nada na resposta", () => {
+  const route = source("app/api/cron/confirmation-emails/route.ts");
+
+  assert.match(route, /process\.env\.CRON_SECRET/);
+  assert.match(route, /status: 503/, "sem segredo configurado a rota não roda");
+  assert.match(route, /status: 401/, "segredo errado é recusado");
+  // Comparação de tempo constante: `===` vazaria o segredo por temporização.
+  assert.match(route, /timingSafeEqual/);
+  assert.match(route, /retryPendingConfirmationEmails\(\)/);
+
+  // A resposta é só contador — nenhum e-mail, nome ou código de reserva.
+  const body = route.slice(route.indexOf("return NextResponse.json(\n    { outcome"));
+  assert.doesNotMatch(body, /email|fullName|publicCode/i);
+});
+
+test("a ação do painel reenvia sem poder duplicar", () => {
+  const route = source("app/api/admin/reservations/[reservationId]/resend-email/route.ts");
+
+  assert.match(route, /isSameOriginRequest/);
+  assert.match(route, /authorizeAdminApi/);
+  assert.match(route, /isUuid/);
+  // Quem decide se envia é o banco, não o endpoint: ele só repassa o resultado.
+  assert.match(route, /sendReservationConfirmationEmail\(reservationId\)/);
+  assert.match(route, /SKIPPED: "Nada a enviar/);
+  assert.doesNotMatch(route, /force|reenviar_sempre|ignoreClaim/i);
+
+  assert.match(source("components/admin/reservation-actions.tsx"), /Reenviar e-mail/);
+  assert.match(source("app/admin/reservas/[reservationId]/page.tsx"), /getConfirmationEmailState/);
+});
+
+test("a recuperação não depende de uma nova confirmação chegar", () => {
+  const service = source("lib/reservations/confirmation-email-service.ts");
+
+  // A drenagem oportunista continua existindo, mas agora há uma função própria
+  // que a rotina agendada e o painel chamam sem precisar de um envio bem-sucedido.
+  assert.match(service, /export async function retryPendingConfirmationEmails/);
+  const retry = service.slice(service.indexOf("export async function retryPendingConfirmationEmails"));
+  assert.match(retry, /claim_pending_confirmation_emails/);
+  assert.doesNotMatch(retry.slice(0, retry.indexOf("}\n\n")), /sendReservationConfirmationEmail/);
+});
+
+test("job já concluído nunca é reivindicado de novo pela recuperação", () => {
+  const sql = readFileSync(
+    new URL("../supabase/migrations/202608190001_reservation_confirmation_email.sql", import.meta.url),
+    "utf8",
+  );
+  const drain = sql.slice(
+    sql.indexOf("function public.claim_pending_confirmation_emails"),
+    sql.indexOf("function public.reservation_confirmation_email"),
+  );
+
+  assert.match(drain, /k\.status <> 'SYNCED'/, "enviado nunca volta para a fila");
+  // FAILED pode ser retentado na hora; PENDING só depois da carência, para a
+  // rotina agendada não disputar um envio em andamento.
+  assert.match(drain, /k\.status = 'FAILED'\s*\n\s*or k\.updated_at </);
+});
+
+test("o agendamento configurado é compatível com o plano atual", () => {
+  const vercel = JSON.parse(source("vercel.json")) as { crons?: Array<{ path: string; schedule: string }> };
+  const cron = vercel.crons?.[0];
+
+  assert.ok(cron, "vercel.json precisa declarar a rotina");
+  assert.equal(cron.path, "/api/cron/confirmation-emails");
+  // Uma vez por dia: é o que o plano Hobby da Vercel permite.
+  assert.match(cron.schedule, /^\d+ \d+ \* \* \*$/);
+});

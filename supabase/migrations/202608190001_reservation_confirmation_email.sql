@@ -62,8 +62,12 @@ $$;
 -- 2. Reivindicação de pendências para nova tentativa ---------------------------
 --
 -- Recupera envios que falharam e também os que ficaram presos em PENDING —
--- o caso de uma instância serverless morrer no meio do envio. A janela de
--- carência evita disputar um envio que ainda está acontecendo agora.
+-- o caso de uma instância serverless morrer no meio do envio.
+--
+-- Os dois casos têm urgências diferentes. Um job FAILED já terminou e pode ser
+-- retentado na hora. Um PENDING pode estar acontecendo neste instante, então só
+-- entra na fila depois da carência — é o que impede a rotina agendada de
+-- disputar um envio em andamento e mandar o e-mail duas vezes.
 create or replace function public.claim_pending_confirmation_emails(
   p_limit integer,
   p_max_attempts integer,
@@ -85,12 +89,15 @@ begin
     where k.integration = 'RESERVATION_CONFIRMATION_EMAIL'
       and k.status <> 'SYNCED'
       and k.attempts < greatest(coalesce(p_max_attempts, 3), 1)
-      and k.updated_at < now() - make_interval(mins => greatest(coalesce(p_stale_minutes, 15), 1))
+      and (
+        k.status = 'FAILED'
+        or k.updated_at < now() - make_interval(mins => greatest(coalesce(p_stale_minutes, 15), 1))
+      )
       -- Uma reserva cancelada depois da confirmação não deve receber o e-mail
       -- em uma tentativa posterior.
       and r.status = 'CONFIRMED'
     order by k.updated_at asc
-    limit least(greatest(coalesce(p_limit, 1), 0), 10)
+    limit least(greatest(coalesce(p_limit, 1), 0), 50)
     for update skip locked
   )
   returning j.id, j.entity_id, j.attempts;

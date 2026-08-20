@@ -10,6 +10,7 @@ import { getAdminReservation } from "@/lib/admin/data";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency, formatMaskedCpf } from "@/lib/admin/format";
 import { isUuid } from "@/lib/admin/validation";
 import { getSheetSyncState, isSheetSyncEnabled } from "@/lib/integrations/google-sheets/service";
+import { getConfirmationEmailState, isConfirmationEmailEnabled } from "@/lib/reservations/confirmation-email-service";
 import { formatSessionDateTime } from "@/lib/sessions/date-time";
 
 export const metadata = { title: "Detalhe da reserva" };
@@ -27,6 +28,10 @@ export default async function AdminReservationDetailPage({ params }: { params: P
   const sheetEnabled = isSheetSyncEnabled();
   const sheetSync = sheetEnabled ? await getSheetSyncState("RESERVATION", reservation.id) : null;
   const sheetStatus = sheetSync?.status ?? "NEVER_SYNCED";
+
+  const emailEnabled = isConfirmationEmailEnabled();
+  const emailState = emailEnabled ? await getConfirmationEmailState(reservation.id) : null;
+  const emailStatus = emailState?.status === "SYNCED" ? "SENT" : emailState?.status ?? "NEVER_SENT";
 
   const fields = [
     ["Nome", reservation.fullName],
@@ -80,8 +85,27 @@ export default async function AdminReservationDetailPage({ params }: { params: P
           </p>
         </section>
       ) : null}
+      {emailEnabled ? (
+        <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">E-mail de confirmação</h2>
+            <StatusBadge status={emailStatus} />
+          </div>
+          <p className="mt-3 text-sm leading-6 text-ink/60">
+            {emailStatus === "SENT"
+              ? `Enviado em ${formatAdminDateTime(emailState?.sentAt ?? null)}. Reenviar não gera e-mail duplicado.`
+              : emailStatus === "FAILED"
+                ? `A última tentativa falhou (${emailState?.lastErrorCode ?? "erro desconhecido"}), após ${emailState?.attempts ?? 0} tentativa(s). A reserva e o pagamento não foram afetados.`
+                : emailStatus === "PENDING"
+                  ? "O envio está em andamento ou pendente, e será tentado de novo automaticamente."
+                  : reservation.status === "CONFIRMED"
+                    ? "Ainda não enviado para esta reserva."
+                    : "O e-mail só é enviado quando a reserva é confirmada."}
+          </p>
+        </section>
+      ) : null}
       <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Observações</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/60">{reservation.notes ?? "Nenhuma observação informada."}</p></section>
-      <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Ações</h2><p className="mt-2 text-sm text-ink/50">A mensagem é apenas preparada; revise antes do envio.</p><div className="mt-5"><ReservationActions reservationId={reservation.id} status={reservation.status} fullName={reservation.fullName} phone={reservation.phone} email={reservation.email} publicCode={reservation.publicCode} checkoutUrl={reservation.checkoutUrl} showMessageButton showSheetSync={sheetEnabled} /></div></section>
+      <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Ações</h2><p className="mt-2 text-sm text-ink/50">A mensagem é apenas preparada; revise antes do envio.</p><div className="mt-5"><ReservationActions reservationId={reservation.id} status={reservation.status} fullName={reservation.fullName} phone={reservation.phone} email={reservation.email} publicCode={reservation.publicCode} checkoutUrl={reservation.checkoutUrl} showMessageButton showSheetSync={sheetEnabled} showEmailResend={emailEnabled} /></div></section>
     </div>
   );
 }

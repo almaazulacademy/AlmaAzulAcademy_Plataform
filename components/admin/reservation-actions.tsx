@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CheckCircle2, Copy, ExternalLink, Mail, MessageCircle, RotateCcw, SearchCheck, Sheet, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, Mail, MailCheck, MessageCircle, RotateCcw, SearchCheck, Sheet, XCircle } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
 import { useToast } from "@/components/admin/toast-provider";
@@ -15,7 +15,7 @@ type ApiPayload = { message?: string };
 type VerifyPayload = { success?: boolean; outcome?: string; message?: string };
 type SyncPayload = { success?: boolean; outcome?: string; errorCode?: string; message?: string };
 
-export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false, showSheetSync = false }: {
+export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false, showSheetSync = false, showEmailResend = false }: {
   reservationId: string;
   status: ReservationStatus;
   fullName: string;
@@ -25,12 +25,14 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   checkoutUrl?: string | null;
   showMessageButton?: boolean;
   showSheetSync?: boolean;
+  showEmailResend?: boolean;
 }) {
   const router = useRouter();
   const { notify } = useToast();
   const [action, setAction] = useState<Action>(null);
   const [verifying, setVerifying] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const verifyPayment = async () => {
     setVerifying(true);
@@ -72,6 +74,26 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
       notify({ title: "Falha na sincronização", description: "Não foi possível falar com o Google Sheets.", variant: "error" });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // Reenvia a confirmação. A decisão de enviar é do banco: se já foi enviado,
+  // a resposta diz isso e nenhum e-mail sai.
+  const resendEmail = async () => {
+    setResending(true);
+    try {
+      const response = await fetch(`/api/admin/reservations/${reservationId}/resend-email`, { method: "POST" });
+      const payload = await response.json().catch(() => ({})) as SyncPayload;
+      notify({
+        title: payload.success ? "E-mail enviado" : "E-mail não enviado",
+        description: payload.message ?? "Não foi possível falar com o provedor de e-mail.",
+        variant: payload.success ? undefined : "error",
+      });
+      router.refresh();
+    } catch {
+      notify({ title: "Falha no envio", description: "Não foi possível falar com o provedor de e-mail.", variant: "error" });
+    } finally {
+      setResending(false);
     }
   };
 
@@ -125,6 +147,11 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
         {showSheetSync ? (
           <Button type="button" size="sm" variant="ghost" disabled={syncing} onClick={syncSheet}>
             <Sheet className="size-4" /> {syncing ? "Sincronizando…" : "Sincronizar planilha"}
+          </Button>
+        ) : null}
+        {showEmailResend ? (
+          <Button type="button" size="sm" variant="ghost" disabled={resending} onClick={resendEmail}>
+            <MailCheck className="size-4" /> {resending ? "Enviando…" : "Reenviar e-mail"}
           </Button>
         ) : null}
         <Button type="button" size="sm" variant="ghost" onClick={() => copy(phone, "WhatsApp")}><MessageCircle className="size-4" /> Copiar WhatsApp</Button>
