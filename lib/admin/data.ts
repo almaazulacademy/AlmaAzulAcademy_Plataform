@@ -17,6 +17,7 @@ import type {
 import type { ReservationStatus } from "@/lib/reservations/types";
 import { applySessionFilters, sessionListFilterFor } from "@/lib/admin/session-filters";
 import { syncReservationAfterChange } from "@/lib/integrations/google-sheets/service";
+import { sendReservationConfirmationEmail } from "@/lib/reservations/confirmation-email-service";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { emptyExperienceEditorial, validateExperienceEditorial } from "@/lib/editorial/experience";
 
@@ -316,7 +317,10 @@ export async function confirmAdminReservation(actorUserId: string, reservationId
   });
   if (result.error) throw new Error(result.error.message);
   const confirmed = asBoolean(result.data);
-  if (confirmed) await syncReservationAfterChange(reservationId, "ADMIN");
+  if (confirmed) {
+    await syncReservationAfterChange(reservationId, "ADMIN");
+    await sendReservationConfirmationEmail(reservationId);
+  }
   return confirmed;
 }
 

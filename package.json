@@ -11,7 +11,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "sheets:setup": "node --experimental-strip-types scripts/google-sheets/setup.ts",
     "sheets:repair": "node --experimental-strip-types scripts/google-sheets/repair.ts",
-    "sheets:verify": "node --experimental-strip-types scripts/google-sheets/verify.ts"
+    "sheets:verify": "node --experimental-strip-types scripts/google-sheets/verify.ts",
+    "email:preview": "node --experimental-strip-types scripts/email/preview.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
