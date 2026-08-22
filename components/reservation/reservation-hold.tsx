@@ -5,7 +5,9 @@ import { CheckCircle2, Clock3, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 
 import { Countdown } from "@/components/reservation/countdown";
+import { SessionTurma } from "@/components/reservation/session-turma";
 import { buttonVariants } from "@/components/ui/button";
+import type { BookingSession } from "@/lib/reservations/types";
 import { cn } from "@/lib/utils";
 
 type ReservationHoldProps = {
@@ -13,9 +15,15 @@ type ReservationHoldProps = {
   expiresAt: string;
   checkoutUrl: string | null;
   title?: string;
+  /**
+   * Sessão da reserva. Opcional porque a página de reserva já exibe a turma
+   * acima deste bloco; a consulta por CPF + código, que renderiza este bloco
+   * sozinho, passa a sessão para o horário não sumir da tela.
+   */
+  session?: BookingSession;
 };
 
-export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "Sua vaga está reservada por 2 horas." }: ReservationHoldProps) {
+export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "Sua vaga está reservada por 2 horas.", session }: ReservationHoldProps) {
   const [expired, setExpired] = useState(new Date(expiresAt).getTime() <= Date.now());
   const [copied, setCopied] = useState(false);
   const expire = useCallback(() => setExpired(true), []);
@@ -36,6 +44,14 @@ export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "S
       <p className="mt-5 max-w-xl leading-7 text-ink/60">
         {expired ? "As vagas foram liberadas automaticamente. Escolha uma nova sessão para tentar novamente." : "Finalize o pagamento antes do contador chegar a zero. Guarde o código para acompanhar a reserva depois."}
       </p>
+      {session && !expired ? (
+        <SessionTurma
+          startsAt={session.startsAt}
+          experienceTitle={session.experienceTitle}
+          note="Cada turma tem horário e vagas próprios. Confira o horário antes de pagar."
+          className="mt-8"
+        />
+      ) : null}
       {!expired && (
         <div className="mt-8 rounded-3xl bg-paper p-6">
           <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-ink/45"><Clock3 className="size-4" />Tempo restante</p>

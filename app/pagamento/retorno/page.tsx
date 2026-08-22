@@ -5,11 +5,12 @@ import { CheckCircle2, Clock3, MessageCircle } from "lucide-react";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
+import { SessionTurma } from "@/components/reservation/session-turma";
 import { buttonVariants } from "@/components/ui/button";
 import { isUuid } from "@/lib/admin/validation";
 import { buildWhatsappReservationHelpLink } from "@/lib/contact";
 import { normalizeCaptureMethod } from "@/lib/payments/webhook-payload";
-import { getReservationExperienceTitle } from "@/lib/reservations/data";
+import { getReservationConfirmationSummary, type ReservationConfirmationSummary } from "@/lib/reservations/data";
 import { confirmPayment } from "@/lib/reservations/payment-confirmation";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
@@ -57,20 +58,20 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
     }
   }
 
-  // Só busca o título depois de confirmar, e só com um UUID válido: evita
-  // consulta desnecessária e enumeração por parâmetro arbitrário na URL.
-  let experienceTitle = "";
+  // Só busca experiência e horário depois de confirmar, e só com um UUID válido:
+  // evita consulta desnecessária e enumeração por parâmetro arbitrário na URL.
+  let summary: ReservationConfirmationSummary = { experienceTitle: "", startsAt: "" };
   if (confirmed && isUuid(orderId)) {
     const admin = getSupabaseAdminClient();
     if (admin) {
       try {
-        experienceTitle = await getReservationExperienceTitle(admin, orderId);
+        summary = await getReservationConfirmationSummary(admin, orderId);
       } catch {
-        experienceTitle = "";
+        summary = { experienceTitle: "", startsAt: "" };
       }
     }
   }
-  const whatsappLink = buildWhatsappReservationHelpLink(experienceTitle);
+  const whatsappLink = buildWhatsappReservationHelpLink(summary.experienceTitle);
 
   return (
     <main className="min-h-screen bg-paper pt-24">
@@ -85,7 +86,20 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
               <p className="mx-auto mt-6 max-w-lg text-lg font-medium leading-8 text-ink">
                 Sua reserva foi confirmada com sucesso!
               </p>
-              <p className="mx-auto mt-4 max-w-lg leading-7 text-ink/65">
+
+              {/* A turma reservada é repetida aqui, saindo da session_id da própria
+                  reserva: a confirmação precisa dizer o horário que ficou valendo,
+                  não deixar o cliente lembrar de qual turma escolheu. */}
+              {summary.startsAt ? (
+                <SessionTurma
+                  startsAt={summary.startsAt}
+                  experienceTitle={summary.experienceTitle || "Experiência Alma Azul Academy"}
+                  label="Turma confirmada"
+                  className="mx-auto mt-8 max-w-lg text-left"
+                />
+              ) : null}
+
+              <p className="mx-auto mt-6 max-w-lg leading-7 text-ink/65">
                 Obrigado por escolher viver essa experiência com a Alma Azul Academy.
               </p>
               <p className="mx-auto mt-4 max-w-lg leading-7 text-ink/65">

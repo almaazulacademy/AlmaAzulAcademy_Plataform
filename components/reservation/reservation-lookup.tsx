@@ -62,7 +62,7 @@ export function ReservationLookup() {
     }
   }
 
-  if (reservation?.status === "PRE_RESERVED") return <ReservationHold publicCode={reservation.publicCode} expiresAt={reservation.expiresAt} checkoutUrl={reservation.checkoutUrl} title="Sua vaga continua reservada." />;
+  if (reservation?.status === "PRE_RESERVED") return <ReservationHold publicCode={reservation.publicCode} expiresAt={reservation.expiresAt} checkoutUrl={reservation.checkoutUrl} title="Sua vaga continua reservada." session={reservation.session} />;
   if (reservation) return <FinalReservation reservation={reservation} />;
 
   return (
