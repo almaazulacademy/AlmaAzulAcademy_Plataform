@@ -53,6 +53,7 @@ lib/
   admin/                     auth, tipos, validação, formatação e acesso a dados
   payments/                  contrato PaymentProvider e InfinitePay
   reservations/              tipos, validação, acesso a dados e confirmação
+  sessions/                  fuso das sessões e tradução de sessão para turma exibida
   supabase/                  clientes browser, servidor público e service role
   experiences.ts             catálogo editorial usado na Home
 public/images/               acervo oficial organizado por uso/experiência
@@ -103,7 +104,7 @@ Todas as mutações administrativas validam sessão, autorização, origem e pay
 
 ### Servidor
 
-Páginas do App Router são Server Components por padrão. Isso inclui a Home, a landing, a página por sessão e o retorno de pagamento. `SessionsSection` também é assíncrono e lê sessões pelo cliente público do Supabase.
+Páginas do App Router são Server Components por padrão. Isso inclui a Home, a landing, a página por sessão e o retorno de pagamento. `SessionsSection` e `SessionTimes` também são assíncronos e leem sessões pelo cliente público do Supabase, compartilhando uma única leitura por requisição em `readOpenSessions`.
 
 Responsabilidades do servidor:
 

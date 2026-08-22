@@ -17,7 +17,7 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { listAgendaSessions, type AgendaSession } from "@/lib/agenda/data";
 import { WHATSAPP_AGENDA_LINK } from "@/lib/contact";
-import { formatSessionDayMonth, formatSessionTime, formatSessionWeekday } from "@/lib/sessions/date-time";
+import { buildSessionChoice } from "@/lib/sessions/choice";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 function resolveExperienceIcon(slug: string): LucideIcon {
@@ -71,9 +71,21 @@ function EmptyState({ error = false }: { error?: boolean }) {
   );
 }
 
+/**
+ * Cartão da agenda geral.
+ *
+ * A agenda mistura experiências, então o título continua sendo a identidade do
+ * cartão — mas o horário ganhou corpo grande logo abaixo da data. Três turmas
+ * da mesma experiência no mesmo dia aparecem lado a lado aqui também, e a hora
+ * é o único dado que as distingue.
+ *
+ * Horário e destino vêm de `buildSessionChoice`, isto é, do `starts_at` e do
+ * `id` da mesma sessão.
+ */
 function AgendaCard({ session }: { session: AgendaSession }) {
   const Icon = resolveExperienceIcon(session.experienceSlug);
-  const dateLabel = `${formatSessionWeekday(session.startsAt)}, ${formatSessionDayMonth(session.startsAt)}`;
+  const choice = buildSessionChoice(session);
+  const dateLabel = `${choice.weekday}, ${choice.dayMonth}`;
   const soldOut = session.remainingSpots <= 0;
 
   return (
@@ -88,7 +100,12 @@ function AgendaCard({ session }: { session: AgendaSession }) {
 
       <p className="mt-2 text-base font-semibold text-ink first-letter:uppercase">{dateLabel}</p>
 
-      <div className="mt-5 space-y-2.5 border-t border-ink/10 pt-5 text-sm text-ink/65">
+      <p className="mt-4 text-[clamp(2.8rem,10vw,3.4rem)] font-medium leading-[0.85] tracking-[-0.055em] text-forest">
+        <span className="sr-only">Horário de início: </span>
+        {choice.time}
+      </p>
+
+      <div className="mt-6 space-y-2.5 border-t border-ink/10 pt-5 text-sm text-ink/65">
         <p className="flex items-center gap-2.5">
           <MapPin className="size-4 shrink-0 text-lake" aria-hidden="true" />
           <span className="sr-only">Local: </span>
@@ -96,9 +113,8 @@ function AgendaCard({ session }: { session: AgendaSession }) {
         </p>
         <p className="flex items-center gap-2.5">
           <Clock3 className="size-4 shrink-0 text-lake" aria-hidden="true" />
-          <span className="sr-only">Horário e duração: </span>
-          {formatSessionTime(session.startsAt)}
-          {session.durationMinutes > 0 ? ` · ${session.durationMinutes} min` : ""}
+          <span className="sr-only">Duração: </span>
+          {session.durationMinutes > 0 ? `${session.durationMinutes} minutos de experiência` : "Duração a confirmar"}
         </p>
         <p className="flex items-center gap-2.5">
           <Ticket className="size-4 shrink-0 text-lake" aria-hidden="true" />
@@ -111,20 +127,22 @@ function AgendaCard({ session }: { session: AgendaSession }) {
         </p>
       </div>
 
-      {soldOut ? (
-        <p className="mt-6 rounded-full border border-ink/15 px-4 py-3 text-center text-sm font-semibold text-ink/45">
-          Sessão esgotada
-        </p>
-      ) : (
-        <Link
-          href={`/reservar/${session.id}`}
-          aria-label={`Reservar vaga na ${session.experienceTitle} em ${dateLabel}, às ${formatSessionTime(session.startsAt)}`}
-          className={buttonVariants({ size: "sm", className: "mt-6 w-full" })}
-        >
-          Reservar vaga
-          <ArrowRight className="size-4" aria-hidden="true" />
-        </Link>
-      )}
+      <div className="mt-auto pt-6">
+        {soldOut ? (
+          <p className="rounded-full border border-ink/15 px-4 py-3 text-center text-sm font-semibold text-ink/45">
+            Sessão esgotada
+          </p>
+        ) : (
+          <Link
+            href={choice.href}
+            aria-label={`Reservar vaga na ${session.experienceTitle} — ${choice.ariaLabel}`}
+            className={buttonVariants({ size: "lg", className: "w-full" })}
+          >
+            Reservar turma das {choice.time}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        )}
+      </div>
     </article>
   );
 }

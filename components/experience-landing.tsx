@@ -10,6 +10,7 @@ import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { Section } from "@/components/section";
+import { SessionTimes, SessionTimesLoading } from "@/components/session-times";
 import { SessionsLoading, SessionsSection } from "@/components/sessions-section";
 import type { PublicExperience } from "@/lib/editorial/experience";
 import { resolveExperienceFaq } from "@/lib/editorial/faq";
@@ -38,13 +39,22 @@ export function ExperienceLanding({ experience }: { experience: PublicExperience
       />
 
       <section id="conteudo" className="bg-paper py-8">
-        <div className="container grid grid-cols-2 gap-4 sm:[grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-          {content.quickFacts.map((fact) => (
-            <div key={`${fact.label}-${fact.value}`} className="rounded-2xl border border-ink/10 bg-white/55 p-5 sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{fact.label}</p>
-              <p className="mt-2 font-semibold">{fact.value}</p>
-            </div>
-          ))}
+        <div className="container space-y-6">
+          {/* As turmas vêm antes dos quick facts de propósito: é a primeira coisa
+              depois do Hero, no lugar onde antes nada dizia que a experiência
+              tem mais de um horário por dia. */}
+          <Suspense fallback={<SessionTimesLoading />}>
+            <SessionTimes experienceSlug={experience.slug} />
+          </Suspense>
+
+          <div className="grid grid-cols-2 gap-4 sm:[grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+            {content.quickFacts.map((fact) => (
+              <div key={`${fact.label}-${fact.value}`} className="rounded-2xl border border-ink/10 bg-white/55 p-5 sm:p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{fact.label}</p>
+                <p className="mt-2 font-semibold">{fact.value}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

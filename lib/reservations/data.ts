@@ -38,27 +38,48 @@ export async function listOpenSessions(client: SupabaseClient, experienceSlug: s
   return (Array.isArray(result.data) ? result.data : []).map((row) => mapBookingSession(row as Row));
 }
 
+export type ReservationConfirmationSummary = { experienceTitle: string; startsAt: string };
+
 /**
- * Título da experiência de uma reserva. Usado só para personalizar a mensagem de
- * contato após o pagamento — nenhum dado pessoal é lido aqui.
- * Devolve string vazia quando a reserva não existe ou a leitura falha.
+ * Experiência e horário de uma reserva, para a tela de retorno do pagamento.
+ *
+ * Personaliza a mensagem de contato e, principalmente, permite repetir na
+ * confirmação a turma que foi realmente reservada — o horário sai de
+ * `sessions.starts_at` pela `session_id` da própria reserva, nunca de um texto
+ * fixo. Nenhum dado pessoal é lido aqui: só título e horário.
+ *
+ * Devolve campos vazios quando a reserva não existe ou a leitura falha.
  */
-export async function getReservationExperienceTitle(client: SupabaseClient, reservationId: string) {
+export async function getReservationConfirmationSummary(
+  client: SupabaseClient,
+  reservationId: string,
+): Promise<ReservationConfirmationSummary> {
+  const empty: ReservationConfirmationSummary = { experienceTitle: "", startsAt: "" };
+
   const reservation = await client
     .from("reservations")
-    .select("experience_id")
+    .select("experience_id, session_id")
     .eq("id", reservationId)
     .maybeSingle();
-  const experienceId = asString(reservation.data?.experience_id);
-  if (reservation.error || !experienceId) return "";
+  if (reservation.error) return empty;
 
-  const experience = await client
-    .from("experiences")
-    .select("title")
-    .eq("id", experienceId)
-    .maybeSingle();
-  if (experience.error) return "";
-  return asString(experience.data?.title);
+  const experienceId = asString(reservation.data?.experience_id);
+  const sessionId = asString(reservation.data?.session_id);
+  if (!experienceId && !sessionId) return empty;
+
+  const [experience, session] = await Promise.all([
+    experienceId
+      ? client.from("experiences").select("title").eq("id", experienceId).maybeSingle()
+      : Promise.resolve(null),
+    sessionId
+      ? client.from("sessions").select("starts_at").eq("id", sessionId).maybeSingle()
+      : Promise.resolve(null),
+  ]);
+
+  return {
+    experienceTitle: experience && !experience.error ? asString(experience.data?.title) : "",
+    startsAt: session && !session.error ? asString(session.data?.starts_at) : "",
+  };
 }
 
 export async function getBookingSession(client: SupabaseClient, sessionId: string) {

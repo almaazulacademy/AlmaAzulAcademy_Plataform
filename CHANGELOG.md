@@ -1,5 +1,16 @@
 # Changelog
 
+## Sprint 6.2 — Clareza das turmas da Imersão Paranoá
+
+- Auditoria do fluxo de reserva (sessão exibida → escolha → `session_id` → resumo → criação → pagamento → confirmação): nenhum defeito técnico encontrado. Horário e `session_id` já saíam da mesma linha de `public.sessions`, sem horário fixo, sem associação por posição e sem erro de fuso.
+- Concentra em `lib/sessions/choice.ts` a única tradução de `sessions.id` + `sessions.starts_at` para o que o cliente vê, e cobre as três turmas com testes de regressão.
+- Anuncia as turmas na página da experiência, com os horários lidos das sessões abertas de verdade — nunca de texto editorial.
+- Reconstrói a escolha da sessão: turmas agrupadas por dia, horário como maior elemento do cartão e cartão inteiro clicável.
+- Mantém o horário escolhido visível e destacado do formulário até a confirmação, incluindo a espera do pagamento, a consulta por CPF + código e o retorno do checkout, que antes não mostravam horário nenhum.
+- Reaproveita uma única leitura de `list_open_sessions` por render entre o destaque das turmas e a grade de datas.
+- Acrescenta diagnóstico somente leitura para conferir horários, turmas duplicadas e coerência reserva/sessão no banco.
+- Não altera reservas antigas, regras de capacidade, pré-reserva, pagamento, InfinitePay, e-mail de confirmação, planilha nem autenticação.
+
 ## Sprint 6.1 — Planilha operacional das turmas
 
 - Sincroniza reservas confirmadas com uma Planilha Google nativa para montagem dos grupos de WhatsApp.

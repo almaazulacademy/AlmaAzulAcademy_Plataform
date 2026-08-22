@@ -96,9 +96,14 @@ test("migration preenche preço, capacidade, campos canônicos e legados", () =>
 });
 
 test("estado sem sessões é genérico, elegante e não cria checkout indevido", () => {
-  assert.match(sessionsSection, /if \(!sessions\.length\) return <EmptyState \/>;/);
+  // Lista vazia, Supabase ausente e falha de leitura caem todos no estado
+  // genérico — nenhum deles inventa sessão, preço ou vaga.
+  assert.match(sessionsSection, /!result\.sessions\.length\) return <EmptyState \/>;/);
+  assert.match(sessionsSection, /result\.status === "UNCONFIGURED"/);
+  assert.match(sessionsSection, /result\.status === "ERROR"\) return <EmptyState error \/>;/);
   assert.match(sessionsSection, /Novas datas serão anunciadas em breve\./);
-  const emptyState = sessionsSection.match(/function EmptyState[\s\S]*?export async function SessionsSection/)?.[0] ?? "";
+  const emptyState = sessionsSection.match(/function EmptyState[\s\S]*?\n}\n/)?.[0] ?? "";
+  assert.ok(emptyState, "função EmptyState não encontrada em sessions-section.tsx");
   assert.doesNotMatch(emptyState, /\/reservar\/|sessionId|checkout|priceCents|remainingSpots/);
   assert.doesNotMatch(emptyState, /R\$\s*0|0 vagas/);
 });
