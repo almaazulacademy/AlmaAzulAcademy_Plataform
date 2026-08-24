@@ -85,6 +85,7 @@ Existem exatamente **três** pontos de chamada, todos em `lib/`. Nenhum endpoint
 | Botão "Verificar pagamento" | `confirmPayment()` | `CONFIRMED` |
 | Confirmação manual do admin | `confirmAdminReservation()` | `ADMIN` |
 | Cancelamento do admin | `cancelAdminReservation()` | `CANCELLED` |
+| Troca de turma do admin | `changeAdminReservationSession()` | `SESSION_CHANGED` + `REBUILD` |
 
 `confirmPayment()` já era o ponto único dos três primeiros caminhos, então basta uma chamada lá para cobrir todos.
 
@@ -115,6 +116,19 @@ Resultado correto, e é o que o código faz:
 - o job fica pendente e é retentado depois.
 
 Também sincroniza em `ALREADY_CONFIRMED`: um webhook repetido vira, de graça, uma nova tentativa do que ficou pendente antes.
+
+### Troca de turma
+
+Quando o admin move uma reserva confirmada de uma turma para outra, a planilha precisa de **duas** escritas — e a ordem tem um motivo:
+
+1. **A reserva** (`SESSION_CHANGED`). O snapshot dela já carrega a turma nova, então a linha de `Reservas do Site` passa a mostrar a nova data e horário, e as linhas de `Vagas Confirmadas` trocam de `session_id`. Como a `Lista da Sessão` é um `FILTER` vivo por `session_id`, os participantes somem da lista antiga e aparecem na nova sem nenhuma escrita adicional. A aba `Sessões` da turma nova também sai daqui, com `Confirmados` e `Vagas restantes` recalculados pelo Supabase.
+2. **A turma antiga** (`REBUILD`). Ela não aparece em nenhum snapshot da reserva, então os totais dela ficariam parados no número de antes. A reconstrução da sessão corrige `Confirmados` e `Vagas restantes`.
+
+As chaves não mudam — `reservation_id` e `reservation_id:índice` continuam as mesmas —, então a troca reescreve as linhas existentes em vez de criar novas. Sincronizar de novo é idempotente.
+
+As duas convergem em qualquer ordem. Se um retry rodar a turma antiga primeiro, ela desativa as vagas que ainda apontam para ela; a sincronização da reserva as devolve, já ativas, na turma nova.
+
+E a regra de sempre continua valendo: uma falha do Google **não** desfaz a troca de turma. A reserva permanece na turma nova no Supabase, o pagamento permanece confirmado, e os dois jobs ficam pendentes para uma próxima tentativa.
 
 ## 3. Estrutura das abas
 

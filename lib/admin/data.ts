@@ -16,10 +16,17 @@ import type {
 } from "@/lib/admin/types";
 import type { ReservationStatus } from "@/lib/reservations/types";
 import { applySessionFilters, sessionListFilterFor } from "@/lib/admin/session-filters";
-import { syncReservationAfterChange } from "@/lib/integrations/google-sheets/service";
+import { syncReservationAfterChange, syncReservationSessionChange } from "@/lib/integrations/google-sheets/service";
 import { sendReservationConfirmationEmail } from "@/lib/reservations/confirmation-email-service";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { emptyExperienceEditorial, validateExperienceEditorial } from "@/lib/editorial/experience";
+import {
+  parseReservationSessionOptions,
+  parseSessionChangeResult,
+  type ReservationSessionChange,
+  type ReservationSessionOptions,
+  type SessionChangeResult,
+} from "@/lib/admin/session-change";
 
 type Row = Record<string, unknown>;
 
@@ -336,6 +343,92 @@ export async function cancelAdminReservation(actorUserId: string, reservationId:
   // e as vagas dela saem da lista operacional da turma.
   if (cancelled) await syncReservationAfterChange(reservationId, "CANCELLED");
   return cancelled;
+}
+
+// --- Troca de turma de uma reserva confirmada -------------------------------
+
+/**
+ * Turmas que a reserva pode receber, já recortadas pelo banco.
+ *
+ * Lida no momento em que o admin abre o modal, e não junto com a listagem: as
+ * vagas restantes mudam a cada reserva confirmada, e o número que importa é o
+ * do instante da decisão.
+ */
+export async function getAdminReservationSessionOptions(
+  actorUserId: string,
+  reservationId: string,
+): Promise<ReservationSessionOptions | null> {
+  const result = await adminClient().rpc("admin_reservation_session_options", {
+    p_actor_id: actorUserId,
+    p_reservation_id: reservationId,
+  });
+  if (result.error) throw new Error(result.error.message);
+  return parseReservationSessionOptions(result.data);
+}
+
+/**
+ * Move a reserva para outra turma e reflete a mudança na planilha.
+ *
+ * A decisão é toda do Supabase: quando a RPC recusa, ela lança e nada é
+ * sincronizado. Quando ela aceita, a mudança já está gravada — e a planilha vem
+ * depois, do mesmo jeito que na confirmação e no cancelamento, porque uma falha
+ * do Google não pode desfazer uma troca de turma já confirmada no banco.
+ *
+ * Nenhum e-mail é disparado aqui: o envio de confirmação é uma-vez-por-reserva
+ * e já aconteceu. Trocar de turma não gera cobrança, estorno nem mensagem
+ * automática ao cliente.
+ */
+export async function changeAdminReservationSession(
+  actorUserId: string,
+  reservationId: string,
+  targetSessionId: string,
+  reason: string,
+): Promise<SessionChangeResult | null> {
+  const result = await adminClient().rpc("admin_change_reservation_session", {
+    p_actor_id: actorUserId,
+    p_reservation_id: reservationId,
+    p_target_session_id: targetSessionId,
+    p_reason: reason,
+  });
+  if (result.error) throw new Error(result.error.message);
+
+  const change = parseSessionChangeResult(result.data);
+  if (!change) return null;
+
+  // Guarda final. As duas sincronizações já embrulham tudo e devolvem PENDING em
+  // vez de propagar, mas nem uma exceção inesperada de importação pode virar um
+  // 500 para uma troca que o Supabase já gravou — o admin leria "falhou" sobre
+  // uma reserva que, de fato, mudou de turma.
+  await syncReservationSessionChange(reservationId, change.previousSessionId).catch(() => undefined);
+  return change;
+}
+
+/** Histórico administrativo de trocas de turma da reserva. Nunca é público. */
+export async function listAdminReservationSessionChanges(
+  actorUserId: string,
+  reservationId: string,
+): Promise<ReservationSessionChange[]> {
+  const result = await adminClient().rpc("admin_list_reservation_session_changes", {
+    p_actor_id: actorUserId,
+    p_reservation_id: reservationId,
+  });
+  if (result.error) throw new Error(result.error.message);
+  return asRows(result.data).map((row) => ({
+    id: asString(row.id),
+    createdAt: asString(row.created_at),
+    actorUserId: nullableString(row.actor_user_id),
+    actorName: asString(row.actor_name),
+    previousSessionId: asString(row.previous_session_id),
+    previousStartsAt: asString(row.previous_starts_at),
+    targetSessionId: asString(row.target_session_id),
+    targetStartsAt: asString(row.target_starts_at),
+    quantity: asNumber(row.quantity),
+    unitPriceCents: asNumber(row.unit_price_cents),
+    totalCents: asNumber(row.total_cents),
+    previousSessionPriceCents: asNumber(row.previous_session_price_cents),
+    targetSessionPriceCents: asNumber(row.target_session_price_cents),
+    reason: nullableString(row.reason),
+  }));
 }
 
 export async function getPlatformSettings(): Promise<PlatformSettings> {

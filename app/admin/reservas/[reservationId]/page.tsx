@@ -6,12 +6,12 @@ import { ReservationActions } from "@/components/admin/reservation-actions";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
-import { getAdminReservation } from "@/lib/admin/data";
+import { getAdminReservation, listAdminReservationSessionChanges } from "@/lib/admin/data";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency, formatMaskedCpf } from "@/lib/admin/format";
 import { isUuid } from "@/lib/admin/validation";
 import { getSheetSyncState, isSheetSyncEnabled } from "@/lib/integrations/google-sheets/service";
 import { getConfirmationEmailState, isConfirmationEmailEnabled } from "@/lib/reservations/confirmation-email-service";
-import { formatSessionDateTime } from "@/lib/sessions/date-time";
+import { formatSessionDateShort, formatSessionDateTime, formatSessionTime } from "@/lib/sessions/date-time";
 
 export const metadata = { title: "Detalhe da reserva" };
 
@@ -28,6 +28,11 @@ export default async function AdminReservationDetailPage({ params }: { params: P
   const sheetEnabled = isSheetSyncEnabled();
   const sheetSync = sheetEnabled ? await getSheetSyncState("RESERVATION", reservation.id) : null;
   const sheetStatus = sheetSync?.status ?? "NEVER_SYNCED";
+
+  // Histórico administrativo de trocas de turma. Interno: nem o motivo nem a
+  // turma anterior aparecem em qualquer página pública. Uma falha aqui não pode
+  // esconder o detalhe da reserva.
+  const sessionChanges = await listAdminReservationSessionChanges(context.profile.userId, reservation.id).catch(() => []);
 
   const emailEnabled = isConfirmationEmailEnabled();
   const emailState = emailEnabled ? await getConfirmationEmailState(reservation.id) : null;
@@ -102,6 +107,32 @@ export default async function AdminReservationDetailPage({ params }: { params: P
                     ? "Ainda não enviado para esta reserva."
                     : "O e-mail só é enviado quando a reserva é confirmada."}
           </p>
+        </section>
+      ) : null}
+      {sessionChanges.length ? (
+        <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6">
+          <h2 className="text-sm font-semibold">Histórico de turma</h2>
+          <p className="mt-2 text-sm text-ink/50">Registro interno. O valor pago e o código da reserva são preservados em toda alteração.</p>
+          <ul className="mt-5 space-y-4">
+            {sessionChanges.map((change) => (
+              <li key={change.id} className="rounded-2xl border border-ink/10 bg-mist/40 p-4">
+                <p className="text-sm font-semibold text-ink">
+                  {formatSessionDateShort(change.previousStartsAt)} · {formatSessionTime(change.previousStartsAt)}
+                  {" → "}
+                  {formatSessionDateShort(change.targetStartsAt)} · {formatSessionTime(change.targetStartsAt)}
+                </p>
+                <p className="mt-1 text-xs text-ink/50">
+                  {formatAdminDateTime(change.createdAt)} · {change.actorName || "Administrador removido"} · {change.quantity} {change.quantity === 1 ? "participante" : "participantes"} · {formatCurrency(change.totalCents)} preservados
+                </p>
+                {change.previousSessionPriceCents !== change.targetSessionPriceCents ? (
+                  <p className="mt-1 text-xs text-ink/50">
+                    As turmas tinham preços diferentes ({formatCurrency(change.previousSessionPriceCents)} e {formatCurrency(change.targetSessionPriceCents)}). Nenhuma diferença foi cobrada ou estornada.
+                  </p>
+                ) : null}
+                {change.reason ? <p className="mt-2 whitespace-pre-wrap text-sm text-ink/70">{change.reason}</p> : null}
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
       <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Observações</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/60">{reservation.notes ?? "Nenhuma observação informada."}</p></section>

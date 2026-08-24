@@ -130,6 +130,31 @@ export function isReservedExperienceSlug(slug: string) {
   return RESERVED_EXPERIENCE_SLUGS.has(slug);
 }
 
+/**
+ * Payload de "Alterar turma".
+ *
+ * O motivo é **opcional** aqui, ao contrário de confirmar e cancelar: a troca
+ * de horário costuma ser um pedido banal do cliente, e exigir justificativa
+ * levaria o admin a digitar qualquer coisa. Quando vem, é registrado no
+ * histórico — e nunca aparece no site público.
+ */
+export function validateReservationSessionChange(value: unknown): ValidationResult<{
+  targetSessionId: string;
+  reason: string;
+}> {
+  if (!isRecord(value)) return { success: false, errors: { form: "Dados inválidos." } };
+  const targetSessionId = String(value.targetSessionId ?? "").trim();
+  const reason = String(value.reason ?? "").trim().replace(/\s+/g, " ");
+  const errors: Record<string, string> = {};
+
+  if (!isUuid(targetSessionId)) errors.targetSessionId = "Selecione a nova turma.";
+  if (reason.length > 500) errors.reason = "Use no máximo 500 caracteres.";
+
+  return Object.keys(errors).length
+    ? { success: false, errors }
+    : { success: true, data: { targetSessionId, reason } };
+}
+
 export function validateReservationAdminAction(value: unknown): ValidationResult<{
   action: "CONFIRM_PAYMENT" | "CANCEL";
   reason: string;

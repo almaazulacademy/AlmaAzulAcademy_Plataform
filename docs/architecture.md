@@ -97,6 +97,8 @@ docs/                        documentação técnica e de produto
 | `POST /api/admin/experiences` | Cria experiência |
 | `PATCH /api/admin/experiences/[experienceId]` | Atualiza conteúdo, ordem e status |
 | `POST /api/admin/reservations/[reservationId]/actions` | Confirma manualmente ou cancela com motivo e auditoria |
+| `GET /api/admin/reservations/[reservationId]/session-options` | Lista as turmas de destino disponíveis para a reserva |
+| `POST /api/admin/reservations/[reservationId]/change-session` | Move uma reserva confirmada para outra turma da mesma experiência |
 
 Todas as mutações administrativas validam sessão, autorização, origem e payload no servidor antes de chamar RPCs exclusivas da service role.
 

@@ -18,7 +18,7 @@ Permitir que a equipe opere experiências, sessões e reservas sem acessar diret
 | `/admin` | Indicadores operacionais e acesso a nova sessão |
 | `/admin/sessoes` | Criar, editar, duplicar, abrir, fechar, excluir sessões sem histórico e arquivar/restaurar sessões com histórico |
 | `/admin/reservas` | Listar e filtrar reservas |
-| `/admin/reservas/[reservationId]` | Ver dados, pagamento e ações de uma reserva |
+| `/admin/reservas/[reservationId]` | Ver dados, pagamento, histórico de turma e ações de uma reserva |
 | `/admin/experiencias` | Criar, editar, publicar, arquivar e ordenar experiências |
 | `/admin/configuracoes` | Consultar configurações operacionais sem editar dados sensíveis |
 
@@ -164,6 +164,40 @@ A confirmação manual:
 - rejeita reservas canceladas e sessões canceladas.
 
 Cancelar uma reserva confirmada libera a vaga, mas não executa estorno no provedor. A interface avisa isso antes da confirmação; conciliação e estorno permanecem processos operacionais separados.
+
+## Alterar turma
+
+Uma reserva `CONFIRMED` pode trocar de dia ou horário sem cancelamento, sem nova cobrança e sem nova reserva. A ação existe **apenas** no painel: nenhuma rota pública, nenhuma tela de cliente e nenhuma RPC acessível por `anon` ou `authenticated` permite trocar de turma.
+
+A ação aparece no cartão da reserva em `/admin/reservas` e no detalhe, como **Alterar turma**. O modal tem duas etapas:
+
+1. **Escolher.** Mostra a turma atual (experiência, data, horário, participantes e valor pago) e as turmas de destino disponíveis, agrupadas por dia, com horário em destaque, vagas restantes, capacidade e status. Um campo opcional de motivo fica no fim.
+2. **Confirmar.** Repete de onde para onde a reserva vai, quantos participantes e as três garantias: a reserva continua confirmada, o pagamento não muda e o código é preservado.
+
+A lista de destinos é lida quando o modal abre, e não junto com a listagem: as vagas restantes mudam a cada confirmação, e o número que importa é o do instante da decisão.
+
+`admin_change_reservation_session` executa a mudança inteira em uma transação:
+
+- trava a reserva e **as duas** sessões, sempre na ordem dos ids — o que impede deadlock quando duas trocas cruzam origem e destino;
+- exige `CONFIRMED`, sessão de destino existente, aberta, futura, da mesma experiência e diferente da atual;
+- expira as retenções vencidas do destino e recalcula a ocupação real antes de decidir;
+- recusa a mudança inteira quando a reserva não cabe: não existe mover parte dos participantes;
+- altera somente `session_id`; status, `confirmed_at`, `public_code`, cliente, CPF, quantidade, `unit_price_cents` e `total_cents` permanecem como estavam;
+- grava o histórico e a linha de auditoria dentro da mesma transação.
+
+Qualquer recusa aborta tudo: nem o vínculo, nem o histórico, nem a auditoria sobrevivem parcialmente.
+
+### Preço diferente entre as turmas
+
+O valor pago é preservado. `unit_price_cents` é coluna da própria reserva e `total_cents` é gerada a partir dela, então nenhuma diferença de preço entre as sessões é recalculada, cobrada ou estornada. Os dois preços ficam registrados no histórico, e o detalhe da reserva avisa quando eles divergiram. Ajuste financeiro continua sendo processo operacional separado.
+
+### Histórico
+
+`reservation_session_changes` guarda reserva, sessão anterior, sessão nova, data e hora, administrador responsável, quantidade de participantes, valor preservado, os preços das duas turmas e o motivo opcional. O histórico aparece no detalhe da reserva, é interno e nunca é exposto em página pública. A trilha única `admin_audit_log` também recebe uma linha `RESERVATION_SESSION_CHANGED`.
+
+### Limite desta versão
+
+A troca acontece entre sessões da **mesma experiência**. Mudar de experiência é mudar de produto, não de horário: mexeria em `reservations.experience_id` e exigiria a cobrança ou o estorno que esta versão deliberadamente não faz. O banco recusa com `SESSION_EXPERIENCE_MISMATCH`.
 
 ## Configurações
 
