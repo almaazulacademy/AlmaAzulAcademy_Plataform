@@ -1,5 +1,22 @@
 # Changelog
 
+## Sprint 6.3 — Alterar turma de uma reserva confirmada
+
+- Auditoria do fluxo `reserva confirmada → sessão → vagas → pagamento → cancelamento → planilha` antes de qualquer alteração de código.
+- Adiciona a ação administrativa **Alterar turma** na listagem e no detalhe de uma reserva `CONFIRMED`, com escolha em duas etapas e confirmação explícita de para onde a reserva vai.
+- Move a reserva por `admin_change_reservation_session`, uma operação transacional que trava a reserva e as duas sessões — sempre na ordem dos ids — e recalcula a ocupação real do destino antes de decidir.
+- Recusa turma inexistente, fechada, passada, de outra experiência, a própria turma da reserva e qualquer destino sem vagas para o grupo inteiro; não existe mover parte dos participantes.
+- Preserva `public_code`, cliente, CPF, quantidade, status `CONFIRMED`, `confirmed_at` e o valor pago: a operação altera exatamente `session_id`.
+- Não gera cobrança, estorno, evento de pagamento, reserva nova nem mensagem automática ao cliente.
+- Preserva o valor quando as duas turmas têm preços diferentes, registra os dois preços no histórico e avisa no detalhe da reserva; ajuste financeiro continua sendo processo operacional separado.
+- Cria `reservation_session_changes` com reserva, sessão anterior, sessão nova, ator, quantidade, valor preservado, preços e motivo opcional, e mantém a linha correspondente em `admin_audit_log`.
+- Reflete a mudança na planilha operacional: a reserva passa a ocupar a turma nova e a turma antiga é reconstruída, mantendo `Sessões`, `Reservas do Site`, `Vagas Confirmadas` e `Lista da Sessão` coerentes e idempotentes.
+- Mantém a garantia da integração: uma falha do Google Sheets não desfaz a troca já confirmada no Supabase; os jobs ficam pendentes para retry.
+- Restringe esta versão a sessões da mesma experiência, com recusa no banco (`SESSION_EXPERIENCE_MISMATCH`).
+- Extrai `adminMutationError` para um módulo sem dependência do Next, permitindo cobrir cada recusa do banco com o runner nativo de testes.
+- Acrescenta diagnóstico transacional (`ROLLBACK` ao fim) para validar a operação e a concorrência contra um Postgres real.
+- Não altera regras de disponibilidade, capacidade, pré-reserva, expiração, pagamento, InfinitePay, e-mail de confirmação, autenticação nem nenhuma migration histórica.
+
 ## Sprint 6.2 — Clareza das turmas da Imersão Paranoá
 
 - Auditoria do fluxo de reserva (sessão exibida → escolha → `session_id` → resumo → criação → pagamento → confirmação): nenhum defeito técnico encontrado. Horário e `session_id` já saíam da mesma linha de `public.sessions`, sem horário fixo, sem associação por posição e sem erro de fuso.

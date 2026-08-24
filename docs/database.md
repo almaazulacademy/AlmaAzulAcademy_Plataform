@@ -63,6 +63,7 @@ Exclusões de experiências, sessões e reservas relacionadas usam `ON DELETE RE
 - `admin_users`: autoriza o UUID do Supabase Auth, nome de exibição, papel `ADMIN`/`OPERATOR` e estado ativo.
 - `admin_audit_log`: registra ator, ação, entidade, motivo e metadados das mutações.
 - `platform_settings`: singleton com nome da empresa, WhatsApp, email e PIX, consultado como somente leitura pelo MVP.
+- `reservation_session_changes`: histórico tipado das trocas administrativas de turma — reserva, sessão anterior, sessão nova, ator, quantidade, valor preservado, preço das duas sessões e motivo opcional. Adicionada pela migration `202608240001_admin_change_reservation_session.sql`, com `on delete restrict` nas três FKs para o histórico não sumir junto com uma sessão excluída.
 
 A migration também adiciona `sessions.internal_notes`, `experiences.image_url` e `experiences.display_order` com limites e índices apropriados.
 
@@ -233,6 +234,7 @@ Não há policy pública de leitura para `reservations` ou `payment_events`; pri
 | `202608010001_reservation_platform.sql` | Schema completo de reservas, funções, RLS, seed da primeira experiência e cron |
 | `202608010002_admin_dashboard_mvp.sql` | Autorização administrativa, auditoria, configurações e RPCs operacionais |
 | `202608020001_legacy_schema_compatibility.sql` | Bootstrap idempotente e não destrutivo para o schema legado |
+| `202608240001_admin_change_reservation_session.sql` | Histórico tipado e RPC transacional da troca administrativa de turma |
 
 ## RPCs administrativas
 
@@ -241,5 +243,26 @@ As funções `admin_dashboard_metrics`, `admin_list_experiences`, `admin_list_se
 Todas exigem um ator ativo, usam `SECURITY DEFINER` com `search_path` explícito e têm execução revogada de `public`, `anon` e `authenticated`. Somente `service_role` recebe `EXECUTE`; o servidor deriva `p_actor_id` da sessão validada, nunca do payload do cliente.
 
 Confirmação manual e alteração de capacidade bloqueiam os registros necessários e recalculam a ocupação. Trocar a experiência de uma sessão com histórico e excluir uma sessão com reservas são proibidos.
+
+### Troca de turma de uma reserva confirmada
+
+`admin_change_reservation_session(actor, reservation, target_session, reason)` move uma reserva `CONFIRMED` para outra sessão da mesma experiência, dentro de uma transação:
+
+1. trava a reserva com `FOR UPDATE`;
+2. exige status `CONFIRMED` e destino diferente da sessão atual;
+3. trava origem e destino com `FOR UPDATE`, **sempre na ordem dos ids** — a ordem fixa é o que evita deadlock entre duas trocas que cruzam origem e destino;
+4. exige destino existente, da mesma experiência, `OPEN` e futuro;
+5. expira as retenções vencidas do destino e recalcula a ocupação real;
+6. rejeita com `INSUFFICIENT_SPOTS` quando a reserva inteira não cabe;
+7. altera somente `session_id`;
+8. grava `reservation_session_changes` e `admin_audit_log`.
+
+A vaga é liberada e ocupada pelo próprio vínculo: `available_spots` soma as reservas por `session_id`, então mover a linha já corrige as duas turmas, sem contador paralelo.
+
+`admin_reservation_session_options(actor, reservation)` devolve a turma atual e as candidatas — mesma experiência, futuras, `OPEN`, com `remainingSpots`, `capacity`, `status` e um `fits` calculado no banco. `admin_list_reservation_session_changes(actor, reservation)` devolve o histórico para o detalhe da reserva.
+
+As três exigem ator administrativo ativo, são `SECURITY DEFINER` com `search_path` explícito e têm execução revogada de `public`, `anon` e `authenticated`.
+
+Nada nessa operação cria reserva, cancela reserva, grava `payment_events` ou altera `unit_price_cents`/`total_cents`: o valor pago sobrevive a qualquer diferença de preço entre as duas sessões, que é apenas registrada no histórico.
 
 Antes de aplicar em um banco com tabelas anteriores, faça backup e revise colunas/dados existentes. Este repositório não contém uma migration anterior nem um dump de produção que permita comprovar compatibilidade de dados.

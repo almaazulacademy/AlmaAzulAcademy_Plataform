@@ -816,3 +816,169 @@ test("uma posição de linha inválida falha alto em vez de corromper a planilha
   assert.match(guarda, /rowNumber < FIRST_DATA_ROW/);
   assert.match(guarda, /throw new Error/);
 });
+
+// --- Troca de turma de uma reserva confirmada -------------------------------
+//
+// O admin move uma reserva paga das 09:00 para as 12:00. A planilha precisa
+// acompanhar: a reserva deixa de ocupar a turma antiga e os participantes
+// aparecem na nova, sem duplicar ninguém e sem apagar histórico.
+//
+// A `Lista da Sessão` não é escrita pela sincronização — ela é um FILTER vivo
+// sobre `Vagas Confirmadas` por `session_id`. Por isso os testes abaixo
+// verificam a coluna `session_id` das vagas: é ela que decide em qual lista a
+// pessoa aparece.
+
+const SESSION_1200: SessionSnapshot = {
+  ...SESSION,
+  id: "5b1a0000-0000-4000-8000-00000000bbbb",
+  startsAt: "2026-09-06T15:00:00.000Z", // 12:00 em Brasília, mesmo dia
+};
+
+/** As vagas que a `Lista da Sessão` mostraria para uma turma. */
+function activeSpotsOf(sheets: FakeSheets, sessionId: string) {
+  const sessionColumn = column(SPOT_HEADERS, "session_id");
+  const activeColumn = column(SPOT_HEADERS, "Ativo");
+  return sheets
+    .dataRows(SPOTS_TAB)
+    .filter((row) => row[sessionColumn] === sessionId && row[activeColumn] === ACTIVE_YES);
+}
+
+function sessionRowOf(sheets: FakeSheets, sessionId: string) {
+  return sheets.dataRows(SESSIONS_TAB).find((row) => row[column(SESSION_HEADERS, "session_id")] === sessionId);
+}
+
+test("troca de turma: as vagas migram para a nova sessão sem duplicar ninguém", async () => {
+  const sheets = createFakeSheets();
+  const paid = reservation({ quantity: 3, totalCents: 21000 });
+
+  // Estado antes: três vagas ocupadas nas 09:00.
+  await sync(sheets, snapshot([paid], { confirmedSpots: 3, remainingSpots: 25 }));
+  assert.equal(activeSpotsOf(sheets, SESSION.id).length, 3);
+
+  // O Supabase já moveu a reserva. A sincronização reflete o novo vínculo.
+  await sync(sheets, { session: { ...SESSION_1200, confirmedSpots: 3, remainingSpots: 25 }, reservations: [paid] });
+
+  assert.equal(activeSpotsOf(sheets, SESSION.id).length, 0, "a turma antiga não conta mais estas vagas");
+  assert.equal(activeSpotsOf(sheets, SESSION_1200.id).length, 3, "a turma nova recebe as três");
+  assert.equal(sheets.dataRows(SPOTS_TAB).length, 3, "as mesmas linhas mudam de turma; nenhuma é criada");
+  assert.equal(sheets.dataRows(RESERVATIONS_TAB).length, 1, "continua sendo uma única reserva");
+});
+
+test("troca de turma: a linha da reserva passa a mostrar a nova data e horário", async () => {
+  const sheets = createFakeSheets();
+  const paid = reservation({ quantity: 3, totalCents: 21000 });
+
+  await sync(sheets, snapshot([paid]));
+  await sync(sheets, { session: SESSION_1200, reservations: [paid] });
+
+  const row = sheets.dataRows(RESERVATIONS_TAB)[0];
+  assert.equal(row[column(RESERVATION_HEADERS, "session_id")], SESSION_1200.id);
+  assert.equal(row[column(RESERVATION_HEADERS, "Horário")], "12:00");
+  assert.equal(row[column(RESERVATION_HEADERS, "Data")], "06/09/2026");
+
+  // O que não muda: código, pessoas, valor pago e status.
+  assert.equal(row[column(RESERVATION_HEADERS, "Código da reserva")], "AZ7K2M9QX1");
+  assert.equal(row[column(RESERVATION_HEADERS, "Pessoas")], 3);
+  assert.equal(row[column(RESERVATION_HEADERS, "Valor total pago")], 210);
+  assert.equal(row[column(RESERVATION_HEADERS, "Status da reserva")], "Confirmada");
+});
+
+test("troca de turma: os totais das duas turmas ficam corretos", async () => {
+  const sheets = createFakeSheets();
+  const paid = reservation({ quantity: 3, totalCents: 21000 });
+
+  await sync(sheets, snapshot([paid], { confirmedSpots: 3, remainingSpots: 25 }));
+
+  // 1. A reserva, que carrega a turma nova.
+  await sync(sheets, { session: { ...SESSION_1200, confirmedSpots: 3, remainingSpots: 25 }, reservations: [paid] });
+  // 2. A turma antiga, que não aparece em nenhum snapshot da reserva e por isso
+  //    precisa da reconstrução para zerar os próprios números.
+  await sync(sheets, { session: { ...SESSION, confirmedSpots: 0, remainingSpots: 28 }, reservations: [] }, true);
+
+  const previous = sessionRowOf(sheets, SESSION.id);
+  const next = sessionRowOf(sheets, SESSION_1200.id);
+  assert.ok(previous && next, "as duas turmas continuam na aba Sessões");
+  assert.equal(previous[column(SESSION_HEADERS, "Confirmados")], 0);
+  assert.equal(previous[column(SESSION_HEADERS, "Vagas restantes")], 28);
+  assert.equal(next[column(SESSION_HEADERS, "Confirmados")], 3);
+  assert.equal(next[column(SESSION_HEADERS, "Vagas restantes")], 25);
+
+  // A reconstrução da turma antiga não pode desativar vagas que já migraram.
+  assert.equal(activeSpotsOf(sheets, SESSION_1200.id).length, 3);
+});
+
+test("troca de turma: a ordem inversa das sincronizações converge para o mesmo resultado", async () => {
+  const sheets = createFakeSheets();
+  const paid = reservation({ quantity: 3, totalCents: 21000 });
+  await sync(sheets, snapshot([paid], { confirmedSpots: 3, remainingSpots: 25 }));
+
+  // A turma antiga é reconstruída primeiro — o caso de a sincronização da
+  // reserva ter falhado e um retry pegar os jobs fora de ordem. As vagas ficam
+  // temporariamente desativadas...
+  await sync(sheets, { session: { ...SESSION, confirmedSpots: 0, remainingSpots: 28 }, reservations: [] }, true);
+  assert.equal(activeSpotsOf(sheets, SESSION.id).length, 0);
+
+  // ...e a sincronização da reserva as devolve, já na turma nova.
+  await sync(sheets, { session: { ...SESSION_1200, confirmedSpots: 3, remainingSpots: 25 }, reservations: [paid] });
+
+  assert.equal(activeSpotsOf(sheets, SESSION_1200.id).length, 3);
+  assert.equal(activeSpotsOf(sheets, SESSION.id).length, 0);
+  assert.equal(sheets.dataRows(SPOTS_TAB).length, 3);
+});
+
+test("17. repetir a sincronização depois da troca permanece idempotente", async () => {
+  const sheets = createFakeSheets();
+  const paid = reservation({ quantity: 3, totalCents: 21000 });
+  await sync(sheets, snapshot([paid], { confirmedSpots: 3, remainingSpots: 25 }));
+
+  const moved: SyncSnapshot = {
+    session: { ...SESSION_1200, confirmedSpots: 3, remainingSpots: 25 },
+    reservations: [paid],
+  };
+
+  await sync(sheets, moved);
+  const afterFirst = JSON.stringify([
+    sheets.grid(SESSIONS_TAB),
+    sheets.grid(RESERVATIONS_TAB),
+    sheets.grid(SPOTS_TAB),
+  ]);
+
+  for (let attempt = 0; attempt < 10; attempt += 1) await sync(sheets, moved);
+
+  assert.equal(
+    JSON.stringify([sheets.grid(SESSIONS_TAB), sheets.grid(RESERVATIONS_TAB), sheets.grid(SPOTS_TAB)]),
+    afterFirst,
+    "dez retries precisam deixar a planilha byte a byte igual",
+  );
+  assert.equal(sheets.dataRows(SPOTS_TAB).length, 3);
+  assert.equal(sheets.dataRows(RESERVATIONS_TAB).length, 1);
+});
+
+test("16. uma falha do Google durante a troca não altera nada no Supabase", async () => {
+  const sheets = createFakeSheets();
+  const paid = reservation({ quantity: 3, totalCents: 21000 });
+  await sync(sheets, snapshot([paid], { confirmedSpots: 3, remainingSpots: 25 }));
+
+  sheets.failNextCalls(1);
+  const moved: SyncSnapshot = {
+    session: { ...SESSION_1200, confirmedSpots: 3, remainingSpots: 25 },
+    reservations: [paid],
+  };
+  await assert.rejects(() => sync(sheets, moved), "a escrita falha…");
+
+  // …e a planilha continua exatamente no estado anterior, sem meia migração.
+  assert.equal(activeSpotsOf(sheets, SESSION.id).length, 3);
+  assert.equal(activeSpotsOf(sheets, SESSION_1200.id).length, 0);
+
+  // O retry seguinte completa a migração. O Supabase nunca foi consultado nem
+  // alterado por nada disso: este motor só escreve na planilha.
+  await sync(sheets, moved);
+  assert.equal(activeSpotsOf(sheets, SESSION_1200.id).length, 3);
+  assert.equal(activeSpotsOf(sheets, SESSION.id).length, 0);
+
+  // O motor de sincronização não tem como desfazer nada no banco: ele recebe um
+  // snapshot pronto e só escreve na planilha. Não importa Supabase, não importa
+  // cliente de banco, não executa RPC.
+  const engine = source("lib/integrations/google-sheets/sync.ts");
+  assert.doesNotMatch(engine, /getSupabaseAdminClient|supabase\/server|\.rpc\(/);
+});

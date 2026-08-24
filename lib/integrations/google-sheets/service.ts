@@ -29,7 +29,7 @@ import { syncSnapshot } from "./sync.ts";
 
 export type SheetSyncEntity = "RESERVATION" | "SESSION";
 
-export type SheetSyncOperation = "CONFIRMED" | "CANCELLED" | "ADMIN" | "REBUILD";
+export type SheetSyncOperation = "CONFIRMED" | "CANCELLED" | "ADMIN" | "REBUILD" | "SESSION_CHANGED";
 
 export type SheetSyncOutcome = "SYNCED" | "PENDING" | "DISABLED";
 
@@ -254,6 +254,37 @@ export async function syncReservationAfterChange(
   } catch {
     return { outcome: "PENDING", errorCode: "UNEXPECTED_ERROR" };
   }
+}
+
+/**
+ * Reflete na planilha a troca de turma de uma reserva já confirmada.
+ *
+ * Duas escritas, nesta ordem e por um motivo:
+ *
+ *   1. **A reserva.** O snapshot dela carrega a turma *nova*, então a linha de
+ *      `Reservas do Site` passa a mostrar a nova data e horário, as linhas de
+ *      `Vagas Confirmadas` trocam de `session_id` — e, como a `Lista da Sessão`
+ *      é um FILTER vivo por `session_id`, os participantes somem da lista antiga
+ *      e aparecem na nova sem nenhuma escrita adicional. A aba `Sessões` da
+ *      turma nova também sai daqui, com capacidade e vagas recalculadas pelo
+ *      Supabase.
+ *
+ *   2. **A turma antiga.** Ela não aparece em nenhum dos dois snapshots acima,
+ *      então os totais dela continuariam parados no número de antes. A
+ *      reconstrução da sessão corrige `Confirmados` e `Vagas restantes`.
+ *
+ * Nenhuma das duas pode derrubar a mudança: quando o Google falha, o job fica
+ * pendente e a reserva continua na turma nova no Supabase. As duas convergem em
+ * qualquer ordem — se a turma antiga for sincronizada primeiro, ela desativa as
+ * vagas movidas e a sincronização da reserva as reativa na turma nova.
+ */
+export async function syncReservationSessionChange(
+  reservationId: string,
+  previousSessionId: string,
+): Promise<{ reservation: SheetSyncResult; previousSession: SheetSyncResult }> {
+  const reservation = await syncReservationAfterChange(reservationId, "SESSION_CHANGED");
+  const previousSession = await syncSessionList(previousSessionId);
+  return { reservation, previousSession };
 }
 
 /** Reconstrói a lista inteira de uma sessão a partir do Supabase. */

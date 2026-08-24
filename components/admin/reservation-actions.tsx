@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CheckCircle2, Copy, ExternalLink, Mail, MailCheck, MessageCircle, RotateCcw, SearchCheck, Sheet, XCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, Copy, ExternalLink, Mail, MailCheck, MessageCircle, RotateCcw, SearchCheck, Sheet, XCircle } from "lucide-react";
 
+import { ChangeSessionDialog } from "@/components/admin/change-session-dialog";
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   const [verifying, setVerifying] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [resending, setResending] = useState(false);
+  const [changingSession, setChangingSession] = useState(false);
 
   const verifyPayment = async () => {
     setVerifying(true);
@@ -133,6 +135,13 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   return (
     <>
       <div className="flex flex-wrap gap-2">
+        {/* Trocar de dia ou horário depois do pagamento. Só faz sentido — e só
+            é permitido pelo banco — em uma reserva confirmada. */}
+        {status === "CONFIRMED" ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => setChangingSession(true)}>
+            <CalendarClock className="size-4" /> Alterar turma
+          </Button>
+        ) : null}
         {status !== "CONFIRMED" && status !== "CANCELLED" ? (
           <Button type="button" size="sm" variant="ghost" disabled={verifying} onClick={verifyPayment}>
             <SearchCheck className="size-4" /> {verifying ? "Verificando…" : "Verificar pagamento"}
@@ -162,6 +171,11 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
         {showMessageButton ? <Button type="button" size="sm" onClick={openWhatsappDraft}><MessageCircle className="size-4" /> Enviar mensagem</Button> : null}
       </div>
 
+      <ChangeSessionDialog
+        open={changingSession}
+        reservationId={reservationId}
+        onClose={() => setChangingSession(false)}
+      />
       <ConfirmationDialog
         open={action === "confirm"}
         title="Confirmar pagamento manualmente?"
