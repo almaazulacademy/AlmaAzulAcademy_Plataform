@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 import { getPaymentProvider } from "@/lib/payments";
+import { drainReconciliationOpportunistically } from "@/lib/reservations/payment-reconciliation";
 import { validateReservationInput } from "@/lib/reservations/validation";
 import { SITE_URL } from "@/lib/site";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
@@ -107,6 +108,12 @@ export async function POST(request: Request) {
       p_checkout_url: checkout.checkoutUrl,
     });
     if (attachment.error || attachment.data !== true) throw new Error("Não foi possível vincular o checkout.");
+
+    // Alguém acabou de começar a pagar: é quando existem reservas em risco para
+    // conferir. Roda depois da resposta e nunca atrasa o cliente. O cron diário
+    // do plano Hobby continua valendo como varredura de fundo.
+    after(() => drainReconciliationOpportunistically());
+
     return NextResponse.json({ ...created, checkoutUrl: checkout.checkoutUrl }, { status: 201 });
   } catch (error) {
     await admin.rpc("cancel_pre_reservation", { p_reservation_id: created.reservationId });

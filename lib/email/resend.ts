@@ -24,7 +24,11 @@ export type ResendConfiguration = {
 export class ResendProvider implements EmailProvider {
   readonly name = "RESEND";
 
-  constructor(private readonly configuration: ResendConfiguration) {}
+  private readonly configuration: ResendConfiguration;
+
+  constructor(configuration: ResendConfiguration) {
+    this.configuration = configuration;
+  }
 
   async send(message: EmailMessage): Promise<void> {
     let response: Response;

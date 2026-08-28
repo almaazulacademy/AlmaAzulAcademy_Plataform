@@ -1,5 +1,28 @@
 # Changelog
 
+## Sprint 6.4 — Confiabilidade da confirmação de pagamento (P0)
+
+- Auditoria completa do fluxo `PRE_RESERVED → checkout → webhook → payment_events → confirmPayment → RPC → CONFIRMED → available_spots → expiração` antes de qualquer alteração de código.
+- **Causa raiz:** a expiração assumia que ausência de confirmação é ausência de pagamento. `expire_pre_reservations()` liberava a vaga pelo relógio, e `available_spots()` parava de contar a pré-reserva no instante em que `expires_at` passava — sem nunca perguntar à InfinitePay se o cliente havia pago.
+- **Causa contribuinte:** o webhook era o único caminho automático de confirmação. O retorno do checkout depende do cliente voltar ao site e a verificação administrativa depende de alguém clicar, então qualquer webhook perdido, atrasado ou rejeitado virava vaga revendida.
+- Introduz janela de segurança na expiração: uma pré-reserva vencida que chegou a gerar checkout entra em retenção em vez de liberar a vaga, e registra `EXPIRATION_HELD_FOR_PAYMENT_CHECK`.
+- Implementa a retenção empurrando o próprio `expires_at`, o que faz `available_spots`, `create_pre_reservation`, `admin_confirm_reservation`, `admin_change_reservation_session` e `confirm_reservation_payment` respeitarem a janela sem serem reescritas. O prazo original do cliente fica preservado em `original_expires_at`.
+- Adiciona reconciliação automática que consulta a InfinitePay sem depender de webhook nem de navegador, com reivindicação `for update skip locked` e três desfechos: pago confirma, comprovadamente não pago libera, e **estado incerto retém**.
+- Garante que erro de rede, timeout e resposta ilegível do gateway nunca sejam tratados como "não pagou": só um veredito positivo de não pagamento devolve a vaga ao mercado.
+- Limita a retenção por um teto absoluto contado do prazo original, e grava `PAYMENT_HOLD_EXHAUSTED` antes de liberar quando a janela termina sem resposta definitiva. Nenhuma vaga volta ao mercado em silêncio.
+- Corrige a rejeição de cartão parcelado com juros pagos pelo cliente: a igualdade exata de valor virava `PAYMENT_AMOUNT_MISMATCH` terminal, respondido com HTTP 200. Passa a exigir que o maior valor observado cubra o total; cobrança a menor continua sendo divergência.
+- Reconhece aprovação sinalizada por `status` textual, que antes virava `NOT_PAID` definitivo e silencioso.
+- Torna o webhook tolerante a `application/x-www-form-urlencoded` e a JSON com `Content-Type` errado, formatos que antes viravam HTTP 400 sem deixar rastro.
+- Tira planilha e e-mail do caminho crítico do webhook (`after()`): somavam até dezesseis segundos de rede a uma resposta que o gateway espera curta.
+- Cria `payment_webhook_log`, a primeira trilha que aceita webhook sem reserva correspondente — o caso que `payment_events` não consegue guardar e que era impossível diagnosticar.
+- Registra etapas nomeadas (`WEBHOOK_RECEIVED`, `PAYMENT_APPROVED`, `CONFIRM_SUCCESS`, `RECONCILIATION_FAILED`, `EXPIRATION_HELD_FOR_PAYMENT_CHECK`…) sem PII e sem segredo, com formato garantido por CHECK no banco.
+- Adiciona **Pagamentos para revisar** no painel administrativo, com contador no dashboard: pagamento aprovado sem vaga, pago e não confirmado, valor divergente, janela esgotada, reconciliação falhando, expirada com sinal de pagamento e webhook órfão.
+- Corrige o status de pagamento do painel, que exibia `NOT_PAID` para reservas recuperadas pela reconciliação porque o `CASE` não conhecia `PAYMENT_CONFIRMED_RECONCILED`.
+- Define o comportamento de pagamento tardio: confirma quando ainda cabe, e gera incidente explícito e permanente quando não cabe. Um pagamento aprovado nunca é tratado como inexistente.
+- Acrescenta 54 testes de falha — webhook duplicado, atrasado, pós-expiração, gateway fora do ar, Supabase indisponível, confirmações simultâneas, pagamento tardio com e sem capacidade — rodando contra o código de produção com portas injetadas, mais um self-test transacional contra Postgres real.
+- Acrescenta script forense somente leitura para produção, com identificadores mascarados e sem CPF, nome, telefone, e-mail, token ou payload integral.
+- Não altera preços, capacidades, reservas existentes, regras de criação de pré-reserva, autenticação, planilha nem e-mail de confirmação.
+
 ## Sprint 6.3 — Alterar turma de uma reserva confirmada
 
 - Auditoria do fluxo `reserva confirmada → sessão → vagas → pagamento → cancelamento → planilha` antes de qualquer alteração de código.

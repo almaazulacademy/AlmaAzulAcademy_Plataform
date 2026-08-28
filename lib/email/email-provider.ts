@@ -19,12 +19,17 @@ export interface EmailProvider {
 }
 
 export class EmailProviderError extends Error {
+  /** Símbolo curto do motivo, seguro para log e para a fila. */
+  readonly causeCode: string;
   /** true quando repetir a chamada mais tarde pode dar certo. */
   readonly retryable: boolean;
 
-  constructor(readonly causeCode: string, retryable: boolean) {
+  // Campos declarados, e não propriedades de parâmetro: o runner de testes do
+  // Node carrega os `.ts` em strip-only mode, que não suporta a forma curta.
+  constructor(causeCode: string, retryable: boolean) {
     super(causeCode);
     this.name = "EmailProviderError";
+    this.causeCode = causeCode;
     this.retryable = retryable;
   }
 }

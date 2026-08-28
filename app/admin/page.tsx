@@ -11,13 +11,16 @@ import {
   Gauge,
   Trophy,
   ReceiptText,
+  ShieldAlert,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/page-header";
+import { PaymentReviewPanel } from "@/components/admin/payment-review-panel";
 import { AdminErrorState } from "@/components/admin/states";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
-import { getAdminDashboard } from "@/lib/admin/data";
+import { getAdminDashboard, getPaymentsNeedingReview } from "@/lib/admin/data";
+import type { PaymentReviewReport } from "@/lib/admin/types";
 import { formatAdminDateTime, formatCurrency } from "@/lib/admin/format";
 import { formatSessionDateTime } from "@/lib/sessions/date-time";
 
@@ -37,6 +40,17 @@ export default async function AdminDashboardPage() {
   const context = await requireAdmin();
   try {
     const metrics = await getAdminDashboard(context.profile.userId);
+
+    // A fila de revisão é informação secundária: se a migration de
+    // confiabilidade ainda não estiver aplicada neste ambiente, o dashboard
+    // continua abrindo normalmente com a lista vazia.
+    const review: PaymentReviewReport = await getPaymentsNeedingReview(context.profile.userId).catch(() => ({
+      items: [], orphanWebhooks: [], webhookFailures: 0, generatedAt: null,
+    }));
+    const pendingReview = metrics.paymentReview.needsReview
+      + metrics.paymentReview.approvedNoCapacity
+      + metrics.paymentReview.webhookFailures;
+
     return (
       <div>
         <AdminPageHeader
@@ -61,6 +75,27 @@ export default async function AdminDashboardPage() {
             ) : (
               <div className="mt-7"><h2 className="text-xl font-semibold">Nenhuma sessão futura</h2><p className="mt-2 text-sm text-white/60">Crie uma nova sessão para organizar a agenda.</p></div>
             )}
+          </article>
+
+          <article
+            className={`rounded-3xl border p-6 sm:col-span-2 ${
+              pendingReview
+                ? "border-red-200 bg-red-50"
+                : "border-ink/10 bg-white"
+            }`}
+          >
+            <div className="flex items-start justify-between">
+              <p className="text-sm font-medium text-ink/55">Pagamentos para revisar</p>
+              <ShieldAlert className={`size-5 ${pendingReview ? "text-red-600" : "text-lake"}`} />
+            </div>
+            <p className={`mt-8 text-3xl font-semibold tracking-[-0.04em] ${pendingReview ? "text-red-700" : "text-ink"}`}>
+              {new Intl.NumberFormat("pt-BR").format(pendingReview)}
+            </p>
+            <p className="mt-2 text-xs text-ink/45">
+              {metrics.paymentReview.onHold} em janela de segurança ·{" "}
+              {metrics.paymentReview.approvedNoCapacity} aprovado(s) sem vaga ·{" "}
+              {metrics.paymentReview.orphanWebhooks} webhook(s) órfão(s)
+            </p>
           </article>
 
           {cards.map((card) => {
@@ -96,6 +131,8 @@ export default async function AdminDashboardPage() {
             <p className="mt-2 text-xs text-ink/45">Horário de Brasília</p>
           </article>
         </section>
+
+        <PaymentReviewPanel report={review} />
       </div>
     );
   } catch {

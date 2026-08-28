@@ -38,9 +38,13 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
   const invoiceSlug = single(query.slug) || single(query.invoice_slug);
   let confirmed = false;
 
-  // Fallback, não fonte de verdade: os parâmetros da URL só apontam qual pedido
-  // consultar. Quem decide se está pago é o payment_check server-to-server dentro
-  // de confirmPayment. Se o cliente nunca voltar, o webhook confirma sozinho.
+  // Camada 2: redundância, nunca dependência. Os parâmetros da URL só apontam
+  // qual pedido consultar — quem decide se está pago é o payment_check
+  // server-to-server dentro de confirmPayment.
+  //
+  // Se o cliente fechar o navegador e nunca voltar, o webhook (camada 1) e a
+  // reconciliação automática (camada 3) confirmam sem ele. Esta página não é
+  // condição para nada; ela só encurta a espera de quem voltou.
   if (orderId) {
     try {
       const confirmation = await confirmPayment({
@@ -51,6 +55,7 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
         receiptUrl: single(query.receipt_url),
         payload: Object.fromEntries(Object.entries(query).map(([key, value]) => [key, single(value)])),
         stage: "return_page",
+        source: "RETURN_PAGE",
       });
       confirmed = confirmation.confirmed;
     } catch (error) {

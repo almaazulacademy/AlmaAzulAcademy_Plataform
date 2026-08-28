@@ -62,6 +62,7 @@ export async function POST(request: Request, context: RouteContext) {
       payload: { source: "admin_verification", actor_user_id: authorization.context.profile.userId },
       requestId,
       stage: "admin_verification",
+      source: "ADMIN",
     });
     return NextResponse.json({
       success: confirmation.confirmed,

@@ -75,7 +75,76 @@ export type AdminDashboardMetrics = {
   monthlyRevenueCents: number;
   averageTicketCents: number;
   revenueByMonth: Array<{ month: string; revenueCents: number }>;
+  paymentReview: PaymentReviewCounters;
   lastUpdatedAt: string | null;
+};
+
+/**
+ * Contadores de "Pagamentos para revisar".
+ *
+ * Existem para eliminar a conferência manual do extrato da InfinitePay: qualquer
+ * número diferente de zero aqui é uma situação que precisa de olho humano.
+ */
+export type PaymentReviewCounters = {
+  /** Reservas não confirmadas com algum sinal de pagamento. */
+  needsReview: number;
+  /** Pagamento aprovado sem vaga disponível. Nunca some sozinho. */
+  approvedNoCapacity: number;
+  /** Pré-reservas seguras na janela de segurança neste instante. */
+  onHold: number;
+  /** Webhooks respondidos com erro HTTP nos últimos 7 dias. */
+  webhookFailures: number;
+  /** Webhooks recebidos que não casaram com nenhuma reserva. */
+  orphanWebhooks: number;
+};
+
+/** Motivo pelo qual uma reserva entrou na fila de revisão. */
+export type PaymentReviewReason =
+  | "APPROVED_NO_CAPACITY"
+  | "PAID_NOT_CONFIRMED"
+  | "AMOUNT_MISMATCH"
+  | "HOLD_EXHAUSTED"
+  | "RECONCILIATION_FAILING"
+  | "EXPIRED_WITH_PAYMENT_SIGNAL";
+
+export type PaymentReviewItem = {
+  reservationId: string;
+  publicCode: string;
+  status: ReservationStatus;
+  paymentStatus: string;
+  reason: PaymentReviewReason | null;
+  quantity: number;
+  totalCents: number;
+  createdAt: string;
+  originalExpiresAt: string | null;
+  expiresAt: string | null;
+  paymentHoldUntil: string | null;
+  reconciliationAttempts: number;
+  lastReconciledAt: string | null;
+  lastReconciliationCode: string | null;
+  sessionId: string;
+  startsAt: string;
+  experienceTitle: string;
+  availableSpots: number;
+  lastEventAt: string | null;
+};
+
+export type PaymentReviewOrphanWebhook = {
+  receivedAt: string;
+  requestId: string;
+  step: string;
+  outcome: string | null;
+  httpStatus: number | null;
+  errorCode: string | null;
+  /** Já chega mascarado do banco: só as pontas do identificador. */
+  orderIdMasked: string | null;
+};
+
+export type PaymentReviewReport = {
+  items: PaymentReviewItem[];
+  orphanWebhooks: PaymentReviewOrphanWebhook[];
+  webhookFailures: number;
+  generatedAt: string | null;
 };
 
 export type AdminExperience = {
