@@ -255,14 +255,23 @@ test("o serviço nunca deixa exceção escapar para quem confirmou o pagamento",
   assert.match(service, /export async function sendReservationConfirmationEmail[\s\S]*?try \{[\s\S]*?\} catch \(error\)[\s\S]*?outcome: "PENDING"/);
   assert.match(service, /if \(!provider\) return DISABLED/);
 
-  // O e-mail é o último passo da confirmação, depois de o Supabase já ter decidido.
+  // O e-mail continua sendo o último passo, agora dentro de
+  // `runPostConfirmationJobs`: planilha primeiro, e-mail depois, os dois só
+  // depois de o Supabase já ter decidido.
   const confirmation = source("lib/reservations/payment-confirmation.ts");
-  const body = confirmation.slice(
+  const jobs = confirmation.slice(
+    confirmation.indexOf("export async function runPostConfirmationJobs"),
     confirmation.indexOf("export async function confirmPayment"),
+  );
+  assert.ok(jobs.indexOf("syncReservationAfterChange") < jobs.indexOf("sendReservationConfirmationEmail"));
+
+  // E o disparo só acontece atrás da confirmação, nunca antes dela.
+  const withJobs = confirmation.slice(
+    confirmation.indexOf("export async function confirmPaymentWithJobs"),
     confirmation.indexOf("async function runConfirmation"),
   );
-  assert.ok(body.indexOf("await runConfirmation") < body.indexOf("sendReservationConfirmationEmail"));
-  assert.ok(body.indexOf("sendReservationConfirmationEmail") < body.indexOf("return confirmation;"));
+  assert.ok(withJobs.indexOf("await runConfirmation") < withJobs.indexOf("await jobs("));
+  assert.match(withJobs, /if \(!confirmation\.confirmed\) return;/);
 });
 
 test("a confirmação manual do admin também dispara o e-mail", () => {
@@ -439,19 +448,29 @@ test("job já concluído nunca é reivindicado de novo pela recuperação", () =
   assert.match(drain, /k\.status = 'FAILED'\s*\n\s*or k\.updated_at </);
 });
 
-test("vercel.json aponta para o caminho real da rota", () => {
+test("vercel.json aponta para os caminhos reais das rotinas", () => {
   const vercel = JSON.parse(source("vercel.json")) as { crons?: Array<{ path: string; schedule: string }> };
-  const cron = vercel.crons?.[0];
+  const crons = vercel.crons ?? [];
 
-  assert.ok(cron, "vercel.json precisa declarar a rotina");
-  assert.equal(cron.path, "/api/cron/confirmation-emails");
+  const emails = crons.find((cron) => cron.path === "/api/cron/confirmation-emails");
+  const reconciliation = crons.find((cron) => cron.path === "/api/cron/payment-reconciliation");
+  assert.ok(emails, "vercel.json precisa declarar a rotina de e-mails");
+  assert.ok(reconciliation, "vercel.json precisa declarar a reconciliação de pagamento");
 
-  // O caminho tem que corresponder ao arquivo de rota que existe de fato: um
-  // caminho inexistente devolve 404 e a Vercel executa assim mesmo, em silêncio.
-  const arquivo = `app${cron.path}/route.ts`;
-  assert.doesNotThrow(() => source(arquivo), `${arquivo} precisa existir`);
-  assert.match(source(arquivo), /export async function GET/, "o Vercel Cron chama por GET");
+  for (const cron of crons) {
+    // O caminho tem que corresponder ao arquivo de rota que existe de fato: um
+    // caminho inexistente devolve 404 e a Vercel executa assim mesmo, em silêncio.
+    const arquivo = `app${cron.path}/route.ts`;
+    assert.doesNotThrow(() => source(arquivo), `${arquivo} precisa existir`);
+    assert.match(source(arquivo), /export async function GET/, "o Vercel Cron chama por GET");
 
-  // Uma vez por dia: é o que o plano Hobby da Vercel permite.
-  assert.match(cron.schedule, /^\d+ \d+ \* \* \*$/);
+    // Uma vez por dia: é o que o plano Hobby da Vercel permite. Para a
+    // reconciliação isso é varredura de fundo — a cadência curta vem da
+    // reconciliação oportunista e da retenção aplicada pelo pg_cron do Supabase,
+    // nenhuma das duas dependente do agendador da Vercel.
+    assert.match(cron.schedule, /^\d+ \d+ \* \* \*$/);
+  }
+
+  // No máximo dois: é o teto do plano Hobby.
+  assert.ok(crons.length <= 2, "o plano Hobby permite no máximo duas rotinas");
 });

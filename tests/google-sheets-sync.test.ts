@@ -392,21 +392,31 @@ test("o retry seguinte grava tudo corretamente", async () => {
 test("a confirmação de pagamento é calculada antes da planilha e devolvida intacta", () => {
   const confirmation = source("lib/reservations/payment-confirmation.ts");
 
-  // O resultado vem de runConfirmation; a sincronização acontece depois e o
-  // valor devolvido é o mesmo, aconteça o que acontecer com o Google.
+  // O resultado vem de runConfirmation; a sincronização acontece depois, dentro
+  // de `settle()`, e o valor devolvido é o mesmo aconteça o que acontecer com o
+  // Google. No webhook, `settle()` ainda roda depois da resposta HTTP.
   const body = confirmation.slice(
-    confirmation.indexOf("export async function confirmPayment"),
+    confirmation.indexOf("export async function confirmPaymentWithJobs"),
     confirmation.indexOf("async function runConfirmation"),
   );
 
   const computed = body.indexOf("await runConfirmation");
-  const synced = body.indexOf("await syncReservationAfterChange");
-  const returned = body.indexOf("return confirmation;");
-  assert.ok(computed >= 0 && synced > computed && returned > synced, "a planilha é o último passo");
+  const synced = body.indexOf("await jobs(");
+  const returned = body.indexOf("return { result: confirmation, settle };");
+  assert.ok(computed >= 0 && synced > computed && returned > computed, "a planilha nunca precede a decisão");
 
   // O resultado é atribuído uma única vez e nunca reescrito pela integração.
   assert.equal(body.match(/confirmation = /g)?.length, 1);
   assert.doesNotMatch(body, /confirmation\.(confirmed|outcome|retryable) =/);
+
+  // A planilha é o primeiro dos dois jobs pós-confirmação, e nenhum dos dois
+  // pode alterar o resultado — eles nem recebem o objeto de confirmação.
+  const jobs = confirmation.slice(
+    confirmation.indexOf("export async function runPostConfirmationJobs"),
+    confirmation.indexOf("export async function confirmPayment"),
+  );
+  assert.match(jobs, /syncReservationAfterChange\(reservationId, "CONFIRMED"\)/);
+  assert.doesNotMatch(jobs, /confirmation/);
 });
 
 test("a sincronização nunca lança para quem confirmou o pagamento", () => {

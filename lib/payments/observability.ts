@@ -15,6 +15,37 @@ export type PaymentStage =
   | "return_page"
   | "admin_verification";
 
+/**
+ * Vocabulário fechado das etapas do fluxo de pagamento.
+ *
+ * Existe para que "por que essa reserva não confirmou?" seja uma consulta, e não
+ * uma leitura de log corrido. Cada passo é gravado tanto no stdout da Vercel
+ * quanto em `payment_webhook_log`, sempre com o mesmo nome.
+ */
+export const PAYMENT_STEPS = [
+  "WEBHOOK_RECEIVED",
+  "WEBHOOK_REJECTED",
+  "WEBHOOK_VALIDATED",
+  "PAYMENT_CHECK_ATTEMPT",
+  "PAYMENT_APPROVED",
+  "PAYMENT_NOT_APPROVED",
+  "PAYMENT_CHECK_FAILED",
+  "CONFIRM_ATTEMPT",
+  "CONFIRM_SUCCESS",
+  "CONFIRM_FAILED",
+  "RECONCILIATION_ATTEMPT",
+  "RECONCILIATION_SUCCESS",
+  "RECONCILIATION_FAILED",
+  "EXPIRATION_HELD_FOR_PAYMENT_CHECK",
+  "EXPIRATION_HOLD_RELEASED",
+  "PAYMENT_APPROVED_WITHOUT_CAPACITY",
+] as const;
+
+export type PaymentStep = (typeof PAYMENT_STEPS)[number];
+
+/** De onde a etapa veio. Espelha o CHECK de `payment_webhook_log.source`. */
+export type PaymentSource = "WEBHOOK" | "RETURN_PAGE" | "ADMIN" | "RECONCILIATION" | "EXPIRATION";
+
 export type PaymentOutcome =
   | "confirmed"
   | "already_confirmed"

@@ -9,6 +9,9 @@ import type {
   AdminSessionFilters,
   AdminSessionInput,
   ExperienceStatus,
+  PaymentReviewCounters,
+  PaymentReviewReason,
+  PaymentReviewReport,
   PaymentStatus,
   PlatformSettings,
   SessionFilter,
@@ -131,7 +134,91 @@ export async function getAdminDashboard(actorUserId: string): Promise<AdminDashb
     monthlyRevenueCents: asNumber(row.monthlyRevenueCents),
     averageTicketCents: asNumber(row.averageTicketCents),
     revenueByMonth: asRows(row.revenueByMonth).map((item) => ({ month: asString(item.month), revenueCents: asNumber(item.revenueCents) })),
+    paymentReview: paymentReviewCounters(row.paymentReview),
     lastUpdatedAt: nullableString(row.lastUpdatedAt),
+  };
+}
+
+/**
+ * Contadores de revisão de pagamento.
+ *
+ * Tolerante a ausência de propósito: enquanto a migration de confiabilidade não
+ * estiver aplicada no ambiente, a RPC devolve o objeto sem esta chave e o painel
+ * simplesmente mostra zero em vez de quebrar.
+ */
+function paymentReviewCounters(value: unknown): PaymentReviewCounters {
+  const row = asRow(value) ?? {};
+  return {
+    needsReview: asNumber(row.needsReview),
+    approvedNoCapacity: asNumber(row.approvedNoCapacity),
+    onHold: asNumber(row.onHold),
+    webhookFailures: asNumber(row.webhookFailures),
+    orphanWebhooks: asNumber(row.orphanWebhooks),
+  };
+}
+
+const REVIEW_REASONS = new Set([
+  "APPROVED_NO_CAPACITY",
+  "PAID_NOT_CONFIRMED",
+  "AMOUNT_MISMATCH",
+  "HOLD_EXHAUSTED",
+  "RECONCILIATION_FAILING",
+  "EXPIRED_WITH_PAYMENT_SIGNAL",
+]);
+
+/**
+ * Fila de "Pagamentos para revisar".
+ *
+ * Substitui a conferência manual do extrato da InfinitePay. Não devolve CPF,
+ * nome, telefone, e-mail nem payload — só o que a equipe precisa para decidir o
+ * que fazer com a reserva.
+ */
+export async function getPaymentsNeedingReview(
+  actorUserId: string,
+  limit = 50,
+  lookbackDays = 30,
+): Promise<PaymentReviewReport> {
+  const result = await adminClient().rpc("admin_payments_needing_review", {
+    p_actor_id: actorUserId,
+    p_limit: limit,
+    p_lookback_days: lookbackDays,
+  });
+  if (result.error) throw new Error(result.error.message);
+  const row = asRow(result.data) ?? {};
+
+  return {
+    items: asRows(row.items).map((item) => ({
+      reservationId: asString(item.reservationId),
+      publicCode: asString(item.publicCode),
+      status: asString(item.status) as ReservationStatus,
+      paymentStatus: asString(item.paymentStatus),
+      reason: REVIEW_REASONS.has(asString(item.reason)) ? (asString(item.reason) as PaymentReviewReason) : null,
+      quantity: asNumber(item.quantity),
+      totalCents: asNumber(item.totalCents),
+      createdAt: asString(item.createdAt),
+      originalExpiresAt: nullableString(item.originalExpiresAt),
+      expiresAt: nullableString(item.expiresAt),
+      paymentHoldUntil: nullableString(item.paymentHoldUntil),
+      reconciliationAttempts: asNumber(item.reconciliationAttempts),
+      lastReconciledAt: nullableString(item.lastReconciledAt),
+      lastReconciliationCode: nullableString(item.lastReconciliationCode),
+      sessionId: asString(item.sessionId),
+      startsAt: asString(item.startsAt),
+      experienceTitle: asString(item.experienceTitle),
+      availableSpots: asNumber(item.availableSpots),
+      lastEventAt: nullableString(item.lastEventAt),
+    })),
+    orphanWebhooks: asRows(row.orphanWebhooks).map((item) => ({
+      receivedAt: asString(item.receivedAt),
+      requestId: asString(item.requestId),
+      step: asString(item.step),
+      outcome: nullableString(item.outcome),
+      httpStatus: Number.isFinite(Number(item.httpStatus)) ? Number(item.httpStatus) : null,
+      errorCode: nullableString(item.errorCode),
+      orderIdMasked: nullableString(item.orderIdMasked),
+    })),
+    webhookFailures: asNumber(row.webhookFailures),
+    generatedAt: nullableString(row.generatedAt),
   };
 }
 

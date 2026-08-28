@@ -2,15 +2,37 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { syncReservationAfterChange } from "@/lib/integrations/google-sheets/service";
 import { getPaymentProvider } from "@/lib/payments";
+import type { PaymentProvider } from "@/lib/payments/payment-provider";
 import { sendReservationConfirmationEmail } from "@/lib/reservations/confirmation-email-service";
 import {
   logPayment,
   newRequestId,
   sanitizePaymentPayload,
+  type PaymentSource,
   type PaymentStage,
 } from "@/lib/payments/observability";
+import { recordPaymentStep } from "@/lib/payments/payment-trail";
 import { PaymentProviderError } from "@/lib/payments/payment-provider";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
+
+/**
+ * Portas externas da confirmação.
+ *
+ * Mesma ideia de `deliverReservationConfirmationEmail`, que já recebe
+ * `claim`/`load`/`send`/`complete`/`fail` de fora: a orquestração fica testável
+ * de ponta a ponta sem banco e sem rede, e a produção continua usando o
+ * Supabase e o provedor reais por padrão.
+ *
+ * É por aqui que a suíte exercita webhook duplicado, webhook atrasado, gateway
+ * fora do ar, confirmações simultâneas e pagamento tardio sem capacidade — todos
+ * contra o código que roda em produção, não contra uma cópia dele.
+ */
+export type ConfirmationPorts = {
+  admin?: SupabaseClient | null;
+  provider?: PaymentProvider;
+  /** Planilha e e-mail. Sobrescrito nos testes para observar o disparo. */
+  jobs?: (reservationId: string) => Promise<void>;
+};
 
 type PaymentNotification = {
   orderId: string;
@@ -21,6 +43,14 @@ type PaymentNotification = {
   payload: Record<string, unknown>;
   requestId?: string;
   stage?: PaymentStage;
+  /** Origem da chamada na trilha durável. */
+  source?: PaymentSource;
+  /**
+   * Quando true, planilha e e-mail não são aguardados aqui. O chamador recebe
+   * `settle()` em `confirmPaymentWithJobs` e decide quando rodá-los — no webhook
+   * isso acontece depois da resposta HTTP, via `after()`.
+   */
+  deferSideEffects?: boolean;
 };
 
 export type ConfirmationOutcome =
@@ -34,7 +64,7 @@ export type ConfirmationOutcome =
   | "NO_CAPACITY"
   /** A InfinitePay não reconhece o pagamento como pago. Estado legítimo (Pix aguardando). */
   | "NOT_PAID"
-  /** Valor cobrado diferente do total da reserva. */
+  /** Valor cobrado abaixo do total da reserva. */
   | "AMOUNT_MISMATCH"
   /** order_nsu não corresponde a nenhuma reserva. */
   | "RESERVATION_NOT_FOUND"
@@ -48,9 +78,15 @@ export type ConfirmationResult = {
   confirmed: boolean;
   /** true quando repetir a chamada mais tarde pode mudar o resultado. */
   retryable: boolean;
+  /**
+   * true quando o resultado é **definitivo e negativo**: a InfinitePay afirma que
+   * este pedido não está pago. Só nesse caso a reconciliação pode devolver a vaga
+   * ao mercado. Erro de rede, timeout e divergência de valor não entram aqui.
+   */
+  definitivelyUnpaid: boolean;
+  /** true quando um humano precisa olhar. Alimenta "Pagamentos para revisar". */
+  needsReview: boolean;
 };
-
-const TRANSIENT_PROVIDER_CODES = new Set(["PROVIDER_RESPONSE_ERROR", "MISSING_CONFIGURATION"]);
 
 /**
  * Grava uma tentativa de pagamento sem nunca interromper o fluxo.
@@ -96,70 +132,124 @@ function result(outcome: ConfirmationOutcome): ConfirmationResult {
     outcome,
     confirmed: outcome === "CONFIRMED" || outcome === "ALREADY_CONFIRMED" || outcome === "RECONCILED",
     retryable: outcome === "PROVIDER_UNAVAILABLE" || outcome === "NOT_PAID",
+    definitivelyUnpaid: outcome === "NOT_PAID",
+    needsReview: outcome === "NO_CAPACITY" || outcome === "AMOUNT_MISMATCH",
   };
 }
 
 /**
- * Ponto único de confirmação. Usado pelo webhook, pela página de retorno e pela
- * verificação administrativa — os três caminhos são idempotentes e chegam ao
- * mesmo estado final.
+ * Efeitos colaterais pós-confirmação: planilha operacional e e-mail do cliente.
+ *
+ * Ficam separados de propósito. Os dois somam até dezesseis segundos de rede no
+ * pior caso e estavam **dentro** do tempo de resposta do webhook — um caminho
+ * direto para o gateway ver timeout num pagamento que já tinha sido confirmado.
+ * Nenhum dos dois pode alterar o resultado: quando o Google ou o provedor de
+ * e-mail falham, a reserva segue CONFIRMED e só os jobs ficam pendentes.
+ */
+export async function runPostConfirmationJobs(reservationId: string) {
+  await syncReservationAfterChange(reservationId, "CONFIRMED");
+  await sendReservationConfirmationEmail(reservationId);
+}
+
+/**
+ * Ponto único de confirmação. Usado pelo webhook, pela página de retorno, pela
+ * verificação administrativa e pela reconciliação automática — os quatro
+ * caminhos são idempotentes e chegam ao mesmo estado final.
  *
  * A confirmação nunca se apoia no payload recebido: o valor e o status "pago"
  * sempre vêm de uma consulta server-to-server ao payment_check da InfinitePay.
- *
- * Depois de confirmada, a reserva é espelhada na planilha operacional e o
- * cliente recebe o e-mail de confirmação. Os dois são deliberadamente os
- * últimos passos e não podem alterar o resultado: quando o Google ou o provedor
- * de e-mail falham, a reserva segue CONFIRMED, o pagamento segue confirmado e o
- * webhook segue respondendo 200 — só os jobs ficam pendentes.
  */
-export async function confirmPayment(notification: PaymentNotification): Promise<ConfirmationResult> {
-  const confirmation = await runConfirmation(notification);
-
-  if (confirmation.confirmed) {
-    // Também dispara em ALREADY_CONFIRMED: um webhook repetido vira, de graça,
-    // uma nova tentativa do que ficou pendente antes. Não gera e-mail duplicado
-    // porque a reivindicação no banco só devolve job para envio ainda não feito.
-    await syncReservationAfterChange(notification.orderId, "CONFIRMED");
-    await sendReservationConfirmationEmail(notification.orderId);
-  }
-
+export async function confirmPayment(
+  notification: PaymentNotification,
+  ports: ConfirmationPorts = {},
+): Promise<ConfirmationResult> {
+  const { result: confirmation, settle } = await confirmPaymentWithJobs(notification, ports);
+  if (!notification.deferSideEffects) await settle();
   return confirmation;
 }
 
-async function runConfirmation(notification: PaymentNotification): Promise<ConfirmationResult> {
+/**
+ * Igual a `confirmPayment`, mas devolve os efeitos colaterais como uma função a
+ * ser executada quando o chamador quiser. `settle()` é seguro de chamar sempre:
+ * quando não houve confirmação, não faz nada.
+ */
+export async function confirmPaymentWithJobs(
+  notification: PaymentNotification,
+  ports: ConfirmationPorts = {},
+): Promise<{ result: ConfirmationResult; settle: () => Promise<void> }> {
+  const confirmation = await runConfirmation(notification, ports);
+  const jobs = ports.jobs ?? runPostConfirmationJobs;
+
+  const settle = async () => {
+    // Também roda em ALREADY_CONFIRMED: um webhook repetido vira, de graça, uma
+    // nova tentativa do que ficou pendente antes. Não gera e-mail duplicado
+    // porque a reivindicação no banco só devolve job para envio ainda não feito.
+    if (!confirmation.confirmed) return;
+    await jobs(notification.orderId);
+  };
+
+  return { result: confirmation, settle };
+}
+
+async function runConfirmation(
+  notification: PaymentNotification,
+  ports: ConfirmationPorts,
+): Promise<ConfirmationResult> {
   const requestId = notification.requestId ?? newRequestId();
   const stage: PaymentStage = notification.stage ?? "confirmation";
-  const admin = getSupabaseAdminClient();
+  const source: PaymentSource = notification.source ?? "WEBHOOK";
+  const admin = ports.admin !== undefined ? ports.admin : getSupabaseAdminClient();
   if (!admin) throw new Error("Supabase administrativo não configurado.");
 
   const reservationResult = await admin
     .from("reservations")
-    .select("id,total_cents,status,expires_at")
+    .select("id,total_cents,status,expires_at,payment_hold_until,provider_reference")
     .eq("id", notification.orderId)
     .maybeSingle();
 
   if (reservationResult.error) {
     logPayment({ requestId, stage, outcome: "failed", orderId: notification.orderId, errorCode: "RESERVATION_LOOKUP_FAILED" });
+    await recordPaymentStep({
+      requestId, source, step: "CONFIRM_FAILED", outcome: "FAILED",
+      orderId: notification.orderId, errorCode: "RESERVATION_LOOKUP_FAILED", stage,
+    }, admin);
     return result("PROVIDER_UNAVAILABLE");
   }
   if (!reservationResult.data) {
     logPayment({ requestId, stage, outcome: "invalid", orderId: notification.orderId, errorCode: "RESERVATION_NOT_FOUND" });
+    await recordPaymentStep({
+      requestId, source, step: "WEBHOOK_REJECTED", outcome: "INVALID",
+      orderId: notification.orderId, errorCode: "RESERVATION_NOT_FOUND", stage,
+    }, admin);
     return result("RESERVATION_NOT_FOUND");
   }
 
   const reservation = reservationResult.data;
   if (reservation.status === "CONFIRMED") {
     logPayment({ requestId, stage, outcome: "already_confirmed", orderId: notification.orderId });
+    await recordPaymentStep({
+      requestId, source, step: "CONFIRM_SUCCESS", outcome: "SKIPPED",
+      orderId: notification.orderId, errorCode: "ALREADY_CONFIRMED", stage,
+    }, admin);
     return result("ALREADY_CONFIRMED");
   }
   if (reservation.status === "CANCELLED") {
     logPayment({ requestId, stage, outcome: "invalid", orderId: notification.orderId, errorCode: "RESERVATION_CANCELLED" });
+    await recordPaymentStep({
+      requestId, source, step: "CONFIRM_FAILED", outcome: "INVALID",
+      orderId: notification.orderId, errorCode: "RESERVATION_CANCELLED", stage,
+    }, admin);
     return result("CANCELLED");
   }
 
   const sanitizedPayload = sanitizePaymentPayload(notification.payload) as Record<string, unknown>;
-  const provider = getPaymentProvider();
+  const provider = ports.provider ?? getPaymentProvider();
+
+  // A referência do checkout guardada na criação é a melhor pista quando o
+  // webhook chega sem slug — e é a única pista da reconciliação, que não tem
+  // webhook nenhum para ler.
+  const invoiceSlug = notification.invoiceSlug
+    || (typeof reservation.provider_reference === "string" ? reservation.provider_reference : "");
 
   // Deixa rastro do que chegou antes de qualquer verificação. Sem isso, um webhook
   // que falha some sem deixar histórico — foi exatamente o que impediu o diagnóstico
@@ -167,7 +257,7 @@ async function runConfirmation(notification: PaymentNotification): Promise<Confi
   await recordAttempt(admin, requestId, {
     reservationId: reservation.id,
     provider: provider.name,
-    providerEventId: `${notification.transactionId || notification.invoiceSlug || requestId}:received`,
+    providerEventId: `${notification.transactionId || invoiceSlug || requestId}:received`,
     eventType: "PAYMENT_WEBHOOK_RECEIVED",
     payload: {
       ...sanitizedPayload,
@@ -176,6 +266,12 @@ async function runConfirmation(notification: PaymentNotification): Promise<Confi
       capture_method: notification.captureMethod ?? "",
     },
   });
+  await recordPaymentStep({
+    requestId, source, step: "WEBHOOK_VALIDATED", outcome: "OK",
+    orderId: notification.orderId, providerReference: invoiceSlug,
+    providerEventId: notification.transactionId, stage,
+    payload: { capture_method: notification.captureMethod ?? "", reservation_status: reservation.status },
+  }, admin);
 
   let verified;
   const startedAt = Date.now();
@@ -183,12 +279,13 @@ async function runConfirmation(notification: PaymentNotification): Promise<Confi
     verified = await provider.verifyPayment({
       orderId: notification.orderId,
       transactionId: notification.transactionId,
-      invoiceSlug: notification.invoiceSlug,
+      invoiceSlug,
       expectedAmountCents: Number(reservation.total_cents),
     });
   } catch (error) {
     const code = error instanceof PaymentProviderError ? error.causeCode : "PAYMENT_CHECK_FAILED";
     const mismatch = code === "PAYMENT_AMOUNT_MISMATCH";
+    const durationMs = Date.now() - startedAt;
     logPayment({
       requestId,
       stage: "payment_check",
@@ -197,8 +294,13 @@ async function runConfirmation(notification: PaymentNotification): Promise<Confi
       transactionId: notification.transactionId,
       captureMethod: notification.captureMethod,
       errorCode: code,
-      durationMs: Date.now() - startedAt,
+      durationMs,
     });
+    await recordPaymentStep({
+      requestId, source, step: "PAYMENT_CHECK_FAILED", outcome: mismatch ? "INVALID" : "FAILED",
+      orderId: notification.orderId, providerReference: invoiceSlug,
+      providerEventId: notification.transactionId, errorCode: code, durationMs, stage: "payment_check",
+    }, admin);
 
     if (mismatch) {
       await recordAttempt(admin, requestId, {
@@ -211,13 +313,17 @@ async function runConfirmation(notification: PaymentNotification): Promise<Confi
       return result("AMOUNT_MISMATCH");
     }
 
-    // Erro de rede, timeout ou resposta inesperada: vale nova tentativa.
-    if (TRANSIENT_PROVIDER_CODES.has(code) || !(error instanceof PaymentProviderError)) {
-      return result("PROVIDER_UNAVAILABLE");
-    }
-    return result("NOT_PAID");
+    // Toda exceção que não é divergência de valor vira PROVIDER_UNAVAILABLE.
+    //
+    // Antes, um `PaymentProviderError` fora da lista de códigos transitórios
+    // virava `NOT_PAID` — um veredito *definitivo* de "não pagou" tirado de um
+    // erro do nosso lado. Com a janela de segurança, esse veredito libera a
+    // vaga. Falha de rede, timeout, resposta ilegível e configuração ausente não
+    // são prova de não pagamento: são incerteza, e incerteza segura a vaga.
+    return result("PROVIDER_UNAVAILABLE");
   }
 
+  const durationMs = Date.now() - startedAt;
   logPayment({
     requestId,
     stage: "payment_check",
@@ -225,8 +331,14 @@ async function runConfirmation(notification: PaymentNotification): Promise<Confi
     orderId: notification.orderId,
     transactionId: notification.transactionId,
     captureMethod: notification.captureMethod,
-    durationMs: Date.now() - startedAt,
+    durationMs,
   });
+  await recordPaymentStep({
+    requestId, source, step: verified.paid ? "PAYMENT_APPROVED" : "PAYMENT_NOT_APPROVED",
+    outcome: "OK", orderId: notification.orderId, providerReference: invoiceSlug,
+    providerEventId: notification.transactionId, durationMs, stage: "payment_check",
+    payload: verified.paid ? { charged_amount_cents: verified.chargedAmountCents } : {},
+  }, admin);
 
   if (!verified.paid) {
     await recordAttempt(admin, requestId, {
@@ -244,39 +356,63 @@ async function runConfirmation(notification: PaymentNotification): Promise<Confi
     ...sanitizedPayload,
     request_id: requestId,
     capture_method: notification.captureMethod ?? "",
+    charged_amount_cents: verified.chargedAmountCents,
     payment_check: sanitizePaymentPayload(verified.raw),
   };
+  const providerEventId = verified.transactionId || `${requestId}:confirm`;
 
-  // Caminho feliz: pré-reserva ainda válida.
+  await recordPaymentStep({
+    requestId, source, step: "CONFIRM_ATTEMPT", outcome: "OK",
+    orderId: notification.orderId, providerEventId, stage: "confirmation",
+  }, admin);
+
+  // Caminho feliz: retenção ainda válida — inclusive quando a validade é a
+  // janela de segurança da expiração, e não mais o prazo original do cliente.
   const confirmation = await admin.rpc("confirm_reservation_payment", {
     p_reservation_id: notification.orderId,
     p_provider: provider.name,
-    p_provider_event_id: verified.transactionId || `${requestId}:confirm`,
+    p_provider_event_id: providerEventId,
     p_amount_cents: verified.amountCents,
     p_receipt_url: receiptUrl,
     p_payload: confirmationPayload,
   });
   if (confirmation.error) {
     logPayment({ requestId, stage: "confirmation", outcome: "failed", orderId: notification.orderId, errorCode: "CONFIRM_RPC_FAILED" });
+    await recordPaymentStep({
+      requestId, source, step: "CONFIRM_FAILED", outcome: "FAILED",
+      orderId: notification.orderId, providerEventId, errorCode: "CONFIRM_RPC_FAILED", stage: "confirmation",
+    }, admin);
     return result("PROVIDER_UNAVAILABLE");
   }
   if (confirmation.data === true) {
     logPayment({ requestId, stage: "confirmation", outcome: "confirmed", orderId: notification.orderId, captureMethod: notification.captureMethod });
+    await recordPaymentStep({
+      requestId, source, step: "CONFIRM_SUCCESS", outcome: "OK",
+      orderId: notification.orderId, providerEventId, stage: "confirmation",
+    }, admin);
     return result("CONFIRMED");
   }
 
   // A RPC recusou. Como o pagamento está comprovado pelo payment_check, isso quase
   // sempre significa retenção vencida. Reconcilia se a sessão ainda comportar.
+  await recordPaymentStep({
+    requestId, source, step: "RECONCILIATION_ATTEMPT", outcome: "OK",
+    orderId: notification.orderId, providerEventId, stage: "reconciliation",
+  }, admin);
   const reconciliation = await admin.rpc("reconcile_reservation_payment", {
     p_reservation_id: notification.orderId,
     p_provider: provider.name,
-    p_provider_event_id: verified.transactionId || `${requestId}:confirm`,
+    p_provider_event_id: providerEventId,
     p_amount_cents: verified.amountCents,
     p_receipt_url: receiptUrl,
     p_payload: confirmationPayload,
   });
   if (reconciliation.error) {
     logPayment({ requestId, stage: "reconciliation", outcome: "failed", orderId: notification.orderId, errorCode: "RECONCILE_RPC_FAILED" });
+    await recordPaymentStep({
+      requestId, source, step: "RECONCILIATION_FAILED", outcome: "FAILED",
+      orderId: notification.orderId, providerEventId, errorCode: "RECONCILE_RPC_FAILED", stage: "reconciliation",
+    }, admin);
     return result("PROVIDER_UNAVAILABLE");
   }
 
@@ -298,5 +434,19 @@ async function runConfirmation(notification: PaymentNotification): Promise<Confi
     captureMethod: notification.captureMethod,
     errorCode: outcome === "RECONCILED" || outcome === "ALREADY_CONFIRMED" ? undefined : status || "RECONCILE_UNKNOWN",
   });
+  await recordPaymentStep({
+    requestId,
+    source,
+    step: outcome === "NO_CAPACITY"
+      ? "PAYMENT_APPROVED_WITHOUT_CAPACITY"
+      : outcome === "RECONCILED" || outcome === "ALREADY_CONFIRMED"
+        ? "RECONCILIATION_SUCCESS"
+        : "RECONCILIATION_FAILED",
+    outcome: outcome === "RECONCILED" || outcome === "ALREADY_CONFIRMED" ? "OK" : "FAILED",
+    orderId: notification.orderId,
+    providerEventId,
+    errorCode: outcome === "RECONCILED" || outcome === "ALREADY_CONFIRMED" ? undefined : status || "RECONCILE_UNKNOWN",
+    stage: "reconciliation",
+  }, admin);
   return result(outcome);
 }
