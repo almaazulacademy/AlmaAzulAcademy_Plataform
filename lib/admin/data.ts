@@ -440,6 +440,10 @@ export async function cancelAdminReservation(actorUserId: string, reservationId:
  * Lida no momento em que o admin abre o modal, e não junto com a listagem: as
  * vagas restantes mudam a cada reserva confirmada, e o número que importa é o
  * do instante da decisão.
+ *
+ * O recorte é a agenda inteira — toda experiência publicada, não só a da
+ * reserva. Quem decide o que entra na lista é `admin_reservation_session_options`,
+ * e quem autoriza a troca continua sendo a RPC de mudança.
  */
 export async function getAdminReservationSessionOptions(
   actorUserId: string,
@@ -454,7 +458,7 @@ export async function getAdminReservationSessionOptions(
 }
 
 /**
- * Move a reserva para outra turma e reflete a mudança na planilha.
+ * Move a reserva para outra turma — da mesma experiência ou de outra qualquer.
  *
  * A decisão é toda do Supabase: quando a RPC recusa, ela lança e nada é
  * sincronizado. Quando ela aceita, a mudança já está gravada — e a planilha vem
@@ -462,8 +466,10 @@ export async function getAdminReservationSessionOptions(
  * do Google não pode desfazer uma troca de turma já confirmada no banco.
  *
  * Nenhum e-mail é disparado aqui: o envio de confirmação é uma-vez-por-reserva
- * e já aconteceu. Trocar de turma não gera cobrança, estorno nem mensagem
- * automática ao cliente.
+ * e já aconteceu. Trocar de turma — inclusive trocando de experiência — não
+ * gera cobrança, estorno nem mensagem automática ao cliente. O aviso ao cliente
+ * é feito pelo admin, com o texto que ele mesmo escolhe, pelas ações de
+ * mensagem que já existem no painel.
  */
 export async function changeAdminReservationSession(
   actorUserId: string,
@@ -507,8 +513,13 @@ export async function listAdminReservationSessionChanges(
     actorName: asString(row.actor_name),
     previousSessionId: asString(row.previous_session_id),
     previousStartsAt: asString(row.previous_starts_at),
+    previousExperienceId: asString(row.previous_experience_id),
+    previousExperienceTitle: asString(row.previous_experience_title),
     targetSessionId: asString(row.target_session_id),
     targetStartsAt: asString(row.target_starts_at),
+    targetExperienceId: asString(row.target_experience_id),
+    targetExperienceTitle: asString(row.target_experience_title),
+    experienceChanged: row.experience_changed === true,
     quantity: asNumber(row.quantity),
     unitPriceCents: asNumber(row.unit_price_cents),
     totalCents: asNumber(row.total_cents),

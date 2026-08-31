@@ -29,9 +29,9 @@ export default async function AdminReservationDetailPage({ params }: { params: P
   const sheetSync = sheetEnabled ? await getSheetSyncState("RESERVATION", reservation.id) : null;
   const sheetStatus = sheetSync?.status ?? "NEVER_SYNCED";
 
-  // Histórico administrativo de trocas de turma. Interno: nem o motivo nem a
-  // turma anterior aparecem em qualquer página pública. Uma falha aqui não pode
-  // esconder o detalhe da reserva.
+  // Histórico administrativo de trocas de turma. Interno: nem o motivo, nem a
+  // turma, nem a experiência anterior aparecem em qualquer página pública. Uma
+  // falha aqui não pode esconder o detalhe da reserva.
   const sessionChanges = await listAdminReservationSessionChanges(context.profile.userId, reservation.id).catch(() => []);
 
   const emailEnabled = isConfirmationEmailEnabled();
@@ -112,7 +112,7 @@ export default async function AdminReservationDetailPage({ params }: { params: P
       {sessionChanges.length ? (
         <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6">
           <h2 className="text-sm font-semibold">Histórico de turma</h2>
-          <p className="mt-2 text-sm text-ink/50">Registro interno. O valor pago e o código da reserva são preservados em toda alteração.</p>
+          <p className="mt-2 text-sm text-ink/50">Registro interno, com a experiência e a turma de antes e de depois. O valor pago e o código da reserva são preservados em toda alteração, inclusive quando a experiência muda.</p>
           <ul className="mt-5 space-y-4">
             {sessionChanges.map((change) => (
               <li key={change.id} className="rounded-2xl border border-ink/10 bg-mist/40 p-4">
@@ -121,12 +121,17 @@ export default async function AdminReservationDetailPage({ params }: { params: P
                   {" → "}
                   {formatSessionDateShort(change.targetStartsAt)} · {formatSessionTime(change.targetStartsAt)}
                 </p>
+                <p className="mt-1 text-sm text-ink/70">
+                  {change.experienceChanged
+                    ? `${change.previousExperienceTitle} → ${change.targetExperienceTitle}`
+                    : change.targetExperienceTitle}
+                </p>
                 <p className="mt-1 text-xs text-ink/50">
                   {formatAdminDateTime(change.createdAt)} · {change.actorName || "Administrador removido"} · {change.quantity} {change.quantity === 1 ? "participante" : "participantes"} · {formatCurrency(change.totalCents)} preservados
                 </p>
                 {change.previousSessionPriceCents !== change.targetSessionPriceCents ? (
                   <p className="mt-1 text-xs text-ink/50">
-                    As turmas tinham preços diferentes ({formatCurrency(change.previousSessionPriceCents)} e {formatCurrency(change.targetSessionPriceCents)}). Nenhuma diferença foi cobrada ou estornada.
+                    As turmas tinham preços diferentes ({formatCurrency(change.previousSessionPriceCents)} e {formatCurrency(change.targetSessionPriceCents)}) e o valor unitário pago era {formatCurrency(change.unitPriceCents)}. Nenhuma diferença foi cobrada ou estornada.
                   </p>
                 ) : null}
                 {change.reason ? <p className="mt-2 whitespace-pre-wrap text-sm text-ink/70">{change.reason}</p> : null}

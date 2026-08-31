@@ -37,8 +37,24 @@ export function adminMutationError(error: unknown) {
   if (message.includes("RESERVATION_NOT_CONFIRMED")) {
     return { status: 409, message: "Só uma reserva confirmada pode trocar de turma." };
   }
+  // Recusa da versão anterior da RPC, que só permitia trocar de turma dentro da
+  // mesma experiência. Continua mapeada de propósito: entre publicar o painel e
+  // aplicar a migration no Supabase, o banco antigo ainda pode levantá-la, e o
+  // operador merece ler o motivo real em vez de um erro genérico.
   if (message.includes("SESSION_EXPERIENCE_MISMATCH")) {
-    return { status: 409, message: "A nova turma precisa ser da mesma experiência da reserva." };
+    return {
+      status: 409,
+      message: "Este banco ainda não permite reagendar entre experiências diferentes. Aplique a migration mais recente do Supabase.",
+    };
+  }
+  if (message.includes("EXPERIENCE_NOT_AVAILABLE")) {
+    return { status: 409, message: "Esta experiência não está publicada e não pode receber a reserva." };
+  }
+  if (message.includes("EXPERIENCE_NOT_FOUND")) {
+    return { status: 404, message: "A experiência da turma escolhida não existe mais." };
+  }
+  if (message.includes("RESERVATION_EXPERIENCE_DESYNC")) {
+    return { status: 409, message: "A reserva ficaria vinculada a uma experiência diferente da turma. Nada foi alterado." };
   }
   if (message.includes("SESSION_NOT_OPEN")) {
     return { status: 409, message: "A turma escolhida não está aberta para receber reservas." };

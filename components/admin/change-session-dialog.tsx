@@ -1,14 +1,17 @@
 "use client";
 
 /**
- * "Alterar turma": move uma reserva confirmada para outra sessão.
+ * "Alterar turma": move uma reserva confirmada para outra sessão da agenda —
+ * da mesma experiência ou de outra qualquer.
  *
  * Duas etapas dentro do mesmo modal, na ordem em que a decisão acontece de
  * verdade: primeiro **escolher** a turma, depois **confirmar** a mudança. A
  * segunda tela repete de onde para onde a reserva vai, quantas pessoas vão
  * junto, e diz explicitamente que a reserva continua confirmada e o pagamento
  * não muda — porque é exatamente isso que o admin precisa ter certeza antes de
- * mexer em uma reserva já paga.
+ * mexer em uma reserva já paga. Quando a experiência muda, ela diz isso com
+ * todas as letras e mostra a diferença entre o valor pago e o preço atual da
+ * turma nova, sem cobrar nem estornar nada.
  *
  * As turmas são lidas quando o modal abre, nunca junto com a listagem: vagas
  * restantes mudam a cada confirmação, e o número que importa é o do instante da
@@ -18,20 +21,23 @@
  * O agrupamento por dia vem de `lib/sessions/choice.ts`, o mesmo módulo que o
  * site público usa. É o que deixa as três turmas da Imersão Paranoá do mesmo
  * sábado — 09:00, 12:00 e 15:00 — distinguíveis de bater o olho, em vez de três
- * linhas quase idênticas.
+ * linhas quase idênticas. Com a agenda inteira na lista, cada opção nomeia a
+ * experiência a que pertence e um filtro por experiência fica disponível assim
+ * que existe mais de uma.
  */
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, CalendarClock, Check, Users, X } from "lucide-react";
 
-import { fieldErrorClass, labelClass, textareaClass } from "@/components/admin/form-styles";
+import { fieldErrorClass, inputClass, labelClass, textareaClass } from "@/components/admin/form-styles";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/admin/format";
 import {
   evaluateOption,
+  priceDifferenceCents,
   sessionChangeMessage,
   type ReservationSessionOptions,
   type SessionChangeCurrent,
@@ -55,6 +61,24 @@ function participantsLabel(quantity: number) {
 function spotsLabel(option: SessionChangeOption) {
   const remaining = Math.max(0, option.remainingSpots);
   return `${remaining} ${remaining === 1 ? "vaga restante" : "vagas restantes"} de ${option.capacity}`;
+}
+
+/**
+ * O que a troca faz com preço: nada, além de informar.
+ *
+ * `unit_price_cents` é coluna da própria reserva, então o valor pago sobrevive
+ * intacto a qualquer diferença entre as duas experiências. O texto existe para
+ * o admin ver a diferença antes de decidir — e para ficar registrado que ela
+ * não foi cobrada nem estornada.
+ */
+function priceNote(paidUnitPriceCents: number, option: SessionChangeOption) {
+  const difference = priceDifferenceCents(paidUnitPriceCents, option.priceCents);
+  if (difference === 0) return null;
+  return `A turma nova custa ${formatCurrency(option.priceCents)} por pessoa hoje, ${
+    difference > 0 ? "mais" : "menos"
+  } que os ${formatCurrency(paidUnitPriceCents)} pagos. A diferença de ${formatCurrency(
+    Math.abs(difference),
+  )} por pessoa fica registrada no histórico e não é cobrada nem estornada.`;
 }
 
 function CurrentTurma({ current, quantity, totalCents }: {
@@ -88,6 +112,7 @@ export function ChangeSessionDialog({ open, reservationId, onClose }: {
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [experienceFilter, setExperienceFilter] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -96,6 +121,7 @@ export function ChangeSessionDialog({ open, reservationId, onClose }: {
     setStep("select");
     setData(null);
     setSelectedId("");
+    setExperienceFilter("");
     setReason("");
     setError("");
     setLoadError("");
@@ -148,9 +174,22 @@ export function ChangeSessionDialog({ open, reservationId, onClose }: {
 
   const now = new Date();
   const selected = data?.options.find((option) => option.sessionId === selectedId) ?? null;
-  const days = data
-    ? groupSessionsByDay(data.options.map((option) => ({ ...option, id: option.sessionId })))
-    : [];
+
+  // Experiências presentes na agenda elegível, na ordem alfabética do título.
+  // O filtro só aparece quando existe mais de uma: com uma só, ele seria uma
+  // caixa de seleção com uma opção.
+  const experiences = [...new Map((data?.options ?? []).map((option) => [option.experienceId, option.experienceTitle])).entries()]
+    .map(([id, title]) => ({ id, title }))
+    .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+
+  const visibleOptions = (data?.options ?? []).filter(
+    (option) => !experienceFilter || option.experienceId === experienceFilter,
+  );
+  const days = groupSessionsByDay(visibleOptions.map((option) => ({ ...option, id: option.sessionId })));
+
+  const currentExperienceId = data?.current?.experienceId ?? "";
+  const experienceChanged = Boolean(selected && data?.current && selected.experienceId !== currentExperienceId);
+  const selectedPriceNote = selected && data ? priceNote(data.unitPriceCents, selected) : null;
 
   const submit = async () => {
     if (!data || !selected) return;
@@ -167,8 +206,8 @@ export function ChangeSessionDialog({ open, reservationId, onClose }: {
         throw new Error(payload.message ?? payload.errors?.targetSessionId ?? "Não foi possível alterar a turma.");
       }
       notify({
-        title: "Turma alterada",
-        description: `A reserva passou para ${turmaLabel(selected.startsAt)}. A reserva continua confirmada e o pagamento não foi alterado.`,
+        title: experienceChanged ? "Turma e experiência alteradas" : "Turma alterada",
+        description: `A reserva passou para ${selected.experienceTitle} · ${turmaLabel(selected.startsAt)}. A reserva continua confirmada e o pagamento não foi alterado.`,
       });
       onClose();
       router.refresh();
@@ -230,9 +269,43 @@ export function ChangeSessionDialog({ open, reservationId, onClose }: {
                   <legend className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">
                     Nova turma
                   </legend>
+                  <p className="mt-2 text-sm text-ink/50">
+                    Toda a agenda futura, inclusive de outras experiências. Só aparecem turmas abertas
+                    com vagas para {participantsLabel(data.quantity)}.
+                    {data.hiddenForCapacity > 0
+                      ? ` ${data.hiddenForCapacity} ${data.hiddenForCapacity === 1 ? "turma ficou" : "turmas ficaram"} de fora por não ter vagas suficientes.`
+                      : ""}
+                  </p>
+
+                  {experiences.length > 1 ? (
+                    <label className="mt-3 block">
+                      <span className="sr-only">Filtrar por experiência</span>
+                      <select
+                        value={experienceFilter}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setExperienceFilter(value);
+                          // Uma seleção que sai da lista visível não pode continuar
+                          // sendo o destino invisível da confirmação.
+                          if (value && selected && selected.experienceId !== value) setSelectedId("");
+                        }}
+                        className={inputClass}
+                      >
+                        <option value="">Todas as experiências ({data.options.length} turmas)</option>
+                        {experiences.map((experience) => (
+                          <option key={experience.id} value={experience.id}>
+                            {experience.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+
                   {days.length === 0 ? (
                     <p className="mt-3 text-sm text-ink/50">
-                      Nenhuma outra turma futura e aberta desta experiência está disponível.
+                      {data.options.length === 0
+                        ? `Nenhuma turma futura e aberta da agenda tem vagas para ${participantsLabel(data.quantity)}.`
+                        : "Nenhuma turma desta experiência está disponível. Escolha outra experiência no filtro."}
                     </p>
                   ) : (
                     <div className="mt-3 space-y-5">
@@ -267,11 +340,19 @@ export function ChangeSessionDialog({ open, reservationId, onClose }: {
                                     onChange={() => setSelectedId(session.sessionId)}
                                   />
                                   <span className="min-w-0 flex-1">
-                                    <span className="block text-xl font-semibold tracking-[-0.02em] text-ink">
+                                    <span className="block text-sm font-semibold text-lake">
+                                      {session.experienceTitle}
+                                      {session.experienceId !== currentExperienceId ? (
+                                        <span className="ml-1.5 rounded-full bg-lake/10 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-lake">
+                                          outra experiência
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                    <span className="mt-1 block text-xl font-semibold tracking-[-0.02em] text-ink">
                                       {formatSessionTime(session.startsAt)}
                                     </span>
                                     <span className="mt-0.5 block text-sm text-ink/60">
-                                      {formatSessionDateShort(session.startsAt)} · {session.experienceTitle}
+                                      {formatSessionDateShort(session.startsAt)}
                                     </span>
                                     <span className="mt-2 flex flex-wrap items-center gap-2">
                                       <StatusBadge status={session.status} />
@@ -315,13 +396,29 @@ export function ChangeSessionDialog({ open, reservationId, onClose }: {
                   <div className="rounded-2xl border border-ink/10 bg-mist/50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">De</p>
                     <p className="mt-2 text-lg font-semibold tracking-[-0.02em] text-ink">{turmaLabel(data.current.startsAt)}</p>
+                    <p className="mt-1 text-sm text-ink/60">{data.current.experienceTitle}</p>
                   </div>
                   <ArrowRight className="mx-auto hidden size-5 text-lake sm:block" aria-hidden />
                   <div className="rounded-2xl border border-lake/40 bg-lake/5 p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">Para</p>
                     <p className="mt-2 text-lg font-semibold tracking-[-0.02em] text-ink">{turmaLabel(selected.startsAt)}</p>
+                    <p className="mt-1 text-sm text-ink/60">{selected.experienceTitle}</p>
                   </div>
                 </div>
+                {experienceChanged ? (
+                  <div className="rounded-2xl border border-lake/40 bg-lake/5 p-4">
+                    <p className="text-sm font-semibold text-ink">
+                      A reserva muda de experiência: {data.current.experienceTitle} → {selected.experienceTitle}.
+                    </p>
+                    <p className="mt-1 text-sm text-ink/70">
+                      É a mesma reserva, com o mesmo código e o mesmo pagamento. Avise o cliente: nenhuma mensagem
+                      automática é enviada por esta alteração.
+                    </p>
+                  </div>
+                ) : null}
+                {selectedPriceNote ? (
+                  <p className="rounded-2xl bg-mist/50 p-4 text-sm text-ink/70">{selectedPriceNote}</p>
+                ) : null}
                 <p className="flex items-center gap-2 text-sm font-semibold text-ink">
                   <Users className="size-4 text-lake" /> {participantsLabel(data.quantity)}
                 </p>

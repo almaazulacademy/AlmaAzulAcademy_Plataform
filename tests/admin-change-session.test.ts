@@ -23,23 +23,41 @@ function source(path: string) {
 
 const sql = source("supabase/migrations/202608240001_admin_change_reservation_session.sql");
 
+/**
+ * A migration 202608310001 redefine, com `create or replace`, as três funções
+ * criadas aqui. É ela que o banco executa depois de aplicada, então é dela que
+ * este arquivo lê os corpos das funções: as garantias abaixo — pagamento
+ * intocado, `public_code` preservado, capacidade travada, só admin executa —
+ * são exatamente as que precisam sobreviver à evolução, e testá-las contra o
+ * corpo antigo provaria apenas que o texto antigo continua no disco.
+ *
+ * O que continua sendo lido do arquivo original é o que só ele cria: a tabela
+ * de histórico e as propriedades da própria migration.
+ */
+const evolvedSql = source("supabase/migrations/202608310001_admin_cross_experience_rescheduling.sql");
+
 /** Só o SQL executável: os comentários explicam o contrato, não o cumprem. */
 function statements(text: string) {
   return text.split("\n").filter((line) => !line.trimStart().startsWith("--")).join("\n");
 }
 
-function section(from: string, to?: string) {
-  const start = sql.indexOf(from);
+function sectionOf(text: string, from: string, to?: string) {
+  const start = text.indexOf(from);
   assert.notEqual(start, -1, `seção ausente: ${from}`);
-  const end = to ? sql.indexOf(to) : sql.length;
+  const end = to ? text.indexOf(to) : text.length;
   assert.notEqual(end, -1, `seção ausente: ${to}`);
-  return statements(sql.slice(start, end));
+  return statements(text.slice(start, end));
 }
 
-const CHANGE_FUNCTION = section("-- 2. A operação transacional", "-- 3. Turmas de destino");
-const OPTIONS_FUNCTION = section("-- 3. Turmas de destino", "-- 4. Histórico exibido");
+function section(from: string, to?: string) {
+  return sectionOf(sql, from, to);
+}
+
+const CHANGE_FUNCTION = sectionOf(evolvedSql, "-- 3. A operação transacional", "-- 4. Turmas de destino");
+const OPTIONS_FUNCTION = sectionOf(evolvedSql, "-- 4. Turmas de destino", "-- 5. Histórico exibido");
+const HISTORY_FUNCTION = sectionOf(evolvedSql, "-- 5. Histórico exibido", "-- 6. Grants");
 const HISTORY_TABLE = section("-- 1. Histórico tipado", "-- 2. A operação transacional");
-const GRANTS = section("-- 5. Grants");
+const GRANTS = sectionOf(evolvedSql, "-- 6. Grants");
 
 // --- Cenário: as três turmas da Imersão Paranoá -----------------------------
 //
@@ -58,6 +76,7 @@ function target(overrides: Partial<SessionChangeTarget> = {}): SessionChangeTarg
   return {
     sessionId: SESSION_1200,
     experienceId: EXPERIENCE,
+    experienceStatus: "PUBLISHED",
     // 12:00 em Brasília no dia 29/08/2026.
     startsAt: "2026-08-29T15:00:00.000Z",
     status: "OPEN",
@@ -161,13 +180,26 @@ test("7. a própria turma da reserva não pode ser escolhida como destino", () =
   assert.equal(denialOf(verdict), "SAME_SESSION");
 });
 
-test("7b. trocar de experiência não é trocar de horário", () => {
-  const verdict = evaluateSessionChange(
-    reservation(),
-    target({ experienceId: "bbbb0000-0000-4000-8000-00000000bbbb" }),
-    NOW,
+test("7b. o destino de outra experiência publicada é aceito; o de uma não publicada, não", () => {
+  const outra = "bbbb0000-0000-4000-8000-00000000bbbb";
+
+  assert.equal(
+    evaluateSessionChange(reservation(), target({ experienceId: outra, experienceStatus: "PUBLISHED" }), NOW).allowed,
+    true,
+    "reagendar para outra experiência publicada é o comportamento novo",
   );
-  assert.equal(denialOf(verdict), "SESSION_EXPERIENCE_MISMATCH");
+
+  for (const status of ["DRAFT", "ARCHIVED"] as const) {
+    const verdict = evaluateSessionChange(reservation(), target({ experienceId: outra, experienceStatus: status }), NOW);
+    assert.equal(denialOf(verdict), "EXPERIENCE_NOT_AVAILABLE", `experiência ${status} não recebe de fora`);
+  }
+
+  // A própria experiência da reserva continua aceita mesmo despublicada: quem
+  // já comprou precisa poder trocar de horário dentro dela.
+  assert.equal(
+    evaluateSessionChange(reservation(), target({ experienceStatus: "ARCHIVED" }), NOW).allowed,
+    true,
+  );
 });
 
 // --- 8: só reserva confirmada muda de turma ---------------------------------
@@ -182,11 +214,12 @@ test("8. reserva que não está CONFIRMED não muda de turma", () => {
 test("8b. o SQL guarda o status e nunca o reescreve na reserva movida", () => {
   assert.match(CHANGE_FUNCTION, /if target\.status <> 'CONFIRMED' then\s+raise exception 'RESERVATION_NOT_CONFIRMED'/);
 
-  // A única escrita na reserva-alvo é o session_id. Status, confirmed_at e
-  // cancelled_at não aparecem em nenhum `set` dirigido a ela.
+  // A única escrita na reserva-alvo é o vínculo — session_id e experience_id,
+  // juntos. Status, confirmed_at e cancelled_at não aparecem em nenhum `set`
+  // dirigido a ela.
   assert.match(
     CHANGE_FUNCTION,
-    /update public\.reservations\s+set session_id = destination_session\.id,\s+updated_at = now\(\)\s+where id = target\.id;/,
+    /update public\.reservations\s+set session_id = destination_session\.id,\s+experience_id = destination_session\.experience_id,\s+updated_at = now\(\)\s+where id = target\.id/,
   );
   assert.doesNotMatch(CHANGE_FUNCTION, /set status = 'CONFIRMED'/);
   assert.doesNotMatch(CHANGE_FUNCTION, /confirmed_at = /);
@@ -310,7 +343,7 @@ test("13c. destino inválido é recusado antes de qualquer chamada ao banco", ()
 // --- 14: autorização --------------------------------------------------------
 
 test("14. usuário sem permissão administrativa ativa não executa nada", () => {
-  for (const body of [CHANGE_FUNCTION, OPTIONS_FUNCTION, section("-- 4. Histórico exibido", "-- 5. Grants")]) {
+  for (const body of [CHANGE_FUNCTION, OPTIONS_FUNCTION, HISTORY_FUNCTION]) {
     assert.match(body, /if not public\.is_active_admin\(p_actor_id\) then\s+raise exception 'ADMIN_FORBIDDEN' using errcode = '42501'/);
   }
 
@@ -329,8 +362,11 @@ test("14. usuário sem permissão administrativa ativa não executa nada", () =>
     assert.match(GRANTS, new RegExp(`grant execute on function public\\.${name} to service_role`));
   }
 
-  assert.match(GRANTS, /alter table public\.reservation_session_changes enable row level security/);
-  assert.match(GRANTS, /revoke all on public\.reservation_session_changes from anon, authenticated/);
+  // A RLS e a revogação da tabela de histórico nascem na migration original e
+  // continuam valendo: a migration nova só adiciona colunas a ela.
+  const originalGrants = section("-- 5. Grants");
+  assert.match(originalGrants, /alter table public\.reservation_session_changes enable row level security/);
+  assert.match(originalGrants, /revoke all on public\.reservation_session_changes from anon, authenticated/);
 });
 
 test("14b. o ator vem da sessão validada no servidor, nunca do payload", () => {
@@ -369,10 +405,11 @@ test("15b. nada sobrevive parcialmente: toda recusa é exceção, não retorno",
     "RESERVATION_NOT_CONFIRMED",
     "SAME_SESSION",
     "SESSION_NOT_FOUND",
-    "SESSION_EXPERIENCE_MISMATCH",
+    "EXPERIENCE_NOT_AVAILABLE",
     "SESSION_NOT_OPEN",
     "SESSION_MUST_BE_FUTURE",
     "INSUFFICIENT_SPOTS",
+    "RESERVATION_EXPERIENCE_DESYNC",
   ]) {
     assert.match(CHANGE_FUNCTION, new RegExp(`raise exception '${failure}'`), `${failure} precisa abortar a transação`);
   }
@@ -382,6 +419,11 @@ test("15b. nada sobrevive parcialmente: toda recusa é exceção, não retorno",
 test("15c. cada recusa do banco vira uma resposta HTTP correta no painel", () => {
   const cases: Array<[string, number]> = [
     ["RESERVATION_NOT_CONFIRMED", 409],
+    ["EXPERIENCE_NOT_AVAILABLE", 409],
+    ["EXPERIENCE_NOT_FOUND", 404],
+    ["RESERVATION_EXPERIENCE_DESYNC", 409],
+    // Recusa do banco ainda sem a migration nova aplicada: continua mapeada
+    // para o operador não ler um erro genérico durante a janela de deploy.
     ["SESSION_EXPERIENCE_MISMATCH", 409],
     ["SESSION_NOT_OPEN", 409],
     ["SESSION_NOT_FOUND", 404],
@@ -472,7 +514,12 @@ test("18. toda consulta de reserva lê data e horário pela session_id da própr
 // --- Contrato de leitura das turmas de destino ------------------------------
 
 test("a lista de destinos é recortada pelo banco, com o `fits` calculado lá", () => {
-  assert.match(OPTIONS_FUNCTION, /s\.experience_id = target\.experience_id/);
+  assert.doesNotMatch(
+    OPTIONS_FUNCTION,
+    /s\.experience_id = target\.experience_id/,
+    "a agenda inteira é elegível, não só a experiência da reserva",
+  );
+  assert.match(OPTIONS_FUNCTION, /e\.status = 'PUBLISHED' or e\.id = target\.experience_id/);
   assert.match(OPTIONS_FUNCTION, /s\.id <> target\.session_id/);
   assert.match(OPTIONS_FUNCTION, /s\.status = 'OPEN'/);
   assert.match(OPTIONS_FUNCTION, /s\.starts_at > now\(\)/);
@@ -489,10 +536,13 @@ test("o payload das turmas é lido defensivamente e carrega o que a tela mostra"
     status: "CONFIRMED",
     quantity: 3,
     totalCents: 21000,
+    unitPriceCents: 7000,
+    hiddenForCapacity: 0,
     current: {
       sessionId: SESSION_0900,
       experienceId: EXPERIENCE,
       experienceTitle: "Imersão Paranoá",
+      experienceStatus: "PUBLISHED",
       startsAt: "2026-08-29T12:00:00.000Z",
       durationMinutes: 90,
       capacity: 28,
@@ -505,6 +555,7 @@ test("o payload das turmas é lido defensivamente e carrega o que a tela mostra"
         sessionId: SESSION_1200,
         experienceId: EXPERIENCE,
         experienceTitle: "Imersão Paranoá",
+        experienceStatus: "PUBLISHED",
         startsAt: "2026-08-29T15:00:00.000Z",
         durationMinutes: 90,
         capacity: 28,
@@ -534,10 +585,13 @@ test("uma opção só é oferecida quando o banco e a régua da tela concordam",
     status: "CONFIRMED",
     quantity: 3,
     totalCents: 21000,
+    unitPriceCents: 7000,
+    hiddenForCapacity: 0,
     current: {
       sessionId: SESSION_0900,
       experienceId: EXPERIENCE,
       experienceTitle: "Imersão Paranoá",
+      experienceStatus: "PUBLISHED",
       startsAt: "2026-08-29T12:00:00.000Z",
       durationMinutes: 90,
       capacity: 28,
@@ -568,7 +622,7 @@ test("cada recusa tem um texto operacional em português", () => {
     "RESERVATION_NOT_CONFIRMED",
     "SESSION_NOT_FOUND",
     "SAME_SESSION",
-    "SESSION_EXPERIENCE_MISMATCH",
+    "EXPERIENCE_NOT_AVAILABLE",
     "SESSION_NOT_OPEN",
     "SESSION_MUST_BE_FUTURE",
     "INSUFFICIENT_SPOTS",
