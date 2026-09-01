@@ -1,5 +1,24 @@
 # Changelog
 
+## Sprint 6.5 — Reagendamento administrativo entre experiências
+
+- Auditoria do fluxo `reserva confirmada → sessão → experiência → vagas → pagamento → planilha → e-mail → histórico` antes de qualquer alteração de código.
+- **Causa da limitação anterior:** `reservations` guarda `experience_id` como coluna própria, e a troca de turma alterava apenas `session_id`. Mover para outra experiência deixaria a reserva com a data nova e o produto antigo — `lookup_reservation`, `admin_get_reservation`, `admin_list_reservations` e o e-mail de confirmação resolvem a experiência por `r.experience_id`. A recusa `SESSION_EXPERIENCE_MISMATCH` protegia justamente essa divergência.
+- Permite reagendar uma reserva `CONFIRMED` para **qualquer** sessão futura elegível da agenda, inclusive de outra experiência, mantendo a mesma reserva: mesmo `id`, mesmo `public_code`, mesmo status, mesmo `confirmed_at` e mesmo pagamento.
+- Escreve `session_id` e `experience_id` juntos, na mesma transação, e relê a linha para conferir a coerência antes de gravar histórico e auditoria.
+- Substitui a restrição antiga por uma invariante do banco: a trigger `reservations_experience_consistency` impõe que `reservations.experience_id` seja sempre a experiência de `reservations.session_id`, validando apenas quando esse par é escrito.
+- Recusa destino em experiência não publicada (`EXPERIENCE_NOT_AVAILABLE`); a própria experiência da reserva continua aceita mesmo despublicada, para quem já comprou poder trocar de horário.
+- Mantém intactos os locks, a ordem determinística por id, a recontagem de ocupação com as sessões travadas e a recusa de mover parte do grupo — a proteção contra overbooking não foi tocada.
+- Oferece no seletor toda a agenda futura e aberta, com nome da experiência, data, horário, vagas restantes e capacidade; esconde canceladas, arquivadas, encerradas e sem vaga para o grupo inteiro, informando quantas ficaram de fora.
+- Acrescenta filtro por experiência no modal, etiqueta *outra experiência* nos destinos que atravessam a fronteira e aviso explícito na confirmação quando a experiência muda.
+- Registra no histórico a experiência anterior e a nova, além da sessão anterior e da nova, do ator e da data/hora, com backfill das trocas já gravadas; `admin_audit_log` recebe as duas experiências e o sinal `experienceChanged`.
+- Preserva o valor pago mesmo entre experiências de preços diferentes: a diferença é exibida antes de confirmar e registrada no histórico, nunca cobrada nem estornada, e nenhum `payment_status`, evento de pagamento ou checkout é criado.
+- Atualiza a mesma linha da planilha operacional, com a experiência, a data e o horário novos, sem duplicar a reserva; a turma antiga é reconstruída para corrigir seus totais.
+- Não envia e-mail: não existe comunicação automática de troca de turma, e o e-mail de confirmação continua sendo uma-vez-por-reserva — o que também garante que nenhuma mensagem duplicada saia daqui. Avisar o cliente segue sendo decisão do admin.
+- Mantém a autorização inalterada: só admin ativo executa, `SECURITY DEFINER` com `search_path` fixo, execução revogada de `public`, `anon` e `authenticated`, e o ator derivado da sessão validada no servidor.
+- Acrescenta 38 testes — inclusive A → B, B → A, destino sem vagas, sessão cancelada, sessão passada, quantidade maior que a capacidade, sincronização real com planilha falsa em memória e regressão completa do fluxo de mesma experiência — e um diagnóstico transacional para Postgres real.
+- Não altera preços, capacidades, reservas existentes, criação de pré-reserva, expiração, pagamento, InfinitePay, autenticação, RLS nem nenhuma migration histórica.
+
 ## Sprint 6.4 — Confiabilidade da confirmação de pagamento (P0)
 
 - Auditoria completa do fluxo `PRE_RESERVED → checkout → webhook → payment_events → confirmPayment → RPC → CONFIRMED → available_spots → expiração` antes de qualquer alteração de código.

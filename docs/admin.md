@@ -167,37 +167,46 @@ Cancelar uma reserva confirmada libera a vaga, mas não executa estorno no prove
 
 ## Alterar turma
 
-Uma reserva `CONFIRMED` pode trocar de dia ou horário sem cancelamento, sem nova cobrança e sem nova reserva. A ação existe **apenas** no painel: nenhuma rota pública, nenhuma tela de cliente e nenhuma RPC acessível por `anon` ou `authenticated` permite trocar de turma.
+Uma reserva `CONFIRMED` pode trocar de dia, de horário **ou de experiência** sem cancelamento, sem nova cobrança e sem nova reserva. A ação existe **apenas** no painel: nenhuma rota pública, nenhuma tela de cliente e nenhuma RPC acessível por `anon` ou `authenticated` permite trocar de turma.
 
 A ação aparece no cartão da reserva em `/admin/reservas` e no detalhe, como **Alterar turma**. O modal tem duas etapas:
 
-1. **Escolher.** Mostra a turma atual (experiência, data, horário, participantes e valor pago) e as turmas de destino disponíveis, agrupadas por dia, com horário em destaque, vagas restantes, capacidade e status. Um campo opcional de motivo fica no fim.
-2. **Confirmar.** Repete de onde para onde a reserva vai, quantos participantes e as três garantias: a reserva continua confirmada, o pagamento não muda e o código é preservado.
+1. **Escolher.** Mostra a turma atual (experiência, data, horário, participantes e valor pago) e as turmas de destino da agenda inteira, agrupadas por dia, cada uma nomeando sua experiência, com horário em destaque, vagas restantes, capacidade e status. Uma etiqueta *outra experiência* marca os destinos que atravessam a fronteira, e um filtro por experiência aparece quando há mais de uma. Um campo opcional de motivo fica no fim.
+2. **Confirmar.** Repete de onde para onde a reserva vai, quantos participantes e as três garantias: a reserva continua confirmada, o pagamento não muda e o código é preservado. Quando a experiência muda, a tela diz isso com todas as letras e lembra que nenhuma mensagem automática é enviada ao cliente.
 
-A lista de destinos é lida quando o modal abre, e não junto com a listagem: as vagas restantes mudam a cada confirmação, e o número que importa é o do instante da decisão.
+A lista de destinos é lida quando o modal abre, e não junto com a listagem: as vagas restantes mudam a cada confirmação, e o número que importa é o do instante da decisão. Turmas sem vagas para o grupo inteiro não são oferecidas — elas são contadas e a tela informa quantas ficaram de fora.
 
 `admin_change_reservation_session` executa a mudança inteira em uma transação:
 
 - trava a reserva e **as duas** sessões, sempre na ordem dos ids — o que impede deadlock quando duas trocas cruzam origem e destino;
-- exige `CONFIRMED`, sessão de destino existente, aberta, futura, da mesma experiência e diferente da atual;
+- exige `CONFIRMED`, sessão de destino existente, aberta, futura e diferente da atual;
+- aceita destino de qualquer experiência **publicada**; a própria experiência da reserva é sempre aceita, mesmo despublicada;
 - expira as retenções vencidas do destino e recalcula a ocupação real antes de decidir;
 - recusa a mudança inteira quando a reserva não cabe: não existe mover parte dos participantes;
-- altera somente `session_id`; status, `confirmed_at`, `public_code`, cliente, CPF, quantidade, `unit_price_cents` e `total_cents` permanecem como estavam;
+- altera `session_id` e `experience_id`, juntos, e relê a linha para conferir que ficaram coerentes; status, `confirmed_at`, `public_code`, cliente, CPF, quantidade, `unit_price_cents` e `total_cents` permanecem como estavam;
 - grava o histórico e a linha de auditoria dentro da mesma transação.
 
 Qualquer recusa aborta tudo: nem o vínculo, nem o histórico, nem a auditoria sobrevivem parcialmente.
 
-### Preço diferente entre as turmas
+### Preço diferente entre as turmas e entre as experiências
 
-O valor pago é preservado. `unit_price_cents` é coluna da própria reserva e `total_cents` é gerada a partir dela, então nenhuma diferença de preço entre as sessões é recalculada, cobrada ou estornada. Os dois preços ficam registrados no histórico, e o detalhe da reserva avisa quando eles divergiram. Ajuste financeiro continua sendo processo operacional separado.
+O valor pago é preservado. `unit_price_cents` é coluna da própria reserva e `total_cents` é gerada a partir dela, então nenhuma diferença de preço — entre duas turmas da mesma experiência ou entre experiências de preços completamente diferentes — é recalculada, cobrada ou estornada. Os dois preços ficam registrados no histórico; o modal mostra a diferença antes de confirmar e o detalhe da reserva a mantém visível depois. Ajuste financeiro continua sendo processo operacional separado, decidido por uma pessoa.
 
 ### Histórico
 
-`reservation_session_changes` guarda reserva, sessão anterior, sessão nova, data e hora, administrador responsável, quantidade de participantes, valor preservado, os preços das duas turmas e o motivo opcional. O histórico aparece no detalhe da reserva, é interno e nunca é exposto em página pública. A trilha única `admin_audit_log` também recebe uma linha `RESERVATION_SESSION_CHANGED`.
+`reservation_session_changes` guarda reserva, sessão anterior, sessão nova, **experiência anterior e experiência nova**, data e hora, administrador responsável, quantidade de participantes, valor preservado, os preços das duas turmas e o motivo opcional. O histórico aparece no detalhe da reserva, é interno e nunca é exposto em página pública. A trilha única `admin_audit_log` também recebe uma linha `RESERVATION_SESSION_CHANGED`, com as duas experiências e o sinal `experienceChanged`.
 
-### Limite desta versão
+### O que a troca de experiência não faz
 
-A troca acontece entre sessões da **mesma experiência**. Mudar de experiência é mudar de produto, não de horário: mexeria em `reservations.experience_id` e exigiria a cobrança ou o estorno que esta versão deliberadamente não faz. O banco recusa com `SESSION_EXPERIENCE_MISMATCH`.
+- **Não cobra e não estorna.** A diferença de preço é informação, nunca lançamento.
+- **Não avisa o cliente sozinha.** Não existe e-mail automático de troca de turma; o único e-mail automático da plataforma é o de confirmação, uma vez por reserva. Avisar o cliente é uma decisão do admin, pelas ações de mensagem do painel — o que também garante que nenhum e-mail duplicado saia daqui.
+- **Não move para dentro de um produto fora do ar.** Uma experiência `DRAFT` ou `ARCHIVED` não recebe reserva vinda de outra experiência: o banco recusa com `EXPERIENCE_NOT_AVAILABLE`.
+
+### A invariante que substituiu a antiga restrição
+
+A versão anterior recusava qualquer destino de outra experiência (`SESSION_EXPERIENCE_MISMATCH`), porque mover só o `session_id` deixaria `reservations.experience_id` apontando para o produto antigo — e `lookup_reservation`, `admin_get_reservation`, `admin_list_reservations` e o e-mail de confirmação resolvem a experiência por essa coluna.
+
+A restrição não foi afrouxada: ela foi trocada por uma garantia mais forte. A trigger `reservations_experience_consistency` impõe que `reservations.experience_id` seja **sempre** a experiência de `reservations.session_id`, validando toda vez que esse par é escrito. A RPC escreve as duas colunas juntas e relê a linha para conferir; qualquer divergência levanta `RESERVATION_EXPERIENCE_DESYNC` e aborta a transação inteira.
 
 ## Configurações
 

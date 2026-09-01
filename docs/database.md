@@ -63,7 +63,7 @@ Exclusões de experiências, sessões e reservas relacionadas usam `ON DELETE RE
 - `admin_users`: autoriza o UUID do Supabase Auth, nome de exibição, papel `ADMIN`/`OPERATOR` e estado ativo.
 - `admin_audit_log`: registra ator, ação, entidade, motivo e metadados das mutações.
 - `platform_settings`: singleton com nome da empresa, WhatsApp, email e PIX, consultado como somente leitura pelo MVP.
-- `reservation_session_changes`: histórico tipado das trocas administrativas de turma — reserva, sessão anterior, sessão nova, ator, quantidade, valor preservado, preço das duas sessões e motivo opcional. Adicionada pela migration `202608240001_admin_change_reservation_session.sql`, com `on delete restrict` nas três FKs para o histórico não sumir junto com uma sessão excluída.
+- `reservation_session_changes`: histórico tipado das trocas administrativas de turma — reserva, sessão anterior, sessão nova, **experiência anterior e experiência nova**, ator, quantidade, valor preservado, preço das duas sessões e motivo opcional. Adicionada pela migration `202608240001_admin_change_reservation_session.sql`, com `on delete restrict` nas FKs para o histórico não sumir junto com uma sessão ou experiência excluída; as duas colunas de experiência vieram em `202608310001_admin_cross_experience_rescheduling.sql`, com backfill das linhas já gravadas.
 
 A migration também adiciona `sessions.internal_notes`, `experiences.image_url` e `experiences.display_order` com limites e índices apropriados.
 
@@ -235,6 +235,7 @@ Não há policy pública de leitura para `reservations` ou `payment_events`; pri
 | `202608010002_admin_dashboard_mvp.sql` | Autorização administrativa, auditoria, configurações e RPCs operacionais |
 | `202608020001_legacy_schema_compatibility.sql` | Bootstrap idempotente e não destrutivo para o schema legado |
 | `202608240001_admin_change_reservation_session.sql` | Histórico tipado e RPC transacional da troca administrativa de turma |
+| `202608310001_admin_cross_experience_rescheduling.sql` | Reagendamento entre experiências: histórico com as duas experiências, invariante reserva ↔ sessão ↔ experiência e evolução das três RPCs |
 
 ## RPCs administrativas
 
@@ -246,20 +247,24 @@ Confirmação manual e alteração de capacidade bloqueiam os registros necessá
 
 ### Troca de turma de uma reserva confirmada
 
-`admin_change_reservation_session(actor, reservation, target_session, reason)` move uma reserva `CONFIRMED` para outra sessão da mesma experiência, dentro de uma transação:
+`admin_change_reservation_session(actor, reservation, target_session, reason)` move uma reserva `CONFIRMED` para outra sessão da agenda — da mesma experiência ou de outra — dentro de uma transação:
 
 1. trava a reserva com `FOR UPDATE`;
 2. exige status `CONFIRMED` e destino diferente da sessão atual;
 3. trava origem e destino com `FOR UPDATE`, **sempre na ordem dos ids** — a ordem fixa é o que evita deadlock entre duas trocas que cruzam origem e destino;
-4. exige destino existente, da mesma experiência, `OPEN` e futuro;
+4. exige destino existente, `OPEN` e futuro; quando o destino é de outra experiência, exige que ela esteja `PUBLISHED` (`EXPERIENCE_NOT_AVAILABLE`);
 5. expira as retenções vencidas do destino e recalcula a ocupação real;
 6. rejeita com `INSUFFICIENT_SPOTS` quando a reserva inteira não cabe;
-7. altera somente `session_id`;
-8. grava `reservation_session_changes` e `admin_audit_log`.
+7. altera `session_id` **e** `experience_id`, relendo a linha para conferir a coerência (`RESERVATION_EXPERIENCE_DESYNC`);
+8. grava `reservation_session_changes` — com as duas experiências — e `admin_audit_log`.
 
 A vaga é liberada e ocupada pelo próprio vínculo: `available_spots` soma as reservas por `session_id`, então mover a linha já corrige as duas turmas, sem contador paralelo.
 
-`admin_reservation_session_options(actor, reservation)` devolve a turma atual e as candidatas — mesma experiência, futuras, `OPEN`, com `remainingSpots`, `capacity`, `status` e um `fits` calculado no banco. `admin_list_reservation_session_changes(actor, reservation)` devolve o histórico para o detalhe da reserva.
+`admin_reservation_session_options(actor, reservation)` devolve a turma atual e as candidatas — toda a agenda futura e `OPEN` de experiências publicadas (mais a própria experiência da reserva), com `experienceTitle`, `experienceStatus`, `remainingSpots`, `capacity`, `status`, `priceCents` e um `fits` calculado no banco. Turmas sem vaga para a reserva inteira não entram na lista e são contadas em `hiddenForCapacity`. `admin_list_reservation_session_changes(actor, reservation)` devolve o histórico, com as duas experiências e o sinal `experience_changed`, para o detalhe da reserva.
+
+### Coerência reserva ↔ sessão ↔ experiência
+
+`reservations` guarda `session_id` e `experience_id`, e quatro leituras resolvem a experiência pela segunda coluna: `lookup_reservation`, `admin_get_reservation`, `admin_list_reservations` e `reservation_confirmation_email`. A trigger `reservations_experience_consistency` impõe que `experience_id` seja sempre a experiência de `session_id`, validando apenas quando esse par é escrito — confirmar, cancelar ou expirar uma reserva não passa por ela. `admin_update_session` já impedia a sessão de mudar de experiência tendo reservas, então o vínculo não pode divergir por nenhum caminho.
 
 As três exigem ator administrativo ativo, são `SECURITY DEFINER` com `search_path` explícito e têm execução revogada de `public`, `anon` e `authenticated`.
 
