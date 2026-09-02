@@ -5,6 +5,7 @@ import { AgendaLoading, AgendaSessions } from "@/components/agenda-sessions";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
+import { DATE_FILTER_PARAM, parseDateFilter } from "@/lib/sessions/date-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,18 @@ export const metadata: Metadata = {
   alternates: { canonical: "/agenda" },
 };
 
-export default function AgendaPage() {
+/**
+ * `?date=2026-10-17` chega validado ao componente: um valor fora do formato, ou
+ * um dia que não existe, vira "sem filtro" e a agenda aparece inteira. O link
+ * compartilhado renderiza já filtrado no servidor, sem piscar a lista completa.
+ */
+export default async function AgendaPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const date = parseDateFilter((await searchParams)[DATE_FILTER_PARAM]);
+
   return (
     <main className="min-h-screen bg-paper pt-24">
       <Navbar />
@@ -33,7 +45,7 @@ export default function AgendaPage() {
 
         <div className="mt-12 sm:mt-16">
           <Suspense fallback={<AgendaLoading />}>
-            <AgendaSessions />
+            <AgendaSessions date={date} />
           </Suspense>
         </div>
       </section>

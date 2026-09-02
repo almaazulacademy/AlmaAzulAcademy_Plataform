@@ -17,7 +17,14 @@ import { resolveExperienceFaq } from "@/lib/editorial/faq";
 
 const icons: Record<string, LucideIcon> = { Compass, Droplets, LifeBuoy, ShieldCheck, Sparkles };
 
-export function ExperienceLanding({ experience }: { experience: PublicExperience }) {
+export function ExperienceLanding({
+  experience,
+  date = null,
+}: {
+  experience: PublicExperience;
+  /** Dia escolhido em `?date=`, já validado pela página. */
+  date?: string | null;
+}) {
   const content = experience.editorial;
   const faq = resolveExperienceFaq(content.faq);
   return (
@@ -90,7 +97,7 @@ export function ExperienceLanding({ experience }: { experience: PublicExperience
         <div className="relative isolate overflow-hidden rounded-4xl bg-ink text-white">
           <EditorialImage src={content.reservations.image.src} alt={content.reservations.image.alt} sizes="100vw" className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-ink/85" />
-          <div className="container relative z-10 py-24 sm:py-28 lg:py-36"><div className="mb-12 max-w-3xl sm:mb-16"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-sand">{content.reservations.eyebrow}</p><h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.055em] sm:text-7xl">{content.reservations.title}</h2><p className="mt-7 max-w-xl text-lg leading-8 text-white/65">{content.reservations.description}</p></div><Suspense fallback={<SessionsLoading />}><SessionsSection experienceSlug={experience.slug} /></Suspense></div>
+          <div className="container relative z-10 py-24 sm:py-28 lg:py-36"><div className="mb-12 max-w-3xl sm:mb-16"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-sand">{content.reservations.eyebrow}</p><h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.055em] sm:text-7xl">{content.reservations.title}</h2><p className="mt-7 max-w-xl text-lg leading-8 text-white/65">{content.reservations.description}</p></div><Suspense fallback={<SessionsLoading />}><SessionsSection experienceSlug={experience.slug} date={date} /></Suspense></div>
         </div>
       </section>
       <Footer />

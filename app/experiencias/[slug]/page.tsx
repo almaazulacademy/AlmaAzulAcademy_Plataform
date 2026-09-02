@@ -3,10 +3,13 @@ import { notFound } from "next/navigation";
 
 import { ExperienceLanding } from "@/components/experience-landing";
 import { getPublishedExperience } from "@/lib/editorial/data";
+import { DATE_FILTER_PARAM, parseDateFilter } from "@/lib/sessions/date-filter";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ slug: string }> };
+type SearchParams = Record<string, string | string[] | undefined>;
+
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<SearchParams> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -26,9 +29,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function DynamicExperiencePage({ params }: Props) {
+export default async function DynamicExperiencePage({ params, searchParams }: Props) {
   const { slug } = await params;
   const experience = await getPublishedExperience(slug);
   if (!experience) notFound();
-  return <ExperienceLanding experience={experience} />;
+  // Só a grade de datas usa o filtro; o destaque de turmas continua mostrando
+  // todos os horários da experiência.
+  const date = parseDateFilter((await searchParams)[DATE_FILTER_PARAM]);
+  return <ExperienceLanding experience={experience} date={date} />;
 }

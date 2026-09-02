@@ -69,7 +69,8 @@ docs/                        documentação técnica e de produto
 | Rota | Tipo | Estado e responsabilidade |
 | --- | --- | --- |
 | `/` | Estática | Home institucional e catálogo editorial |
-| `/agenda` | Dinâmica | Agenda geral com as sessões abertas de todas as experiências publicadas |
+| `/agenda` | Dinâmica | Agenda geral com as sessões abertas de todas as experiências publicadas; aceita `?date=YYYY-MM-DD` para recortar um dia |
+| `/experiencias/[slug]` | Dinâmica | Landing da experiência; a grade de datas aceita o mesmo `?date=YYYY-MM-DD` |
 | `/imersao-paranoa` | Redirect | 308 permanente para `/experiencias/imersao-paranoa`, definido em `next.config.ts` |
 | `/reservar/[sessionId]` | Dinâmica | Carrega uma sessão aberta e apresenta formulário/resumo |
 | `/acompanhar-reserva` | Estática com interação cliente | Consulta por CPF + código e retoma pagamento quando possível |

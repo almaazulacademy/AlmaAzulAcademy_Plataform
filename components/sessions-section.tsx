@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, CalendarDays, Ticket, Users } from "lucide-react";
 
+import { SessionDateFilter } from "@/components/session-date-filter";
 import { buttonVariants } from "@/components/ui/button";
 import { readOpenSessions } from "@/lib/reservations/session-catalog";
 import type { BookingSession } from "@/lib/reservations/types";
@@ -74,44 +75,64 @@ function SessionCard({ choice, session }: { choice: SessionChoice; session: Book
 }
 
 /**
- * Grade de escolha da sessão, agrupada por dia.
+ * Grade de escolha da sessão, agrupada por dia e filtrável por data.
  *
  * O agrupamento existe para tornar óbvio o que confundia o cliente: o mesmo
  * sábado tem 09:00, 12:00 e 15:00. Cada dia aparece uma vez, com as turmas
  * daquele dia lado a lado e o horário em evidência.
+ *
+ * O filtro trabalha por cima desse agrupamento: cada dia já é um bloco com a
+ * sua chave local, então escolher uma data é escolher um bloco. As sessões são
+ * as mesmas de sempre — só desta experiência, porque `readOpenSessions` já
+ * recebeu o slug.
  */
-export function SessionsGrid({ sessions }: { sessions: BookingSession[] }) {
+export function SessionsGrid({ sessions, date = null }: { sessions: BookingSession[]; date?: string | null }) {
   const days = groupSessionsByDay(sessions);
 
   return (
-    <div className="space-y-12 sm:space-y-14">
-      {days.map((day) => (
-        <section key={day.dayKey} aria-label={day.fullDate}>
-          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-white/15 pb-4">
-            <h3 className="text-2xl font-medium tracking-[-0.035em] first-letter:uppercase sm:text-3xl">
-              {day.weekday}, {day.dayMonth}
-            </h3>
-            <p className="text-sm text-white/55">
-              {day.turmas.length === 1 ? "1 turma neste dia" : `${day.turmas.length} turmas neste dia`}
-            </p>
-          </div>
+    <SessionDateFilter
+      tone="dark"
+      initialDate={date}
+      listClassName="space-y-12 sm:space-y-14"
+      emptyMessage="Não encontramos horários desta experiência nesta data."
+      entries={days.map((day) => ({
+        key: day.dayKey,
+        dayKey: day.dayKey,
+        count: day.turmas.length,
+        node: (
+          <section aria-label={day.fullDate}>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-white/15 pb-4">
+              <h3 className="text-2xl font-medium tracking-[-0.035em] first-letter:uppercase sm:text-3xl">
+                {day.weekday}, {day.dayMonth}
+              </h3>
+              <p className="text-sm text-white/55">
+                {day.turmas.length === 1 ? "1 turma neste dia" : `${day.turmas.length} turmas neste dia`}
+              </p>
+            </div>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {day.turmas.map(({ choice, session }) => (
-              <SessionCard key={choice.sessionId} choice={choice} session={session} />
-            ))}
-          </div>
-        </section>
-      ))}
-    </div>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {day.turmas.map(({ choice, session }) => (
+                <SessionCard key={choice.sessionId} choice={choice} session={session} />
+              ))}
+            </div>
+          </section>
+        ),
+      }))}
+    />
   );
 }
 
 /** Lê as sessões abertas da experiência e decide entre grade e estado vazio. */
-export async function SessionsSection({ experienceSlug }: { experienceSlug: string }) {
+export async function SessionsSection({
+  experienceSlug,
+  date = null,
+}: {
+  experienceSlug: string;
+  date?: string | null;
+}) {
   const result = await readOpenSessions(experienceSlug);
   if (result.status === "ERROR") return <EmptyState error />;
   if (result.status === "UNCONFIGURED" || !result.sessions.length) return <EmptyState />;
 
-  return <SessionsGrid sessions={result.sessions} />;
+  return <SessionsGrid sessions={result.sessions} date={date} />;
 }
