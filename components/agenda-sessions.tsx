@@ -14,10 +14,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { SessionDateFilter } from "@/components/session-date-filter";
 import { buttonVariants } from "@/components/ui/button";
 import { listAgendaSessions, type AgendaSession } from "@/lib/agenda/data";
 import { WHATSAPP_AGENDA_LINK } from "@/lib/contact";
 import { buildSessionChoice } from "@/lib/sessions/choice";
+import { sessionDayKey } from "@/lib/sessions/date-filter";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 function resolveExperienceIcon(slug: string): LucideIcon {
@@ -147,7 +149,15 @@ function AgendaCard({ session }: { session: AgendaSession }) {
   );
 }
 
-export async function AgendaSessions() {
+/**
+ * Agenda geral: todas as experiências publicadas em uma lista só.
+ *
+ * As sessões continuam vindo de `listAgendaSessions` — mesma RPC, mesmas regras
+ * de publicação e disponibilidade. O filtro de data recebe os cartões já
+ * renderizados aqui e apenas escolhe quais ficam visíveis; nenhuma consulta
+ * extra acontece quando o cliente troca de dia.
+ */
+export async function AgendaSessions({ date = null }: { date?: string | null }) {
   const supabase = getSupabaseServerClient();
   if (!supabase) return <EmptyState />;
 
@@ -156,11 +166,17 @@ export async function AgendaSessions() {
     if (!sessions.length) return <EmptyState />;
 
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {sessions.map((session) => (
-          <AgendaCard key={session.id} session={session} />
-        ))}
-      </div>
+      <SessionDateFilter
+        tone="light"
+        initialDate={date}
+        listClassName="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        emptyMessage="Não encontramos experiências disponíveis nesta data."
+        entries={sessions.map((session) => ({
+          key: session.id,
+          dayKey: sessionDayKey(session.startsAt),
+          node: <AgendaCard session={session} />,
+        }))}
+      />
     );
   } catch (error) {
     console.error("Erro ao montar a agenda geral:", error instanceof Error ? error.message : "erro desconhecido");

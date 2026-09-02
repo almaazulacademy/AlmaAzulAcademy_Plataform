@@ -1,5 +1,19 @@
 # Changelog
 
+## Sprint 6.6 — Filtro de data na agenda pública
+
+- Auditoria do fluxo público de escolha de data antes de qualquer alteração: `/agenda` monta a lista com `listAgendaSessions`, e cada página de experiência usa `SessionsSection`/`SessionsGrid` sobre `readOpenSessions`. As duas já recebiam a lista inteira de sessões abertas em uma única resposta, agrupada por dia local pelo `groupSessionsByDay`.
+- Acrescenta um filtro por data no topo das duas listagens públicas: agenda geral (todas as experiências misturadas) e a grade de datas de cada experiência, incluindo Imersão Paranoá, Remada Sunset, Remada do Nascer do Sol e Remada da Lua Cheia, que reutilizam o mesmo componente.
+- O recorte é **client-side** sobre as sessões que a página já carregou: nenhuma consulta, RPC ou rota nova foi criada, e trocar de data não repinta a página. O volume de sessões abertas cabe em uma resposta, então uma ida ao servidor por clique seria custo sem ganho.
+- A data escolhida vai para a URL (`?date=2026-10-17`) pela History API nativa: o link filtrado pode ser compartilhado, o refresh mantém o filtro e voltar/avançar do navegador ficam previsíveis. O servidor lê o parâmetro e já entrega o primeiro HTML filtrado, sem piscar a lista completa.
+- Um `?date=` fora do formato, com dia inexistente (`2026-02-30`), repetido ou com conteúdo arbitrário é ignorado como "sem filtro" — a página mostra todas as datas em vez de quebrar. O componente revalida o valor mesmo já vindo validado da página.
+- A comparação usa sempre o dia local em `America/Sao_Paulo`, derivado de `toSessionDateTimeLocal`: uma remada de 05:30 fica no próprio dia e uma turma de 22:00 não escorrega para o dia seguinte por causa do UTC.
+- Estado vazio explicado em cada contexto — "Não encontramos experiências disponíveis nesta data." na agenda geral, "Não encontramos horários desta experiência nesta data." na página da experiência — sempre com a ação "Ver todas as datas".
+- Filtro horizontal e integrado ao cabeçalho no desktop, empilhado e com alvo confortável no mobile, sem estourar largura e sem caminho de código próprio por tamanho de tela.
+- Na página de uma experiência o filtro atua apenas sobre as sessões daquela experiência; o destaque "Turmas disponíveis" continua listando todos os horários e não é filtrado.
+- Acrescenta 26 testes de fuso, validação do parâmetro, recorte por dia, estado vazio, limpeza do filtro e coerência com o agrupamento por dia.
+- Trabalho somente de interface e navegação: não altera `public.sessions`, migrations, `available_spots`, capacidade, reservas, checkout, InfinitePay, pagamentos, status de sessão, Google Sheets, reagendamento nem o admin. Nenhuma migration foi criada.
+
 ## Sprint 6.5 — Reagendamento administrativo entre experiências
 
 - Auditoria do fluxo `reserva confirmada → sessão → experiência → vagas → pagamento → planilha → e-mail → histórico` antes de qualquer alteração de código.
