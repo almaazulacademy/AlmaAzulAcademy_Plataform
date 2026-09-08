@@ -1,5 +1,19 @@
 # Changelog
 
+## Sprint 6.7 — E-mail de confirmação mais completo
+
+- Auditoria do fluxo de e-mail antes de qualquer alteração: o template vive em `lib/reservations/confirmation-email.ts` (funções puras), o envio em `lib/reservations/confirmation-email-service.ts`, e os dados vêm da RPC `reservation_confirmation_email` — nome, código, experiência, `starts_at` da sessão e quantidade.
+- Reescreve **apenas o conteúdo e a apresentação** do e-mail de confirmação, para que ele responda sozinho as perguntas que hoje chegam por WhatsApp.
+- Acrescenta um bloco de **localização** com o endereço do ponto de encontro (`QL 5 Conjunto 5 - Lago Norte`). Texto, sem link de mapa: o projeto não tem link nem coordenada oficial em lugar nenhum, e inventar um seria criar informação que ninguém conferiu.
+- Acrescenta um bloco de **horário de encontro** em destaque, com o horário real da sessão reservada e a tolerância de até 20 minutos. O horário continua saindo de `formatSessionTime(starts_at)` em `America/Sao_Paulo` — um teste recusa qualquer horário literal no arquivo do template.
+- Acrescenta as seções **Antes de vir** (não precisa ter experiência com esportes ou canoa; roupa de banho, repelente e roupa confortável; vir de chinelo), **Duração** (em torno de 1h30, com parada para banho), **Imprevistos acontecem** (cancelamento com reembolso ou crédito até 1 dia antes) e **Criaremos um grupo** (grupo de comunicação até 1 dia antes da experiência).
+- A duração fica como texto fixo, e não como `duration_minutes`: a RPC não devolve esse campo, todas as experiências atuais duram 90 minutos e a frase fala também da parada para banho, que nenhuma coluna carrega. Buscar o valor dinamicamente exigiria mexer na RPC, fora do escopo desta mudança.
+- Cada bloco de texto fixo virou **constante exportada**, e é a própria constante que os testes comparam com o HTML e com o texto puro — a frase não pode divergir entre as duas versões nem ser alterada em silêncio.
+- Reorganiza o layout em cartões: resumo da reserva, dois blocos de destaque (local e horário) e seções separadas por filete, com títulos curtos. O HTML continua deliberadamente antiquado — tabelas, largura máxima de 560px, estilo inline, sem `<ul>`, sem media query, sem imagem, sem `<style>` e sem CSS que Gmail ou Outlook ignorem.
+- A versão em texto puro recebeu as mesmas seções: ela continua sendo a mensagem inteira, nunca um resumo.
+- Acrescenta 11 testes de conteúdo, fuso, responsividade e preservação do que já existia, mais a verificação de que o e-mail continua servindo às quatro experiências com um único template.
+- **Nada da mecânica foi tocado:** reivindicação exatamente-uma-vez, prevenção de envio duplicado, retry, rotina agendada, botão de reenvio do painel, webhook da InfinitePay, confirmação de pagamento, `payment_status`, `payment_events`, checkout, schema do Supabase, `public.sessions`, `public.reservations`, disponibilidade, Google Sheets e reagendamento seguem exatamente como estavam. Nenhuma migration foi criada.
+
 ## Sprint 6.6 — Filtro de data na agenda pública
 
 - Auditoria do fluxo público de escolha de data antes de qualquer alteração: `/agenda` monta a lista com `listAgendaSessions`, e cada página de experiência usa `SessionsSection`/`SessionsGrid` sobre `readOpenSessions`. As duas já recebiam a lista inteira de sessões abertas em uma única resposta, agrupada por dia local pelo `groupSessionsByDay`.
