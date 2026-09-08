@@ -9,14 +9,68 @@
  * inline e nada de flexbox ou grid. Cliente de e-mail não é navegador — Outlook
  * e Gmail ignoram boa parte do CSS moderno, e o layout precisa se manter de pé
  * no celular e no desktop.
+ *
+ * O corpo concentra de propósito as respostas que hoje chegam por WhatsApp:
+ * onde é, a que horas, o que levar, quanto dura, como cancelar e quando o grupo
+ * de comunicação aparece. Cada uma dessas seções é uma constante exportada,
+ * para que o teste verifique exatamente o texto que o cliente lê.
  */
 
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE, INSTAGRAM_LINK, WHATSAPP_NUMBER } from "../contact.ts";
 import { formatSessionDate, formatSessionTime } from "../sessions/date-time.ts";
 import { SITE_NAME, SITE_URL } from "../site.ts";
 
-/** Local de encontro das experiências. */
-export const MEETING_LOCATION = "Lago Norte";
+/**
+ * Endereço do ponto de encontro das experiências.
+ *
+ * Só texto: o projeto não tem link de mapa nem coordenada em lugar nenhum, e
+ * inventar um aqui seria criar informação que ninguém conferiu. Quando existir
+ * um link oficial, ele entra nesta constante e no bloco de localização.
+ */
+export const MEETING_LOCATION = "QL 5 Conjunto 5 - Lago Norte";
+
+/** Tolerância de chegada, contada a partir do horário da sessão reservada. */
+export const MEETING_TOLERANCE_NOTE = "Tolerância de até 20 minutos após o horário marcado.";
+
+/** O que o cliente precisa saber antes de sair de casa. */
+export const PREPARATION_TITLE = "Antes de vir";
+
+export const PREPARATION_ITEMS = [
+  "Não é necessário ter experiência com esportes ou canoa. A remada em grupo é tranquila de acompanhar e aprender.",
+  "Traga roupa de banho, repelente e roupa confortável para praticar atividade física.",
+  "Recomendamos vir de chinelo.",
+] as const;
+
+/**
+ * Duração da experiência.
+ *
+ * Texto fixo, e não `duration_minutes` da sessão: a RPC que alimenta este
+ * e-mail não devolve a duração, todas as experiências atuais duram 90 minutos e
+ * a frase fala também da parada para banho, que nenhum campo do banco carrega.
+ * Buscar a duração dinamicamente exigiria mexer na RPC — fora do escopo aqui.
+ */
+export const DURATION_TITLE = "Duração";
+
+export const DURATION_NOTE =
+  "A experiência dura em torno de 1h30 e conta com uma parada para banho durante a remada.";
+
+/** Política de cancelamento. Texto operacional — não ampliar nem restringir. */
+export const CANCELLATION_TITLE = "Imprevistos acontecem";
+
+export const CANCELLATION_NOTE =
+  "Caso ocorra algum imprevisto, é permitido solicitar cancelamento com reembolso ou crédito para uma próxima remada até 1 dia antes do horário marcado.";
+
+/** Aviso do grupo de comunicação, o que mais reduz mensagem individual. */
+export const GROUP_TITLE = "Criaremos um grupo";
+
+export const GROUP_NOTE =
+  "Até 1 dia antes da sua experiência, criaremos um grupo para facilitar a comunicação, enviar orientações finais e manter todos atualizados.";
+
+/** Fechamento: o código e o canal de contato. */
+const CLOSING_PARAGRAPHS = [
+  "Guarde o código da reserva: é por ele que identificamos o seu agendamento.",
+  "Se precisar falar conosco antes disso, responda a este e-mail ou utilize o nosso canal oficial de atendimento.",
+] as const;
 
 /** Paleta da marca, espelhando as variáveis de `app/globals.css`. */
 const BRAND = {
@@ -26,6 +80,7 @@ const BRAND = {
   lake: "#277f87",
   forest: "#214f43",
   sand: "#d7c5a0",
+  tint: "#eff5f4",
 } as const;
 
 export type ReservationConfirmationData = {
@@ -74,28 +129,22 @@ export function reservationConfirmationSubject(publicCode: string) {
   return `Reserva confirmada — ${publicCode}`;
 }
 
-const BODY_PARAGRAPHS = [
-  "O encontro acontecerá no mesmo horário selecionado durante a reserva. Recomendamos chegar com alguns minutos de antecedência para que possamos começar tudo com tranquilidade.",
-  "Até um dia antes da experiência, você será adicionado(a) a um grupo de comunicação. Por lá, reforçaremos as orientações importantes, os detalhes do ponto de encontro e facilitaremos nosso contato no dia da remada.",
-  "Por favor, guarde o código da reserva para facilitar a identificação do seu agendamento.",
-  "Se precisar falar conosco antes disso, responda a este e-mail ou utilize o nosso canal oficial de atendimento.",
-];
-
 /**
- * Linhas de dados da reserva. O horário e a data saem sempre no fuso de
- * Brasília, que é o mesmo usado pelo site na hora de escolher a sessão.
+ * Linhas de dados da reserva. A data sai sempre no fuso de Brasília, que é o
+ * mesmo usado pelo site na hora de escolher a sessão. O horário tem bloco
+ * próprio, logo abaixo, junto da tolerância.
  */
 function detailRows(data: ReservationConfirmationData) {
   const rows: Array<[string, string]> = [
     ["Código da reserva", data.publicCode],
     ["Experiência", data.experienceTitle],
     ["Data", formatSessionDate(data.startsAt)],
-    ["Horário de encontro", formatSessionTime(data.startsAt)],
-    ["Local da experiência", MEETING_LOCATION],
   ];
   if (data.quantity > 1) rows.push(["Pessoas", `${data.quantity}`]);
   return rows;
 }
+
+// --- Versão em texto puro ----------------------------------------------------
 
 function buildText(data: ReservationConfirmationData) {
   const rows = detailRows(data).map(([label, value]) => `${label}: ${value}`);
@@ -107,7 +156,26 @@ function buildText(data: ReservationConfirmationData) {
     "",
     ...rows,
     "",
-    ...BODY_PARAGRAPHS.flatMap((paragraph) => [paragraph, ""]),
+    "Localização",
+    MEETING_LOCATION,
+    "",
+    "Horário de encontro",
+    formatSessionTime(data.startsAt),
+    MEETING_TOLERANCE_NOTE,
+    "",
+    PREPARATION_TITLE,
+    ...PREPARATION_ITEMS.map((item) => `- ${item}`),
+    "",
+    DURATION_TITLE,
+    DURATION_NOTE,
+    "",
+    CANCELLATION_TITLE,
+    CANCELLATION_NOTE,
+    "",
+    GROUP_TITLE,
+    GROUP_NOTE,
+    "",
+    ...CLOSING_PARAGRAPHS.flatMap((paragraph) => [paragraph, ""]),
     "Até breve!",
     `Equipe ${SITE_NAME}`,
     "",
@@ -119,18 +187,72 @@ function buildText(data: ReservationConfirmationData) {
   ].join("\n");
 }
 
+// --- Versão HTML -------------------------------------------------------------
+
+const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
+
+/** Cartão destacado: rótulo pequeno, valor grande e, quando houver, uma nota. */
+function highlightCard(label: string, value: string, note?: string) {
+  const noteHtml = note
+    ? `
+                <p style="margin:8px 0 0;font-size:14px;line-height:21px;color:${BRAND.ink};opacity:0.7;">${escapeHtml(note)}</p>`
+    : "";
+
+  return `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px;">
+                <tr>
+                  <td style="padding:16px 18px;background-color:${BRAND.tint};border-radius:14px;">
+                    <p style="margin:0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:${BRAND.lake};font-weight:600;">${escapeHtml(label)}</p>
+                    <p style="margin:6px 0 0;font-size:20px;line-height:28px;font-weight:600;color:${BRAND.forest};">${escapeHtml(value)}</p>${noteHtml}
+                  </td>
+                </tr>
+              </table>`;
+}
+
+/** Seção de leitura: título curto e um parágrafo ou uma lista curta. */
+function infoSection(title: string, body: string) {
+  return `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 4px;">
+                <tr>
+                  <td style="padding:18px 0 0;border-top:1px solid ${BRAND.mist};">
+                    <p style="margin:0 0 8px;font-size:16px;line-height:24px;font-weight:600;color:${BRAND.forest};">${escapeHtml(title)}</p>${body}
+                  </td>
+                </tr>
+              </table>`;
+}
+
+function paragraph(text: string) {
+  return `
+                    <p style="margin:0;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.8;">${escapeHtml(text)}</p>`;
+}
+
+/** Lista com marcador em célula própria: é o que sobrevive ao Outlook. */
+function bulletList(items: readonly string[]) {
+  const rows = items
+    .map((item, index) => `
+                      <tr>
+                        <td width="16" valign="top" style="padding:0 0 ${index === items.length - 1 ? "0" : "10px"};font-size:15px;line-height:24px;color:${BRAND.lake};">&bull;</td>
+                        <td style="padding:0 0 ${index === items.length - 1 ? "0" : "10px"};font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.8;">${escapeHtml(item)}</td>
+                      </tr>`)
+    .join("");
+
+  return `
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}
+                    </table>`;
+}
+
 function buildHtml(data: ReservationConfirmationData) {
   const rows = detailRows(data)
     .map(([label, value]) => `
-              <tr>
-                <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:14px;color:${BRAND.ink};opacity:0.6;">${escapeHtml(label)}</td>
-                <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:15px;font-weight:600;color:${BRAND.ink};text-align:right;">${escapeHtml(value)}</td>
-              </tr>`)
+                      <tr>
+                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:14px;color:${BRAND.ink};opacity:0.6;">${escapeHtml(label)}</td>
+                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:15px;font-weight:600;color:${BRAND.ink};text-align:right;">${escapeHtml(value)}</td>
+                      </tr>`)
     .join("");
 
-  const paragraphs = BODY_PARAGRAPHS
-    .map((paragraph) => `
-            <p style="margin:0 0 16px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(paragraph)}</p>`)
+  const closing = CLOSING_PARAGRAPHS
+    .map((text) => `
+              <p style="margin:0 0 14px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(text)}</p>`)
     .join("");
 
   return `<!doctype html>
@@ -154,25 +276,31 @@ function buildHtml(data: ReservationConfirmationData) {
             </td>
           </tr>
           <tr>
-            <td style="padding:28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+            <td style="padding:28px;font-family:${SANS};">
               <p style="margin:0 0 16px;font-size:17px;line-height:26px;font-weight:600;color:${BRAND.ink};">Olá, ${escapeHtml(firstName(data.fullName))}!</p>
               <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">Sua reserva está confirmada. Será um prazer receber você para essa experiência!</p>
 
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;margin:0 0 20px;">
                 <tr><td style="padding:4px 0;">
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}
                   </table>
                 </td></tr>
               </table>
-
+${highlightCard("Localização", MEETING_LOCATION)}
+${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
+              <div style="height:12px;line-height:12px;">&nbsp;</div>
+${infoSection(PREPARATION_TITLE, bulletList(PREPARATION_ITEMS))}
+${infoSection(DURATION_TITLE, paragraph(DURATION_NOTE))}
+${infoSection(CANCELLATION_TITLE, paragraph(CANCELLATION_NOTE))}
+${infoSection(GROUP_TITLE, paragraph(GROUP_NOTE))}
               <div style="height:24px;line-height:24px;">&nbsp;</div>
-${paragraphs}
+${closing}
               <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">Até breve!</p>
               <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">Equipe ${escapeHtml(SITE_NAME)}</p>
             </td>
           </tr>
           <tr>
-            <td style="padding:20px 28px 28px;background-color:${BRAND.mist};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+            <td style="padding:20px 28px 28px;background-color:${BRAND.mist};font-family:${SANS};">
               <p style="margin:0 0 8px;font-size:13px;line-height:20px;color:${BRAND.ink};opacity:0.7;">
                 WhatsApp <a href="${whatsappLink()}" style="color:${BRAND.lake};text-decoration:none;">${escapeHtml(formatWhatsappNumber())}</a>
                 &nbsp;·&nbsp; <a href="mailto:${CONTACT_EMAIL}" style="color:${BRAND.lake};text-decoration:none;">${escapeHtml(CONTACT_EMAIL)}</a>

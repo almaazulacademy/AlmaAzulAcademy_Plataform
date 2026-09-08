@@ -111,7 +111,27 @@ A mesma tela mostra o estado: **Enviado** (com a data), **Pendente**, **Erro** (
 
 **Assunto:** `Reserva confirmada — AZ7K2M9QX1`
 
-O corpo traz código da reserva, experiência, data, horário de encontro, local (Lago Norte) e, quando a reserva é para mais de uma pessoa, a quantidade.
+O corpo concentra de propósito as perguntas que hoje chegam por WhatsApp, nesta ordem:
+
+| Bloco | Conteúdo | Origem |
+| --- | --- | --- |
+| Resumo da reserva | código, experiência, data e — quando é para mais de uma pessoa — a quantidade | RPC `reservation_confirmation_email` |
+| Localização | `QL 5 Conjunto 5 - Lago Norte` | constante `MEETING_LOCATION` |
+| Horário de encontro | horário da sessão reservada + "Tolerância de até 20 minutos após o horário marcado." | `starts_at` da sessão |
+| Antes de vir | não precisa ter experiência; roupa de banho, repelente e roupa confortável; vir de chinelo | constante `PREPARATION_ITEMS` |
+| Duração | "A experiência dura em torno de 1h30 e conta com uma parada para banho durante a remada." | constante `DURATION_NOTE` |
+| Imprevistos acontecem | política de cancelamento com reembolso ou crédito até 1 dia antes | constante `CANCELLATION_NOTE` |
+| Criaremos um grupo | grupo de comunicação criado até 1 dia antes da experiência | constante `GROUP_NOTE` |
+| Fechamento | guardar o código, canal de contato, assinatura e rodapé | — |
+
+Cada bloco de texto fixo é uma **constante exportada** de `lib/reservations/confirmation-email.ts`, e é a própria constante que a suíte de testes compara com o HTML e com o texto puro. Mudar a frase num lugar só não passa no CI.
+
+Duas escolhas deliberadas:
+
+- **A localização é texto, sem link de mapa.** O projeto não tem link nem coordenada oficial em lugar nenhum — quando existir, ele entra em `MEETING_LOCATION` e no bloco de localização.
+- **A duração é texto fixo, não `duration_minutes`.** A RPC que alimenta o e-mail não devolve a duração, todas as experiências atuais duram 90 minutos e a frase fala também da parada para banho, que nenhum campo do banco carrega. Buscar o valor dinamicamente exigiria mexer na RPC.
+
+O e-mail **informa** a política de cancelamento; ele não abre nenhum fluxo de cancelamento, e o teste recusa qualquer link nesse sentido.
 
 **Data e horário saem sempre no fuso de Brasília** (`America/Sao_Paulo`), pelos mesmos helpers de `lib/sessions/date-time.ts` que o site usa na escolha da sessão. Uma sessão às `12:00Z` aparece como `09:00`.
 

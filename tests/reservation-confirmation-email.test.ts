@@ -4,9 +4,18 @@ import test from "node:test";
 
 import {
   buildReservationConfirmationEmail,
+  CANCELLATION_NOTE,
+  CANCELLATION_TITLE,
   deliverReservationConfirmationEmail,
+  DURATION_NOTE,
+  DURATION_TITLE,
+  GROUP_NOTE,
+  GROUP_TITLE,
   MEETING_LOCATION,
+  MEETING_TOLERANCE_NOTE,
   parseReservationConfirmationData,
+  PREPARATION_ITEMS,
+  PREPARATION_TITLE,
   reservationConfirmationSubject,
   type ConfirmationEmail,
   type ConfirmationEmailDeps,
@@ -140,6 +149,162 @@ test("reserva de mais de uma pessoa mostra a quantidade", () => {
 
   assert.doesNotMatch(uma.text, /^Pessoas:/m);
   assert.match(tres.text, /^Pessoas: 3$/m);
+});
+
+// --- As informações que o e-mail passou a concentrar ------------------------
+
+/** Escapa um texto para virar regex — as frases têm parênteses e acento. */
+function literal(value: string) {
+  return new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+}
+
+/** As duas versões precisam dizer a mesma coisa; nenhuma é resumo da outra. */
+function versions(overrides: Partial<ReservationConfirmationData> = {}) {
+  const email = buildReservationConfirmationEmail(data(overrides));
+  return [email.html, email.text];
+}
+
+test("o e-mail informa o endereço do ponto de encontro", () => {
+  assert.equal(MEETING_LOCATION, "QL 5 Conjunto 5 - Lago Norte");
+
+  for (const conteudo of versions()) {
+    assert.match(conteudo, /Localiza(ç|&ccedil;)ão/);
+    assert.match(conteudo, literal(MEETING_LOCATION));
+  }
+});
+
+test("o horário exibido é o da sessão reservada, com a tolerância ao lado", () => {
+  for (const conteudo of versions()) {
+    assert.match(conteudo, /Horário de encontro/);
+    assert.match(conteudo, /09:00/);
+    assert.match(conteudo, literal(MEETING_TOLERANCE_NOTE));
+    assert.match(conteudo, /20 minutos/);
+  }
+});
+
+test("outra sessão gera outro horário: nada de horário fixo no template", () => {
+  // 21:00 UTC é 18:00 em Brasília. Se o horário estivesse escrito no template,
+  // esta reserva mostraria 09:00 igual à anterior.
+  for (const conteudo of versions({ startsAt: "2026-09-06T21:00:00.000Z" })) {
+    assert.match(conteudo, /18:00/);
+    assert.doesNotMatch(conteudo, /09:00/);
+  }
+
+  const template = source("lib/reservations/confirmation-email.ts");
+  assert.doesNotMatch(template, /\b\d{2}:\d{2}\b/, "nenhum horário literal no arquivo do template");
+  assert.match(template, /formatSessionTime\(data\.startsAt\)/);
+});
+
+test("a seção de preparo tranquiliza quem nunca remou e diz o que levar", () => {
+  for (const conteudo of versions()) {
+    assert.match(conteudo, literal(PREPARATION_TITLE));
+    for (const item of PREPARATION_ITEMS) assert.match(conteudo, literal(item));
+    assert.match(conteudo, /Não é necessário ter experiência/);
+    assert.match(conteudo, /roupa de banho/);
+    assert.match(conteudo, /repelente/);
+    assert.match(conteudo, /chinelo/);
+  }
+  assert.equal(PREPARATION_ITEMS.length, 3);
+});
+
+test("a duração da experiência aparece com a parada para banho", () => {
+  for (const conteudo of versions()) {
+    assert.match(conteudo, literal(DURATION_TITLE));
+    assert.match(conteudo, literal(DURATION_NOTE));
+    assert.match(conteudo, /1h30/);
+    assert.match(conteudo, /parada para banho/);
+  }
+});
+
+test("a política de cancelamento sai exatamente como foi definida", () => {
+  // Regra operacional: nem ampliar nem restringir. O texto é o contrato.
+  assert.equal(
+    CANCELLATION_NOTE,
+    "Caso ocorra algum imprevisto, é permitido solicitar cancelamento com reembolso ou crédito para uma próxima remada até 1 dia antes do horário marcado.",
+  );
+
+  for (const conteudo of versions()) {
+    assert.match(conteudo, literal(CANCELLATION_TITLE));
+    assert.match(conteudo, literal(CANCELLATION_NOTE));
+  }
+
+  // O e-mail informa a regra; ele não abre nenhum fluxo de cancelamento.
+  const { html } = buildReservationConfirmationEmail(data());
+  assert.doesNotMatch(html, /href="[^"]*cancel/i);
+});
+
+test("o aviso do grupo de comunicação aparece com o prazo de 1 dia", () => {
+  assert.equal(
+    GROUP_NOTE,
+    "Até 1 dia antes da sua experiência, criaremos um grupo para facilitar a comunicação, enviar orientações finais e manter todos atualizados.",
+  );
+
+  for (const conteudo of versions()) {
+    assert.match(conteudo, literal(GROUP_TITLE));
+    assert.match(conteudo, literal(GROUP_NOTE));
+  }
+});
+
+test("nenhuma informação antiga importante desapareceu", () => {
+  const email = buildReservationConfirmationEmail(data({ quantity: 2 }));
+
+  for (const conteudo of [email.html, email.text]) {
+    assert.match(conteudo, /Olá, João!/);
+    assert.match(conteudo, /Sua reserva está confirmada/);
+    assert.match(conteudo, /Código da reserva/);
+    assert.match(conteudo, /AZ7K2M9QX1/);
+    assert.match(conteudo, /Imersão Paranoá/);
+    assert.match(conteudo, /domingo, 06 de setembro de 2026/);
+    assert.match(conteudo, /Pessoas/);
+    assert.match(conteudo, /Até breve!/);
+    assert.match(conteudo, /Equipe Alma Azul Academy/);
+    assert.match(conteudo, /almaazulacademy@gmail\.com/);
+    assert.match(conteudo, /\(61\) 99268-2522/);
+  }
+  assert.equal(email.subject, "Reserva confirmada — AZ7K2M9QX1");
+});
+
+test("as seções novas valem para qualquer experiência", () => {
+  // Um único template atende todas: o que muda é o título e a sessão.
+  for (const experienceTitle of ["Imersão Paranoá", "Remada Lua Cheia", "Remada Nascer do Sol", "Remada Sunset"]) {
+    const email = buildReservationConfirmationEmail(data({ experienceTitle }));
+
+    for (const conteudo of [email.html, email.text]) {
+      assert.match(conteudo, literal(experienceTitle));
+      for (const trecho of [MEETING_LOCATION, MEETING_TOLERANCE_NOTE, DURATION_NOTE, CANCELLATION_NOTE, GROUP_NOTE]) {
+        assert.match(conteudo, literal(trecho), `"${experienceTitle}" perdeu uma seção`);
+      }
+    }
+  }
+});
+
+test("as seções novas cabem no celular sem CSS que Gmail e Outlook ignoram", () => {
+  const { html } = buildReservationConfirmationEmail(data());
+
+  // Os blocos de destaque e as listas continuam em tabela, estilo inline.
+  assert.doesNotMatch(html, /display:\s*(flex|grid)/);
+  assert.doesNotMatch(html, /<ul|<li/i, "lista em <ul> quebra no Outlook: o marcador vai em célula própria");
+  assert.doesNotMatch(html, /@media/, "sem media query: o layout já é fluido");
+  assert.doesNotMatch(html, /position:\s*(absolute|fixed)/);
+  assert.doesNotMatch(html, /<style/i);
+  assert.equal((html.match(/max-width:560px/g) ?? []).length, 1, "uma única largura máxima");
+
+  // Nenhuma imagem externa: as seções são texto, e texto sempre aparece.
+  assert.doesNotMatch(html, /<img/i);
+});
+
+test("o conteúdo novo não tocou na prevenção de envio duplicado", () => {
+  const template = source("lib/reservations/confirmation-email.ts");
+  const entrega = template.slice(template.indexOf("export async function deliverReservationConfirmationEmail"));
+
+  // Reivindica primeiro, envia depois — a ordem é a garantia.
+  assert.ok(entrega.indexOf("await deps.claim()") < entrega.indexOf("await deps.send("));
+  assert.match(entrega, /if \(!jobId\) return \{ outcome: "SKIPPED" \};/);
+
+  // As seções novas são conteúdo puro: nenhuma delas fala com o banco ou com o
+  // provedor, então não há como mudarem a decisão de enviar.
+  const conteudo = template.slice(0, template.indexOf("// --- Leitura defensiva"));
+  assert.doesNotMatch(conteudo, /claim|integration_sync_jobs|supabase|fetch\(/i);
 });
 
 // --- Disparo correto --------------------------------------------------------
