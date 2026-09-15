@@ -36,9 +36,8 @@ export function isLocalBaseMedia(src: string) {
  */
 export const TEMPORARY_BASE_MEDIA: Record<string, readonly string[]> = {
   "concha-acustica": [
-    // Landing e card da Concha — registros reais da Alma Azul no Lago Paranoá,
+    // Landing da Concha — registros reais da Alma Azul no Lago Paranoá,
     // ainda não produzidos na nova base (ver lib/bases/concha-landing.ts).
-    "/images/bases/concha-acustica/concha-card-nascer-do-sol.webp",
     "/images/bases/concha-acustica/concha-hero-nascer-do-sol-desktop.webp",
     // Card e hero da base (mídia do espaço) — foto do Lago Norte.
     "/images/experiences/remada-sunset/remada-sunset-sobre.webp",

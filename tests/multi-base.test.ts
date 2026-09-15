@@ -339,4 +339,11 @@ test("landing da Concha é só conteúdo: sem reserva, com mídia local e leve",
   }
   // Nenhuma foto associada a um roteiro específico.
   assert.equal(CONCHA_LANDING.paths.routes.some((route) => "image" in route), false);
+  // Cápsula: fotos reais do espaço (sem selo de registro temporário) e Lia só com nome e papel.
+  const { isTemporaryMedia } = await import("../lib/bases/media.ts");
+  for (const src of [CONCHA_LANDING.capsula.image.desktop, ...CONCHA_LANDING.capsula.details.map((detail) => detail.src)]) {
+    assert.equal(isTemporaryMedia("concha-acustica", src), false, src);
+  }
+  assert.deepEqual(Object.keys(CONCHA_LANDING.capsula.founder).sort(), ["eyebrow", "name", "role"]);
+  assert.match(source("app/bases/[slug]/page.tsx"), /ConchaLanding/);
 });
