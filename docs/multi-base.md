@@ -178,7 +178,7 @@ resolvidos antes de a base passar para `ACTIVE`.
   `experiences.image_url` e `editorial_content`. Ex.: `remada-sunset-concha-acustica/`.
 - Sem banco de imagens nem URL externa. Mídia de base só aceita caminho local
   (`isLocalBaseMedia`).
-- Foto temporária mostra o selo "Imagem ilustrativa". Ao trocar o arquivo, remova o caminho de
+- Foto temporária mostra o selo "Registros de experiências Alma Azul no Lago Paranoá". Ao trocar o arquivo, remova o caminho de
   `TEMPORARY_BASE_MEDIA` e o selo some.
 
 ## Pendências menores

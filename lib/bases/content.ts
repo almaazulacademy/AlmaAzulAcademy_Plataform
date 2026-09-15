@@ -24,6 +24,11 @@ export type BasePageContent = {
   heroTitle: string;
   heroSubtitle: string;
   heroImage: BaseGalleryImage;
+  /**
+   * Foto do card da base na Home e em /bases. Quando existe, prevalece sobre
+   * `bases.image_url` sem exigir alteração no banco.
+   */
+  cardImage?: string;
   aboutTitle: string;
   experiencesTitle: string;
   experiencesDescription: string;
@@ -77,9 +82,10 @@ const CONTENT: Record<string, BasePageContent> = {
     heroEyebrow: "Nova base · Em breve",
     heroTitle: "Concha Acústica",
     heroSubtitle: "Nossa nova base está chegando. Uma nova forma de viver o Lago Paranoá, a partir do coração de Brasília.",
+    cardImage: "/images/bases/concha-acustica/concha-card-nascer-do-sol.webp",
     heroImage: {
-      src: "/images/experiences/remada-sunset/remada-sunset-sobre.webp",
-      alt: "Participantes em uma canoa havaiana contemplando o pôr do sol sobre o Lago Paranoá",
+      src: "/images/bases/concha-acustica/concha-hero-nascer-do-sol-desktop.webp",
+      alt: "Canoa havaiana da Alma Azul remando ao nascer do sol no Lago Paranoá",
     },
     aboutTitle: "Brasília vista a partir da água.",
     // Preparado para o acervo do espaço (Concha Acústica/Cápsula Bar). Vazio até a curadoria.
