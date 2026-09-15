@@ -6,6 +6,7 @@ import { ArrowRight, Compass, Droplets, LifeBuoy, MapPin, Navigation, ShieldChec
 import { ActiveBaseBadge, ComingSoonBadge, PartnerBadge } from "@/components/bases/badges";
 import { BaseSpaceMedia } from "@/components/bases/base-media";
 import { BaseExperienceCard } from "@/components/bases/experience-cards";
+import { ConchaLanding } from "@/components/bases/concha-landing";
 import { EditorialImage } from "@/components/editorial-image";
 import { FeatureCard } from "@/components/feature-card";
 import { Gallery } from "@/components/gallery";
@@ -53,6 +54,12 @@ export default async function BasePage({ params }: Props) {
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${base.address}, Brasília - DF`)}`
     : null;
 
+  // Landing editorial da Concha só enquanto a base estiver fechada. Ao ativar a
+  // base, a página volta ao modelo padrão, com agenda e reservas.
+  if (base.slug === "concha-acustica" && !bookable) {
+    return <ConchaLanding base={base} fallbackBase={fallbackBase} />;
+  }
+
   return (
     <main>
       <Navbar overlay />
@@ -62,7 +69,7 @@ export default async function BasePage({ params }: Props) {
         description={content.heroSubtitle}
         image={content.heroImage.src}
         imageAlt={content.heroImage.alt}
-        imageCredit={isTemporaryMedia(base.slug, content.heroImage.src) ? `${TEMPORARY_MEDIA_LABEL} · Lago Paranoá` : undefined}
+        imageCredit={isTemporaryMedia(base.slug, content.heroImage.src) ? TEMPORARY_MEDIA_LABEL : undefined}
         primaryLabel={bookable ? "Ver experiências" : "Ver experiências planejadas"}
         primaryHref="#experiencias"
         secondaryLabel={bookable ? "Ver agenda" : fallbackBase ? `Conhecer a Base ${fallbackBase.name}` : undefined}

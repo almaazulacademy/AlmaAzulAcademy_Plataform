@@ -28,7 +28,7 @@ export function isLocalBaseMedia(src: string) {
 /**
  * Fotos TEMPORÁRIAS por base: imagens do Lago Norte usadas enquanto a base não
  * tem acervo próprio. Enquanto um caminho estiver aqui, o site mostra
- * "Imagem ilustrativa" sobre a foto naquela base.
+ * `TEMPORARY_MEDIA_LABEL` sobre a foto naquela base.
  *
  * Para trocar pela mídia real: coloque os arquivos nas pastas da base/experiência,
  * atualize `bases.image_url`, `experiences.image_url` e `lib/bases/content.ts`,
@@ -36,6 +36,10 @@ export function isLocalBaseMedia(src: string) {
  */
 export const TEMPORARY_BASE_MEDIA: Record<string, readonly string[]> = {
   "concha-acustica": [
+    // Landing e card da Concha — registros reais da Alma Azul no Lago Paranoá,
+    // ainda não produzidos na nova base (ver lib/bases/concha-landing.ts).
+    "/images/bases/concha-acustica/concha-card-nascer-do-sol.webp",
+    "/images/bases/concha-acustica/concha-hero-nascer-do-sol-desktop.webp",
     // Card e hero da base (mídia do espaço) — foto do Lago Norte.
     "/images/experiences/remada-sunset/remada-sunset-sobre.webp",
     // Cards das experiências planejadas (mídia de experiência) — fotos do Lago Norte.
@@ -46,7 +50,7 @@ export const TEMPORARY_BASE_MEDIA: Record<string, readonly string[]> = {
   ],
 };
 
-export const TEMPORARY_MEDIA_LABEL = "Imagem ilustrativa";
+export const TEMPORARY_MEDIA_LABEL = "Registros de experiências Alma Azul no Lago Paranoá";
 
 export function isTemporaryMedia(baseSlug: string, src: string | null | undefined) {
   return Boolean(src && TEMPORARY_BASE_MEDIA[baseSlug]?.includes(src));

@@ -314,3 +314,29 @@ test("bloqueadores de ativação da Concha estão registrados no código e na do
   assert.match(doc, /MEETING_LOCATION/);
   assert.match(doc, /Base no Google Sheets/);
 });
+
+test("landing da Concha é só conteúdo: sem reserva, com mídia local e leve", async () => {
+  const { CONCHA_LANDING } = await import("../lib/bases/concha-landing.ts");
+  const landing = source("components/bases/concha-landing.tsx");
+  const copy = JSON.stringify(CONCHA_LANDING);
+  // Nenhum caminho de compra: sem agenda, reserva, checkout, preço ou lista de espera.
+  for (const forbidden of [/\/agenda/, /reserv/i, /comprar/i, /checkout/i, /R\$/, /pre[çc]o/i, /lista de espera/i, /\/experiencias\/[a-z]/]) {
+    assert.equal(forbidden.test(landing) || forbidden.test(copy), false, String(forbidden));
+  }
+  // A landing só substitui a página padrão enquanto a base está fechada.
+  assert.match(source("app/bases/[slug]/page.tsx"), /base\.slug === "concha-acustica" && !bookable/);
+  // Registros do Lago Paranoá sempre identificados; nada de Drive ou URL externa.
+  assert.equal(CONCHA_LANDING.mediaCredit, "Registros de experiências Alma Azul no Lago Paranoá");
+  assert.equal(/https?:\/\//.test(copy), false);
+  const paths = copy.match(/\/(images|videos)\/[^"]+/g) ?? [];
+  assert.ok(paths.length >= 14);
+  const { statSync } = await import("node:fs");
+  for (const path of paths) {
+    const url = new URL(`../public${path}`, import.meta.url);
+    assert.equal(existsSync(url), true, path);
+    const limit = path.endsWith(".mp4") ? (path.includes("capsula") ? 400_000 : 4_000_000) : 400_000;
+    assert.ok(statSync(url).size <= limit, `${path} acima do orçamento`);
+  }
+  // Nenhuma foto associada a um roteiro específico.
+  assert.equal(CONCHA_LANDING.paths.routes.some((route) => "image" in route), false);
+});

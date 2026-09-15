@@ -2,9 +2,9 @@ import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
 
 import { ActiveBaseBadge, ComingSoonBadge, PartnerBadge } from "@/components/bases/badges";
-import { TemporaryMediaLabel } from "@/components/bases/base-media";
 import { EditorialImage } from "@/components/editorial-image";
-import { isTemporaryMedia } from "@/lib/bases/media";
+import { basePageContent } from "@/lib/bases/content";
+import { isTemporaryMedia, TEMPORARY_MEDIA_LABEL } from "@/lib/bases/media";
 import type { PublicBase } from "@/lib/bases/types";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 export function BaseCard({ base, experienceTitles, className }: { base: PublicBase; experienceTitles: string[]; className?: string }) {
   const comingSoon = base.status !== "ACTIVE";
   const cta = comingSoon ? "Conhecer a nova base" : "Conhecer a base";
+  const imageUrl = basePageContent(base).cardImage ?? base.imageUrl;
 
   return (
     <Link
@@ -30,13 +31,12 @@ export function BaseCard({ base, experienceTitles, className }: { base: PublicBa
     >
       <div className="relative isolate aspect-[4/3] max-w-full overflow-hidden bg-ink sm:aspect-[16/10]">
         <EditorialImage
-          src={base.imageUrl}
+          src={imageUrl}
           alt={`Base ${base.name} da Alma Azul`}
           sizes="(min-width: 1024px) 45vw, 100vw"
           className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/10 to-transparent" />
-        {isTemporaryMedia(base.slug, base.imageUrl) ? <TemporaryMediaLabel position="top" /> : null}
         <div className="absolute left-4 top-4 flex flex-wrap gap-2 sm:left-6 sm:top-6">
           {comingSoon ? <ComingSoonBadge tone="dark" /> : <ActiveBaseBadge tone="dark" />}
         </div>
@@ -51,6 +51,8 @@ export function BaseCard({ base, experienceTitles, className }: { base: PublicBa
           <MapPin aria-hidden="true" className="size-4 shrink-0 text-lake" />
           {base.locationLabel}
         </p>
+        {/* Fora da foto, para nunca cobrir o selo "Em breve". */}
+        {isTemporaryMedia(base.slug, imageUrl) ? <p className="mt-1 text-xs text-ink/40">{TEMPORARY_MEDIA_LABEL}</p> : null}
         <p className="mt-4 text-base leading-7 text-ink/70">{base.shortDescription}</p>
         {base.partnerName ? <PartnerBadge partner={base.partnerName} className="mt-5 self-start" /> : null}
 

@@ -5,7 +5,7 @@ import { isLocalBaseMedia, TEMPORARY_MEDIA_LABEL, type BaseMediaItem } from "@/l
 /** Selo discreto sobre fotos temporárias (acervo de outra base usado provisoriamente). */
 export function TemporaryMediaLabel({ position = "bottom" }: { position?: "top" | "bottom" }) {
   return (
-    <span className={cn("pointer-events-none absolute right-3 z-10 rounded-full bg-ink/55 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-white/85 backdrop-blur-sm", position === "top" ? "top-4 sm:top-6" : "bottom-3")}>
+    <span className={cn("pointer-events-none absolute right-3 z-10 max-w-[calc(100%-1.5rem)] rounded-full bg-ink/55 px-2.5 py-1 text-[11px] font-medium leading-tight text-white/85 backdrop-blur-sm", position === "top" ? "top-4 sm:top-6" : "bottom-3")}>
       {TEMPORARY_MEDIA_LABEL}
     </span>
   );
