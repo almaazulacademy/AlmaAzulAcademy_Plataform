@@ -3,12 +3,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, PersonStanding, Sailboat, Store, Users, Waves } from "lucide-react";
 
+import { BaseCard } from "@/components/bases/base-card";
 import { ExperienceCard } from "@/components/experience-card";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { Section } from "@/components/section";
 import { buttonVariants } from "@/components/ui/button";
+import { baseLabel, exclusiveLabel, experiencesForBase } from "@/lib/bases/availability";
+import { listCatalogExperiences, listPublicBases } from "@/lib/bases/data";
 import { WHATSAPP_UPCOMING_ACTIVITIES_LINK } from "@/lib/contact";
 import { listPublishedExperiences } from "@/lib/editorial/data";
 import { resolveExperienceCardLocation, resolveExperienceCardMedia } from "@/lib/editorial/image";
@@ -26,14 +29,17 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default async function HomePage() {
-  const published = await listPublishedExperiences();
+  const [published, bases, catalog] = await Promise.all([listPublishedExperiences(), listPublicBases(), listCatalogExperiences()]);
   const cards = published.map((experience) => {
     const media = resolveExperienceCardMedia(experience);
+    const placement = catalog.find((item) => item.slug === experience.slug);
+    const base = bases.find((item) => item.slug === placement?.baseSlug);
     return {
       title: experience.title,
       eyebrow: experience.editorial.hero.eyebrow,
       summary: experience.summary,
-      location: resolveExperienceCardLocation(experience),
+      location: base ? baseLabel(base) : `Base ${resolveExperienceCardLocation(experience)}`,
+      badge: base && placement?.isExclusive ? exclusiveLabel(base) : undefined,
       image: media.src,
       imageAlt: media.alt,
       href: `/experiencias/${experience.slug}`,
@@ -84,6 +90,24 @@ export default async function HomePage() {
       </section>
 
       <Section
+        id="bases"
+        eyebrow={bases.length === 2 ? "Uma Alma Azul · duas bases" : "Uma Alma Azul · nossas bases"}
+        title="Escolha onde viver a Alma Azul"
+        description="Cada base tem o seu cenário e as suas experiências no Lago Paranoá. O jeito Alma Azul de estar na água é o mesmo em todas."
+        tone="white"
+      >
+        <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
+          {bases.map((base) => (
+            <BaseCard
+              key={base.slug}
+              base={base}
+              experienceTitles={experiencesForBase(catalog, base.slug).map((experience) => experience.title)}
+            />
+          ))}
+        </div>
+      </Section>
+
+      <Section
         id="experiencias"
         eyebrow="Explore nossas experiências"
         title="O Lago Paranoá tem muitas formas de ser vivido."
@@ -98,6 +122,10 @@ export default async function HomePage() {
             ))}
           </div>
         ) : null}
+        <Link href="/experiencias" className={buttonVariants({ variant: "outline", size: "lg", className: "mt-10" })}>
+          Ver todas as experiências e bases
+          <ArrowRight className="size-4" />
+        </Link>
       </Section>
 
       <section id="sobre" className="bg-white py-20 sm:py-28 lg:py-36">
@@ -168,7 +196,9 @@ export default async function HomePage() {
         <div className="absolute inset-0 bg-ink/65" />
         <div className="container relative z-10 flex min-h-[620px] items-center justify-center py-24 text-center">
           <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Alma Azul Academy</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">
+              {featured.badge ?? "Alma Azul Academy"}
+            </p>
             <h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.05em] sm:text-7xl">
               Comece pela Imersão Paranoá
             </h2>

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { AdminShell } from "@/components/admin/admin-shell";
 import { requireAdmin } from "@/lib/admin/auth";
+import { listAdminBases } from "@/lib/admin/data";
 
 export const metadata: Metadata = {
   title: { default: "Painel", template: "%s | Painel Alma Azul" },
@@ -13,5 +14,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const context = await requireAdmin();
-  return <AdminShell profile={context.profile}>{children}</AdminShell>;
+  // A navegação nunca pode derrubar o painel: sem Supabase ou sem a migration,
+  // o menu usa as bases conhecidas localmente.
+  const { bases } = await listAdminBases().catch(() => ({ bases: [] }));
+  return <AdminShell profile={context.profile} bases={bases}>{children}</AdminShell>;
 }

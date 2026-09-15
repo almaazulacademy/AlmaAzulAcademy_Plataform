@@ -26,6 +26,11 @@ import { SITE_NAME, SITE_URL } from "../site.ts";
  * Só texto: o projeto não tem link de mapa nem coordenada em lugar nenhum, e
  * inventar um aqui seria criar informação que ninguém conferiu. Quando existir
  * um link oficial, ele entra nesta constante e no bloco de localização.
+ *
+ * BLOQUEADOR MULTI-BASE (antes de abrir reservas em qualquer base além do Lago
+ * Norte): este endereço é fixo no Lago Norte. O local de encontro do e-mail,
+ * da confirmação e das demais comunicações precisa vir da base da sessão da
+ * reserva (`bases.address`). Ver docs/multi-base.md.
  */
 export const MEETING_LOCATION = "QL 5 Conjunto 5 - Lago Norte";
 

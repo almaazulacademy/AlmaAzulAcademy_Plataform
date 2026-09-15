@@ -1,4 +1,6 @@
 import type {
+  AdminBase,
+  AdminBaseDashboard,
   AdminDashboardMetrics,
   AdminExperience,
   AdminExperienceInput,
@@ -18,7 +20,9 @@ import type {
   SessionLifecycleStatus,
 } from "@/lib/admin/types";
 import type { ReservationStatus } from "@/lib/reservations/types";
+import { experienceBaseMap } from "@/lib/admin/base-filter";
 import { applySessionFilters, sessionListFilterFor } from "@/lib/admin/session-filters";
+import { FALLBACK_BASES } from "@/lib/bases/catalog";
 import { syncReservationAfterChange, syncReservationSessionChange } from "@/lib/integrations/google-sheets/service";
 import { sendReservationConfirmationEmail } from "@/lib/reservations/confirmation-email-service";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
@@ -222,12 +226,119 @@ export async function getPaymentsNeedingReview(
   };
 }
 
+/**
+ * Base de cada experiência, lida direto das tabelas com a service role.
+ *
+ * Fica fora de `admin_list_experiences` de propósito: mudar o RETURNS TABLE
+ * daquela RPC exigiria recriá-la. Sem a migration multi-base as colunas não
+ * existem, a leitura falha e o mapa volta vazio — quem consome trata ausência
+ * como Base Lago Norte.
+ */
+async function readExperiencePlacements() {
+  const client = adminClient();
+  const [experiences, bases] = await Promise.all([
+    client.from("experiences").select("id, base_id, is_exclusive"),
+    client.from("bases").select("id, slug, name"),
+  ]);
+  const placements = new Map<string, { baseId: string; baseSlug: string; baseName: string; isExclusive: boolean }>();
+  if (experiences.error || bases.error) return placements;
+  const baseById = new Map(asRows(bases.data).map((base) => [asString(base.id), { slug: asString(base.slug), name: asString(base.name) }]));
+  for (const row of asRows(experiences.data)) {
+    const base = baseById.get(asString(row.base_id));
+    if (base) placements.set(asString(row.id), { baseId: asString(row.base_id), baseSlug: base.slug, baseName: base.name, isExclusive: asBoolean(row.is_exclusive) });
+  }
+  return placements;
+}
+
+function fallbackAdminBases(): { bases: AdminBase[]; migrationPending: boolean } {
+  return {
+    migrationPending: true,
+    bases: FALLBACK_BASES.map((base) => ({
+      id: base.id, slug: base.slug, name: base.name, status: base.status,
+      locationLabel: base.locationLabel, partnerName: base.partnerName, displayOrder: base.displayOrder,
+    })),
+  };
+}
+
+export async function listAdminBases(): Promise<{ bases: AdminBase[]; migrationPending: boolean }> {
+  const client = getSupabaseAdminClient();
+  if (!client) return fallbackAdminBases();
+  const result = await client
+    .from("bases")
+    .select("id, slug, name, status, location_label, partner_name, display_order")
+    .order("display_order")
+    .order("name");
+  if (result.error) return fallbackAdminBases();
+  return {
+    migrationPending: false,
+    bases: asRows(result.data).map((row) => ({
+      id: asString(row.id),
+      slug: asString(row.slug),
+      name: asString(row.name),
+      status: (["ACTIVE", "COMING_SOON", "INACTIVE"].includes(asString(row.status)) ? asString(row.status) : "INACTIVE") as AdminBase["status"],
+      locationLabel: asString(row.location_label),
+      partnerName: nullableString(row.partner_name),
+      displayOrder: asNumber(row.display_order),
+    })),
+  };
+}
+
+function validTimestamp(value: unknown) {
+  const text = asString(value);
+  return text && !text.includes("infinity") ? text : null;
+}
+
+/** Métricas de uma base (ou de todas, com `baseId` nulo). Nunca inventa dados: base sem operação volta zerada. */
+export async function getAdminBaseDashboard(actorUserId: string, baseId: string | null): Promise<AdminBaseDashboard> {
+  const result = await adminClient().rpc("admin_base_dashboard_metrics", { p_actor_id: actorUserId, p_base_id: baseId });
+  if (result.error) throw new Error(result.error.message);
+  const row = asRow(result.data) ?? {};
+  const next = asRow(row.nextSession);
+  return {
+    nextSession: next
+      ? { id: asString(next.id), experienceTitle: asString(next.experienceTitle), startsAt: asString(next.startsAt), remainingSpots: asNumber(next.remainingSpots) }
+      : null,
+    upcomingSessions: asRows(row.upcomingSessions).map((item) => ({
+      id: asString(item.id),
+      experienceTitle: asString(item.experienceTitle),
+      startsAt: asString(item.startsAt),
+      status: asString(item.status),
+      capacity: asNumber(item.capacity),
+      remainingSpots: asNumber(item.remainingSpots),
+    })),
+    experiencesCount: asNumber(row.experiencesCount),
+    sessionsCount: asNumber(row.sessionsCount),
+    futureSessions: asNumber(row.futureSessions),
+    confirmedReservations: asNumber(row.confirmedReservations),
+    cancelledReservations: asNumber(row.cancelledReservations),
+    preReservations: asNumber(row.preReservations),
+    expectedRevenueCents: asNumber(row.expectedRevenueCents),
+    confirmedRevenueCents: asNumber(row.confirmedRevenueCents),
+    totalParticipants: asNumber(row.totalParticipants),
+    totalReservations: asNumber(row.totalReservations),
+    averageOccupancyRate: asNumber(row.averageOccupancyRate),
+    topExperience: nullableString(row.topExperience),
+    monthlyRevenueCents: asNumber(row.monthlyRevenueCents),
+    averageTicketCents: asNumber(row.averageTicketCents),
+    revenueByMonth: asRows(row.revenueByMonth).map((item) => ({ month: asString(item.month), revenueCents: asNumber(item.revenueCents) })),
+    lastUpdatedAt: validTimestamp(row.lastUpdatedAt),
+  };
+}
+
 export async function listAdminExperiences(actorUserId: string): Promise<AdminExperience[]> {
-  const result = await adminClient().rpc("admin_list_experiences", { p_actor_id: actorUserId });
+  const [result, placements] = await Promise.all([
+    adminClient().rpc("admin_list_experiences", { p_actor_id: actorUserId }),
+    readExperiencePlacements(),
+  ]);
   if (result.error) throw new Error(result.error.message);
   return asRows(result.data).map((row) => {
     const editorial = validateExperienceEditorial(row.editorial_content, false);
+    const placement = placements.get(asString(row.id));
     return ({
+    baseId: placement?.baseId ?? null,
+    baseSlug: placement?.baseSlug ?? null,
+    baseName: placement?.baseName ?? null,
+    isExclusive: placement?.isExclusive ?? false,
     id: asString(row.id),
     slug: asString(row.slug),
     title: asString(row.title),
@@ -271,9 +382,13 @@ export async function listAdminSessions(actorUserId: string, filter: SessionFilt
 // ela é chamada uma única vez com o recorte mais estreito possível e o
 // restante (experiência, período, busca e ordenação) é aplicado aqui, sem
 // consulta adicional.
-export async function listAdminSessionsFiltered(actorUserId: string, filters: AdminSessionFilters): Promise<AdminSession[]> {
+export async function listAdminSessionsFiltered(
+  actorUserId: string,
+  filters: AdminSessionFilters,
+  experiences: AdminExperience[] = [],
+): Promise<AdminSession[]> {
   const sessions = await listAdminSessions(actorUserId, sessionListFilterFor(filters.status));
-  return applySessionFilters(sessions, filters);
+  return applySessionFilters(sessions, filters, new Date(), experienceBaseMap(experiences));
 }
 
 export async function createAdminSession(actorUserId: string, input: AdminSessionInput) {
@@ -339,6 +454,7 @@ export async function createAdminExperience(actorUserId: string, slug: string, i
     p_price_cents: input.priceCents,
     p_default_capacity: input.defaultCapacity,
     p_editorial_content: input.editorialContent,
+    p_base_id: input.baseId,
   });
   if (result.error) throw new Error(result.error.message);
   return asString(result.data);
@@ -358,6 +474,7 @@ export async function updateAdminExperience(actorUserId: string, experienceId: s
     p_price_cents: input.priceCents,
     p_default_capacity: input.defaultCapacity,
     p_editorial_content: input.editorialContent,
+    p_base_id: input.baseId,
   });
   if (result.error) throw new Error(result.error.message);
   return asBoolean(result.data);

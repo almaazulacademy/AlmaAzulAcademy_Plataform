@@ -12,6 +12,9 @@
 export const SPREADSHEET_LOCALE = "pt_BR";
 export const SPREADSHEET_TIME_ZONE = "America/Sao_Paulo";
 
+// BLOQUEADOR MULTI-BASE (antes de abrir reservas fora do Lago Norte): as abas
+// não têm coluna de base. Reservas, sessões e vagas precisam exportar a base da
+// sessão antes da primeira reserva de outra base. Ver docs/multi-base.md.
 export const RESERVATIONS_TAB = "Reservas do Site";
 export const SESSIONS_TAB = "Sessões";
 export const SPOTS_TAB = "Vagas Confirmadas";

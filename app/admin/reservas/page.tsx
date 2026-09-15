@@ -7,7 +7,8 @@ import { ReservationsList } from "@/components/admin/reservations-list";
 import { AdminErrorState } from "@/components/admin/states";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
-import { listAdminExperiences, listAdminReservations, listAdminSessions } from "@/lib/admin/data";
+import { adminExperienceLabel, experiencesInBase, itemsInBase, parseAdminBaseFilter } from "@/lib/admin/base-filter";
+import { listAdminBases, listAdminExperiences, listAdminReservations, listAdminSessions } from "@/lib/admin/data";
 import type { AdminReservationFilters } from "@/lib/admin/types";
 import { PAYMENT_STATUSES, type PaymentStatus } from "@/lib/admin/types";
 import { RESERVATION_STATUSES, type ReservationStatus } from "@/lib/reservations/types";
@@ -22,10 +23,11 @@ function valueOf(params: SearchParams, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function filtersFrom(params: SearchParams): AdminReservationFilters {
+function filtersFrom(params: SearchParams, baseSlugs: Array<{ slug: string }>): AdminReservationFilters {
   const status = valueOf(params, "status");
   return {
     date: valueOf(params, "date"),
+    base: parseAdminBaseFilter(params.base, baseSlugs),
     experienceId: valueOf(params, "experienceId"),
     status: RESERVATION_STATUSES.includes(status as ReservationStatus) ? status as ReservationStatus : "",
     name: valueOf(params, "name"),
@@ -40,13 +42,19 @@ function filtersFrom(params: SearchParams): AdminReservationFilters {
 
 export default async function AdminReservationsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const context = await requireAdmin();
-  const filters = filtersFrom(await searchParams);
+  const params = await searchParams;
   try {
-    const [reservations, experiences, sessions] = await Promise.all([
+    const { bases } = await listAdminBases();
+    const filters = filtersFrom(params, bases);
+    const [allReservations, experiences, allSessions] = await Promise.all([
       listAdminReservations(context.profile.userId, filters),
       listAdminExperiences(context.profile.userId),
       listAdminSessions(context.profile.userId),
     ]);
+    // A RPC não conhece base: o recorte é feito pela experiência da reserva.
+    const reservations = itemsInBase(allReservations, experiences, filters.base);
+    const sessions = itemsInBase(allSessions, experiences, filters.base);
+    const baseExperiences = experiencesInBase(experiences, filters.base);
     const hasFilters = Object.values(filters).some(Boolean);
     return (
       <div>
@@ -54,8 +62,9 @@ export default async function AdminReservationsPage({ searchParams }: { searchPa
         <form method="get" className="mt-8 rounded-3xl border border-ink/10 bg-white p-5 sm:p-6" aria-label="Filtros de reservas">
           <div className="flex items-center gap-2"><Filter className="size-4 text-lake" /><h2 className="text-sm font-semibold">Filtros</h2></div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <label><span className={labelClass}>Base</span><select name="base" defaultValue={filters.base} className={inputClass}><option value="">Todas as bases</option>{bases.map((base) => <option key={base.slug} value={base.slug}>{base.name}{base.status === "COMING_SOON" ? " (em breve)" : ""}</option>)}</select></label>
             <label><span className={labelClass}>Data</span><input type="date" name="date" defaultValue={filters.date} className={inputClass} /></label>
-            <label><span className={labelClass}>Experiência</span><select name="experienceId" defaultValue={filters.experienceId} className={inputClass}><option value="">Todas</option>{experiences.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+            <label><span className={labelClass}>Experiência</span><select name="experienceId" defaultValue={filters.experienceId} className={inputClass}><option value="">Todas</option>{baseExperiences.map((item) => <option key={item.id} value={item.id}>{adminExperienceLabel(item)}</option>)}</select></label>
             <label><span className={labelClass}>Status</span><select name="status" defaultValue={filters.status} className={inputClass}><option value="">Todos</option><option value="PRE_RESERVED">Pré-reserva</option><option value="CONFIRMED">Confirmada</option><option value="EXPIRED">Expirada</option><option value="CANCELLED">Cancelada</option></select></label>
             <label><span className={labelClass}>Pagamento</span><select name="paymentStatus" defaultValue={filters.paymentStatus} className={inputClass}><option value="">Todos</option><option value="PENDING">Pendente</option><option value="PAID">Pago</option><option value="PAID_AFTER_EXPIRATION">Pago após expirar</option><option value="NOT_PAID">Não pago</option></select></label>
             <label><span className={labelClass}>Sessão</span><select name="sessionId" defaultValue={filters.sessionId} className={inputClass}><option value="">Todas</option>{sessions.map((item) => <option key={item.id} value={item.id}>{item.experienceTitle} · {formatSessionDateShort(item.startsAt)}</option>)}</select></label>

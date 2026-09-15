@@ -1,6 +1,8 @@
 import { Compass, Droplets, LifeBuoy, MapPin, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { Suspense } from "react";
 
+import { BaseBadge, ExclusiveBadge } from "@/components/bases/badges";
 import { EditorialImage } from "@/components/editorial-image";
 import { FAQ } from "@/components/faq";
 import { FeatureCard } from "@/components/feature-card";
@@ -12,6 +14,7 @@ import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { Section } from "@/components/section";
 import { SessionTimes, SessionTimesLoading } from "@/components/session-times";
 import { SessionsLoading, SessionsSection } from "@/components/sessions-section";
+import type { PublicBase } from "@/lib/bases/types";
 import type { PublicExperience } from "@/lib/editorial/experience";
 import { resolveExperienceFaq } from "@/lib/editorial/faq";
 
@@ -20,10 +23,13 @@ const icons: Record<string, LucideIcon> = { Compass, Droplets, LifeBuoy, ShieldC
 export function ExperienceLanding({
   experience,
   date = null,
+  placement = null,
 }: {
   experience: PublicExperience;
   /** Dia escolhido em `?date=`, já validado pela página. */
   date?: string | null;
+  /** Base onde a experiência acontece. Ausente só no preview administrativo. */
+  placement?: { base: PublicBase; isExclusive: boolean } | null;
 }) {
   const content = experience.editorial;
   const faq = resolveExperienceFaq(content.faq);
@@ -47,6 +53,15 @@ export function ExperienceLanding({
 
       <section id="conteudo" className="bg-paper py-8">
         <div className="container space-y-6">
+          {placement ? (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+              <Link href={`/bases/${placement.base.slug}`} className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lake">
+                <BaseBadge name={placement.base.name} />
+              </Link>
+              {placement.isExclusive ? <ExclusiveBadge baseName={placement.base.name} /> : null}
+              <span className="text-sm text-ink/55">{placement.base.address ?? placement.base.locationLabel}</span>
+            </div>
+          ) : null}
           {/* As turmas vêm antes dos quick facts de propósito: é a primeira coisa
               depois do Hero, no lugar onde antes nada dizia que a experiência
               tem mais de um horário por dia. */}

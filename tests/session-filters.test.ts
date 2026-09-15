@@ -114,7 +114,18 @@ test("lê os filtros da URL e preserva os links antigos de arquivamento", () => 
   assert.equal(sessionFiltersFrom({ filtro: "todas" }).status, "ALL");
   assert.equal(sessionFiltersFrom({ filtro: "inexistente" }).status, "ACTIVE");
   const parsed = sessionFiltersFrom({ busca: " sunset ", filtro: "abertas", experiencia: "exp-1", periodo: "hoje", de: "2026-08-01", ate: "invalida", ordem: "antigas" });
-  assert.deepEqual(parsed, { query: "sunset", status: "OPEN", experienceId: "exp-1", period: "TODAY", from: "2026-08-01", to: "", sort: "OLDEST" });
+  assert.deepEqual(parsed, { query: "sunset", status: "OPEN", experienceId: "exp-1", base: "", period: "TODAY", from: "2026-08-01", to: "", sort: "OLDEST" });
+  assert.equal(sessionFiltersFrom({ base: "Concha-Acustica" }).base, "concha-acustica");
+});
+
+test("recorta sessões pela base da experiência, tratando experiência sem base como Lago Norte", () => {
+  const bases = new Map([["exp-sunset-concha", "concha-acustica"]]);
+  const concha = { ...sunset, id: "s9", experienceId: "exp-sunset-concha" };
+  const withConcha = [...all, concha];
+  assert.deepEqual(ids(applySessionFilters(withConcha, filters({ base: "concha-acustica", status: "ALL" }), NOW, bases)), ["s9"]);
+  assert.equal(applySessionFilters(withConcha, filters({ base: "lago-norte", status: "ALL" }), NOW, bases).some((item) => item.id === "s9"), false);
+  assert.equal(applySessionFilters(withConcha, filters({ base: "lago-norte", status: "ALL" }), NOW, bases).length, all.length);
+  assert.deepEqual(sessionFiltersFrom(Object.fromEntries(new URLSearchParams(sessionSearchParams(filters({ base: "concha-acustica" }))))).base, "concha-acustica");
 });
 
 test("mantém a seleção na URL e sinaliza quando há filtros aplicados", () => {

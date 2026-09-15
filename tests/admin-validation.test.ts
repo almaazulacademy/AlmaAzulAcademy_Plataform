@@ -118,7 +118,8 @@ test("valida os limites de uma sessão administrativa", () => {
 });
 
 test("valida cadastro e imagem oficial da experiência", () => {
-  assert.equal(validateAdminExperienceInput({
+  const valid = {
+    baseId: "3b12f1df-5232-4804-897e-917bf397618a",
     title: "Remada Sunset",
     summary: "Uma remada ao entardecer no Lago Paranoá.",
     description: "Uma experiência completa ao entardecer, conduzida pela equipe Alma Azul.",
@@ -128,7 +129,12 @@ test("valida cadastro e imagem oficial da experiência", () => {
     status: "DRAFT",
     imageUrl: "/images/experiences/sunset/capa.webp",
     displayOrder: 1,
-  }).success, true);
+  };
+  assert.equal(validateAdminExperienceInput(valid).success, true);
+  // Base é obrigatória: sem ela, nada é criado nem salvo.
+  const withoutBase = validateAdminExperienceInput({ ...valid, baseId: "" });
+  assert.equal(withoutBase.success, false);
+  assert.equal(withoutBase.success ? "" : withoutBase.errors.baseId, "Selecione a base da experiência.");
   assert.equal(validateAdminExperienceInput({
     title: "X",
     summary: "curta",

@@ -11,10 +11,11 @@ import { StatusBadge } from "@/components/admin/status-badge";
 import { AdminEmptyState } from "@/components/admin/states";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
-import type { AdminExperience, ExperienceStatus } from "@/lib/admin/types";
+import type { AdminBase, AdminExperience, ExperienceStatus } from "@/lib/admin/types";
 import { emptyExperienceEditorial } from "@/lib/editorial/experience";
 
 type FormState = {
+  baseId: string;
   title: string;
   summary: string;
   description: string;
@@ -29,10 +30,12 @@ type FormState = {
 
 type ApiPayload = { message?: string; errors?: Record<string, string> };
 
-const emptyForm: FormState = { title: "", summary: "", description: "", durationMinutes: "90", price: "", defaultCapacity: "15", imageUrl: "", displayOrder: "0", status: "DRAFT", editorialJson: JSON.stringify(emptyExperienceEditorial(), null, 2) };
+// Sem base pré-selecionada de propósito: quem cria escolhe a base explicitamente.
+const emptyForm: FormState = { baseId: "", title: "", summary: "", description: "", durationMinutes: "90", price: "", defaultCapacity: "15", imageUrl: "", displayOrder: "0", status: "DRAFT", editorialJson: JSON.stringify(emptyExperienceEditorial(), null, 2) };
 
 function fromExperience(experience: AdminExperience): FormState {
   return {
+    baseId: experience.baseId ?? "",
     title: experience.title,
     summary: experience.summary,
     description: experience.description,
@@ -46,7 +49,7 @@ function fromExperience(experience: AdminExperience): FormState {
   };
 }
 
-export function ExperiencesManager({ experiences }: { experiences: AdminExperience[] }) {
+export function ExperiencesManager({ experiences, bases = [] }: { experiences: AdminExperience[]; bases?: AdminBase[] }) {
   const router = useRouter();
   const { notify } = useToast();
   const [formOpen, setFormOpen] = useState(false);
@@ -71,6 +74,7 @@ export function ExperiencesManager({ experiences }: { experiences: AdminExperien
   };
 
   const apiInput = (state: FormState, status = state.status) => ({
+    baseId: state.baseId,
     title: state.title,
     summary: state.summary,
     description: state.description,
@@ -143,15 +147,16 @@ export function ExperiencesManager({ experiences }: { experiences: AdminExperien
             <button type="button" onClick={() => setFormOpen(false)} disabled={loading} className="grid size-10 place-items-center rounded-full text-ink/50 hover:bg-ink/5" aria-label="Fechar formulário"><X className="size-5" /></button>
           </div>
           <form className="mt-7 grid gap-5 md:grid-cols-2" onSubmit={submit} noValidate>
+            <label className="block"><span className={labelClass}>Base *</span><select className={inputClass} value={form.baseId} onChange={(event) => setForm({ ...form, baseId: event.target.value })} disabled={loading || Boolean(editingId && experiences.find((item) => item.id === editingId)?.sessionsCount)} required><option value="">Selecione a base</option>{bases.filter((base) => /^[0-9a-f-]{36}$/i.test(base.id)).map((base) => <option key={base.id} value={base.id}>{base.name}{base.status === "COMING_SOON" ? " (em breve)" : base.status === "INACTIVE" ? " (inativa)" : ""}</option>)}</select>{editingId && experiences.find((item) => item.id === editingId)?.sessionsCount ? <span className="mt-1.5 block text-xs text-ink/45">A base fica travada depois que a experiência recebe sessões.</span> : null}{errors.baseId ? <span className={fieldErrorClass}>{errors.baseId}</span> : null}</label>
             <label className="block"><span className={labelClass}>Nome</span><input className={inputClass} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} maxLength={120} disabled={loading} placeholder="Remada Sunset" />{errors.title ? <span className={fieldErrorClass}>{errors.title}</span> : null}</label>
             <label className="block"><span className={labelClass}>Imagem oficial</span><input className={inputClass} value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} maxLength={500} disabled={loading} placeholder="/images/experiences/..." />{errors.imageUrl ? <span className={fieldErrorClass}>{errors.imageUrl}</span> : null}</label>
             <label className="block md:col-span-2"><span className={labelClass}>Descrição curta</span><textarea className={textareaClass} value={form.summary} onChange={(event) => setForm({ ...form, summary: event.target.value })} maxLength={300} disabled={loading} />{errors.summary ? <span className={fieldErrorClass}>{errors.summary}</span> : null}</label>
             <label className="block md:col-span-2"><span className={labelClass}>Descrição completa</span><textarea className={textareaClass} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} maxLength={5000} rows={6} disabled={loading} />{errors.description ? <span className={fieldErrorClass}>{errors.description}</span> : null}</label>
             <label className="block"><span className={labelClass}>Duração padrão (min)</span><input type="number" min="15" max="1440" className={inputClass} value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: event.target.value })} disabled={loading} />{errors.durationMinutes ? <span className={fieldErrorClass}>{errors.durationMinutes}</span> : null}</label>
             <label className="block"><span className={labelClass}>Preço padrão (R$)</span><input type="number" min="0" step="0.01" className={inputClass} value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} disabled={loading} />{errors.priceCents ? <span className={fieldErrorClass}>{errors.priceCents}</span> : null}</label>
-            <label className="block"><span className={labelClass}>Capacidade padrão</span><input type="number" min="1" max="500" className={inputClass} value={form.defaultCapacity} onChange={(event) => setForm({ ...form, defaultCapacity: event.target.value })} disabled={loading} />{errors.defaultCapacity ? <span className={fieldErrorClass}>{errors.defaultCapacity}</span> : null}</label>
+            <label className="block"><span className={labelClass}>Capacidade padrão</span><input type="number" min="0" max="500" className={inputClass} value={form.defaultCapacity} onChange={(event) => setForm({ ...form, defaultCapacity: event.target.value })} disabled={loading} />{errors.defaultCapacity ? <span className={fieldErrorClass}>{errors.defaultCapacity}</span> : null}</label>
             <label className="block"><span className={labelClass}>Ordem de exibição</span><input type="number" min="0" max="10000" className={inputClass} value={form.displayOrder} onChange={(event) => setForm({ ...form, displayOrder: event.target.value })} disabled={loading} />{errors.displayOrder ? <span className={fieldErrorClass}>{errors.displayOrder}</span> : null}</label>
-            <label className="block"><span className={labelClass}>Status</span><select className={inputClass} value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as ExperienceStatus })} disabled={loading}><option value="DRAFT">Rascunho</option><option value="PUBLISHED">Ativa</option><option value="ARCHIVED">Inativa</option></select>{errors.status ? <span className={fieldErrorClass}>{errors.status}</span> : null}</label>
+            <label className="block"><span className={labelClass}>Status</span><select className={inputClass} value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as ExperienceStatus })} disabled={loading}><option value="DRAFT">Rascunho</option><option value="PUBLISHED">Ativa</option><option value="COMING_SOON">Em breve (sem reservas)</option><option value="ARCHIVED">Inativa</option></select>{errors.status ? <span className={fieldErrorClass}>{errors.status}</span> : null}</label>
             <label className="block md:col-span-2"><span className={labelClass}>Conteúdo editorial versionado (JSON)</span><textarea className={`${textareaClass} min-h-[32rem] font-mono text-xs`} value={form.editorialJson} onChange={(event) => setForm({ ...form, editorialJson: event.target.value })} spellCheck={false} disabled={loading} /><span className="mt-2 block text-xs leading-5 text-ink/45">Edite Hero, CTAs, informações rápidas, Sobre, galeria, etapas, itens inclusos, o que levar, restrições, FAQ, reservas, SEO, textos alternativos e créditos. A ordem dos arrays define a ordem de exibição.</span>{errors.editorialContent ? <span className={fieldErrorClass}>{errors.editorialContent}</span> : null}</label>
             {errors.form ? <p className="md:col-span-2 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{errors.form}</p> : null}
             <div className="flex flex-col-reverse gap-3 md:col-span-2 md:flex-row md:justify-end"><Button type="button" variant="ghost" onClick={() => setFormOpen(false)} disabled={loading}>Cancelar</Button><Button type="submit" disabled={loading}><Save className="size-4" /> {loading ? "Salvando..." : "Salvar experiência"}</Button></div>
@@ -164,6 +169,10 @@ export function ExperiencesManager({ experiences }: { experiences: AdminExperien
           <article key={experience.id} className="rounded-3xl border border-ink/10 bg-white p-6">
             <div className="flex items-start justify-between gap-4"><div className="grid size-11 place-items-center rounded-2xl bg-mist text-forest"><ImageIcon className="size-5" /></div><StatusBadge status={experience.status} /></div>
             <h2 className="mt-6 text-xl font-semibold tracking-[-0.025em]">{experience.title}</h2>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+              <span className="rounded-full bg-mist px-2.5 py-1 text-forest">Base {experience.baseName ?? "Lago Norte"}</span>
+              {experience.isExclusive ? <span className="rounded-full bg-forest px-2.5 py-1 text-white">Exclusiva da base</span> : null}
+            </div>
             <p className="mt-2 text-xs font-medium text-lake">/{experience.slug}</p>
             <p className="mt-4 min-h-12 text-sm leading-6 text-ink/55">{experience.summary}</p>
             <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 border-t border-ink/10 pt-4 text-xs text-ink/50"><span>Ordem {experience.displayOrder}</span><span>{experience.sessionsCount} sessões</span><span>{experience.durationMinutes} min</span><span>{experience.defaultCapacity} vagas</span><span>{experience.imageUrl ? "Imagem definida" : "Sem imagem"}</span></div>

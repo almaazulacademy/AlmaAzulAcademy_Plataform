@@ -13,6 +13,7 @@ import { AdminEmptyState } from "@/components/admin/states";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { AdminExperience, AdminSession, AdminSessionFilters, SessionStatus } from "@/lib/admin/types";
+import { adminExperienceLabel } from "@/lib/admin/base-filter";
 import { hasSessionFilters, sessionSearchParams } from "@/lib/admin/session-filters";
 import { formatCurrency } from "@/lib/admin/format";
 import { formatSessionDateTime, sessionLocalToIso, toSessionDateTimeLocal } from "@/lib/sessions/date-time";
@@ -68,6 +69,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filters,
   // Salvar uma sessão não pode descartar a busca e os filtros em uso.
   const listUrl = search ? `/admin/sessoes?${search}` : "/admin/sessoes";
   const hasFilters = hasSessionFilters(filters);
+  const baseNames = new Map(experiences.map((experience) => [experience.id, experience.baseName ?? null]));
   const { notify } = useToast();
   const [formOpen, setFormOpen] = useState(initiallyOpen);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -227,7 +229,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filters,
               <span className={labelClass}>Experiência</span>
               <select className={inputClass} value={form.experienceId} onChange={(event) => setForm({ ...form, experienceId: event.target.value })} disabled={loading}>
                 <option value="">Selecione</option>
-                {experiences.map((experience) => <option key={experience.id} value={experience.id}>{experience.title}</option>)}
+                {experiences.map((experience) => <option key={experience.id} value={experience.id}>{adminExperienceLabel(experience)}{experience.status === "COMING_SOON" ? " (em breve — não reservável)" : ""}</option>)}
               </select>
               {errors.experienceId ? <span className={fieldErrorClass}>{errors.experienceId}</span> : null}
             </label>
@@ -266,7 +268,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filters,
           <article key={session.id} className="rounded-3xl border border-ink/10 bg-white p-5 sm:p-6">
             <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2"><StatusBadge status={session.status} /><span className="text-xs font-medium text-ink/40">{session.reservationsCount} reservas</span></div>
+                <div className="flex flex-wrap items-center gap-2"><StatusBadge status={session.status} /><span className="text-xs font-medium text-ink/40">{session.reservationsCount} reservas</span>{baseNames.get(session.experienceId) ? <span className="text-xs font-medium text-lake">Base {baseNames.get(session.experienceId)}</span> : null}</div>
                 <h2 className="mt-3 text-lg font-semibold text-ink">{session.experienceTitle}</h2>
                 <p className="mt-1 text-sm text-ink/55">{formatSessionDateTime(session.startsAt)}</p>
               </div>

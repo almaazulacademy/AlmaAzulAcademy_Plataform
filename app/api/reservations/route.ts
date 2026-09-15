@@ -55,6 +55,7 @@ function publicOrigin() {
 function reservationError(message: string) {
   if (message.includes("INSUFFICIENT_SPOTS")) return { status: 409, message: "Não há vagas suficientes para essa quantidade." };
   if (message.includes("SESSION_UNAVAILABLE")) return { status: 409, message: "Essa sessão não está mais disponível." };
+  if (message.includes("EXPERIENCE_UNAVAILABLE")) return { status: 409, message: "Esta experiência ainda não está com reservas abertas." };
   return { status: 500, message: "Não foi possível criar a pré-reserva." };
 }
 
