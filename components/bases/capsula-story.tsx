@@ -71,21 +71,20 @@ export function CapsulaStory() {
           <h3 className="text-balance text-3xl font-medium tracking-[-0.04em] text-forest sm:text-4xl">{C.encounter.title}</h3>
           <p className="mt-5 text-lg leading-8 text-ink/70">{C.encounter.text}</p>
 
-          <div className="mt-10 flex items-center gap-5 border-t border-ink/10 pt-8">
+          {/* Lia com presença real na composição: retrato grande, texto curto embaixo. */}
+          <div className="mt-10 border-t border-ink/10 pt-8">
             <Image
               src={C.founder.photo.src}
               alt={C.founder.photo.alt}
               width={C.founder.photo.width}
               height={C.founder.photo.height}
-              sizes="120px"
-              className="aspect-[3/4] w-20 shrink-0 rounded-3xl object-cover object-top sm:w-24"
+              sizes="(min-width: 1024px) 24vw, 45vw"
+              className="aspect-[4/5] w-44 max-w-full rounded-4xl object-cover object-top sm:w-52 lg:w-full"
             />
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/45">{C.founder.eyebrow}</p>
-              <p className="mt-1 text-2xl font-medium tracking-[-0.03em] text-ink">{C.founder.name}</p>
-              <p className="text-ink/60">{C.founder.role}</p>
-              <Image src={CONCHA_LANDING.partner.logo} alt="Cápsula Bar" width={640} height={453} sizes="64px" className="mt-3 h-auto w-14" />
-            </div>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-ink/45">{C.founder.eyebrow}</p>
+            <p className="mt-1 text-2xl font-medium tracking-[-0.03em] text-ink">{C.founder.name}</p>
+            <p className="text-ink/60">{C.founder.role}</p>
+            <Image src={CONCHA_LANDING.partner.logo} alt="Cápsula Bar" width={640} height={453} sizes="64px" className="mt-4 h-auto w-14" />
           </div>
 
           <a href="#experiencias" className={buttonVariants({ variant: "outline", size: "lg", className: "mt-10" })}>
