@@ -29,6 +29,8 @@ export type BasePageContent = {
    * `bases.image_url` sem exigir alteração no banco.
    */
   cardImage?: string;
+  /** Logo do parceiro no card da base (discreta, ao lado do selo de parceria). */
+  partnerLogo?: string;
   aboutTitle: string;
   experiencesTitle: string;
   experiencesDescription: string;
@@ -83,6 +85,7 @@ const CONTENT: Record<string, BasePageContent> = {
     heroTitle: "Concha Acústica",
     heroSubtitle: "Nossa nova base está chegando. Uma nova forma de viver o Lago Paranoá, a partir do coração de Brasília.",
     cardImage: "/images/bases/concha-acustica/concha-card-capsula-lago.webp",
+    partnerLogo: "/images/bases/concha-acustica/capsula-bar-logo.webp",
     heroImage: {
       src: "/images/bases/concha-acustica/concha-hero-nascer-do-sol-desktop.webp",
       alt: "Canoa havaiana da Alma Azul remando ao nascer do sol no Lago Paranoá",

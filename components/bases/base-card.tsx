@@ -1,9 +1,11 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
 
 import { ActiveBaseBadge, ComingSoonBadge, PartnerBadge } from "@/components/bases/badges";
 import { EditorialImage } from "@/components/editorial-image";
 import { basePageContent } from "@/lib/bases/content";
+import { publicExperienceTitle } from "@/lib/bases/labels";
 import { isTemporaryMedia, TEMPORARY_MEDIA_LABEL } from "@/lib/bases/media";
 import type { PublicBase } from "@/lib/bases/types";
 import { cn } from "@/lib/utils";
@@ -18,7 +20,8 @@ import { cn } from "@/lib/utils";
 export function BaseCard({ base, experienceTitles, className }: { base: PublicBase; experienceTitles: string[]; className?: string }) {
   const comingSoon = base.status !== "ACTIVE";
   const cta = comingSoon ? "Conhecer a nova base" : "Conhecer a base";
-  const imageUrl = basePageContent(base).cardImage ?? base.imageUrl;
+  const content = basePageContent(base);
+  const imageUrl = content.cardImage ?? base.imageUrl;
 
   return (
     <Link
@@ -54,7 +57,14 @@ export function BaseCard({ base, experienceTitles, className }: { base: PublicBa
         {/* Fora da foto, para nunca cobrir o selo "Em breve". */}
         {isTemporaryMedia(base.slug, imageUrl) ? <p className="mt-1 text-xs text-ink/40">{TEMPORARY_MEDIA_LABEL}</p> : null}
         <p className="mt-4 text-base leading-7 text-ink/70">{base.shortDescription}</p>
-        {base.partnerName ? <PartnerBadge partner={base.partnerName} className="mt-5 self-start" /> : null}
+        {base.partnerName ? (
+          <span className="mt-5 flex items-center gap-3">
+            <PartnerBadge partner={base.partnerName} />
+            {content.partnerLogo ? (
+              <Image src={content.partnerLogo} alt="" aria-hidden="true" width={640} height={453} sizes="80px" className="h-auto w-16 shrink-0 opacity-85" />
+            ) : null}
+          </span>
+        ) : null}
 
         {experienceTitles.length ? (
           <div className="mt-6 border-t border-ink/10 pt-5">
@@ -64,7 +74,7 @@ export function BaseCard({ base, experienceTitles, className }: { base: PublicBa
             <ul className="mt-3 flex flex-wrap gap-2">
               {experienceTitles.map((title) => (
                 <li key={title} className="rounded-full bg-mist px-3 py-1.5 text-sm font-medium text-forest">
-                  {title}
+                  {publicExperienceTitle(title)}
                 </li>
               ))}
             </ul>

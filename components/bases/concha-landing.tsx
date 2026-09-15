@@ -33,6 +33,23 @@ function HeroPicture() {
   );
 }
 
+/** Entrada do Cápsula: 16:9 no desktop e 3:4 no celular, carregada sob demanda. */
+function EntrancePicture() {
+  const common = { alt: C.impact.image.alt, sizes: "100vw", quality: 70 } as const;
+  const { props: mobile } = getImageProps({ ...common, src: C.impact.image.mobile, width: 1000, height: 1333 });
+  const {
+    props: { srcSet: desktopSrcSet, ...desktop },
+  } = getImageProps({ ...common, src: C.impact.image.desktop, width: 2000, height: 1125 });
+  return (
+    <picture>
+      <source media="(min-width: 768px)" srcSet={desktopSrcSet} sizes="100vw" />
+      <source media="(max-width: 767px)" srcSet={mobile.srcSet} sizes="100vw" />
+      {/* eslint-disable-next-line jsx-a11y/alt-text -- alt vem de getImageProps */}
+      <img {...desktop} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+    </picture>
+  );
+}
+
 /**
  * Landing da Base Concha Acústica enquanto a base está em breve.
  *
@@ -59,48 +76,44 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
             <h1 className="text-balance text-[clamp(3rem,7.4vw,7rem)] font-medium leading-[0.9] tracking-[-0.06em]">{C.hero.title}</h1>
             <p className="mt-7 max-w-xl text-balance text-lg leading-8 text-white/80 sm:text-xl">{C.hero.description}</p>
 
-            {/* Parceria: elemento menor, subordinado ao título da Alma Azul. */}
-            <div className="mt-8 flex items-center gap-4">
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Em parceria com</span>
-              <span className="relative block aspect-video w-32 shrink-0 overflow-hidden rounded-xl bg-white shadow-soft sm:w-36">
-                <AmbientVideo
-                  desktopSrc={C.partner.video.desktop}
-                  mobileSrc={C.partner.video.mobile}
-                  poster={C.partner.video.poster}
-                  fallbackMode="on-failure"
-                  fallback={<Image src={C.partner.video.poster} alt="" fill sizes="144px" className="scale-[1.7] object-cover" />}
-                  className="scale-[1.7] object-cover"
-                />
-                <span className="sr-only">{base.partnerName ?? "Cápsula Bar"}</span>
-              </span>
-            </div>
-
-            <a href="#brasilia-vista-da-agua" className={buttonVariants({ variant: "light", size: "lg", className: "mt-9" })}>
+            <a href="#a-nova-base" className={buttonVariants({ variant: "light", size: "lg", className: "mt-9" })}>
               Conhecer a nova base <ArrowDown className="size-4" />
             </a>
           </div>
         </div>
+        {/* Parceria no alto à direita: presente, mas sem disputar com o título. */}
+        {/* Sem z-index próprio: o elemento precisa dividir o contexto de empilhamento
+            com a foto para o mix-blend-mode enxergar a imagem por baixo. */}
+        <div className="absolute right-4 top-24 flex flex-col items-end gap-2 sm:right-8 sm:top-28 lg:top-32">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">Em parceria com</span>
+          {/* O arquivo é logo preta sobre branco: inverter + screen deixa só a marca sobre a foto. */}
+          <span className="relative block aspect-video w-40 shrink-0 overflow-hidden [filter:invert(1)] [mix-blend-mode:screen] sm:w-52 lg:w-60">
+            <AmbientVideo
+              desktopSrc={C.partner.video.desktop}
+              mobileSrc={C.partner.video.mobile}
+              poster={C.partner.video.poster}
+              fallbackMode="on-failure"
+              fallback={<Image src={C.partner.video.poster} alt="" fill sizes="240px" className="scale-[1.6] object-cover" />}
+              className="scale-[1.6] object-cover"
+            />
+          </span>
+          <span className="sr-only">{base.partnerName ?? "Cápsula Bar"}</span>
+        </div>
+
         <MediaCredit className="absolute bottom-4 left-4 z-10 max-w-[60%] text-[11px] leading-tight text-white/55 sm:left-auto sm:right-6 sm:max-w-none sm:text-right" />
       </section>
 
-      {/* 2. Impacto — drone */}
-      <section id="brasilia-vista-da-agua" className="scroll-mt-20 bg-white p-3 sm:p-5">
-        <div className="relative isolate h-[82svh] min-h-[520px] overflow-hidden rounded-4xl bg-ink text-white sm:h-[88svh]">
-          <AmbientVideo
-            desktopSrc={C.impact.video.desktop}
-            mobileSrc={C.impact.video.mobile}
-            loop
-            lazy
-            fallback={<Image src={C.impact.video.poster} alt="" fill sizes="100vw" className="object-cover" />}
-            className="object-cover"
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(8,28,25,0.8)_0%,rgba(8,28,25,0.15)_55%,rgba(8,28,25,0.05)_100%)]" />
+      {/* 2. A nova base: entrada do Cápsula */}
+      <section id="a-nova-base" className="scroll-mt-20 bg-white p-3 sm:p-5">
+        <figure className="relative isolate h-[82svh] min-h-[520px] overflow-hidden rounded-4xl bg-ink text-white sm:h-[88svh]">
+          <EntrancePicture />
+          <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(8,28,25,0.85)_0%,rgba(8,28,25,0.2)_55%,rgba(8,28,25,0.1)_100%)]" />
           <div className="container relative z-10 flex h-full flex-col justify-end pb-12 sm:pb-16">
             <h2 className="max-w-3xl text-balance text-5xl font-medium leading-[0.95] tracking-[-0.055em] sm:text-7xl">{C.impact.title}</h2>
             <p className="mt-5 max-w-lg text-lg leading-8 text-white/75 sm:text-xl">{C.impact.description}</p>
-            <MediaCredit className="mt-8 text-xs text-white/50" />
+            <figcaption className="mt-8 text-xs text-white/50">{C.impact.image.caption}</figcaption>
           </div>
-        </div>
+        </figure>
       </section>
 
       {/* 3. Cápsula — a nova base */}
@@ -110,7 +123,7 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
       <section id="experiencias" className="scroll-mt-20 bg-paper py-20 sm:py-28 lg:py-36" aria-labelledby="experiencias-titulo">
         <div className="container">
           <div className="mb-12 max-w-3xl sm:mb-16">
-            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-lake">Base {base.name}</p>
+            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-lake">{C.experiences.eyebrow}</p>
             <h2 id="experiencias-titulo" className="text-balance text-4xl font-medium leading-[1.03] tracking-[-0.045em] sm:text-5xl lg:text-6xl">
               {C.experiences.title}
             </h2>
