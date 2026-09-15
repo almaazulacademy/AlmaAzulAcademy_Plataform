@@ -82,7 +82,7 @@ const CONTENT: Record<string, BasePageContent> = {
     heroEyebrow: "Nova base · Em breve",
     heroTitle: "Concha Acústica",
     heroSubtitle: "Nossa nova base está chegando. Uma nova forma de viver o Lago Paranoá, a partir do coração de Brasília.",
-    cardImage: "/images/bases/concha-acustica/concha-card-nascer-do-sol.webp",
+    cardImage: "/images/bases/concha-acustica/concha-card-capsula-lago.webp",
     heroImage: {
       src: "/images/bases/concha-acustica/concha-hero-nascer-do-sol-desktop.webp",
       alt: "Canoa havaiana da Alma Azul remando ao nascer do sol no Lago Paranoá",

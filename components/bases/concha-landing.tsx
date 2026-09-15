@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowRight } from "lucide-react";
 
 import { AmbientVideo } from "@/components/bases/ambient-video";
+import { CapsulaStory } from "@/components/bases/capsula-story";
 import { ComingSoonBadge } from "@/components/bases/badges";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
@@ -102,19 +103,8 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
         </div>
       </section>
 
-      {/* 3. Introdução */}
-      <section className="bg-white py-20 sm:py-28 lg:py-36">
-        <div className="container grid gap-10 lg:grid-cols-[1fr_1fr] lg:gap-20">
-          <div>
-            <ComingSoonBadge />
-            <h2 className="mt-6 text-balance text-4xl font-medium leading-[1.02] tracking-[-0.05em] text-forest sm:text-5xl lg:text-6xl">{C.intro.title}</h2>
-          </div>
-          <div className="lg:pt-14">
-            <p className="text-xl leading-9 text-ink/70">{C.intro.description}</p>
-            <p className="mt-6 text-sm font-semibold uppercase tracking-[0.16em] text-ink/45">{C.intro.partner}</p>
-          </div>
-        </div>
-      </section>
+      {/* 3. Cápsula — a nova base */}
+      <CapsulaStory />
 
       {/* 4. Experiências */}
       <section id="experiencias" className="scroll-mt-20 bg-paper py-20 sm:py-28 lg:py-36" aria-labelledby="experiencias-titulo">
@@ -204,28 +194,11 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
         </div>
       </section>
 
-      {/* 6. Parceria */}
-      <section className="bg-paper py-16 sm:py-24" aria-labelledby="parceria">
-        <div className="container">
-          <div className="mx-auto flex max-w-4xl flex-col items-center gap-8 rounded-4xl border border-ink/10 bg-white px-6 py-12 text-center sm:px-12 sm:py-16">
-            <h2 id="parceria" className="text-xs font-semibold uppercase tracking-[0.2em] text-lake">
-              {C.partner.title}
-            </h2>
-            <div className="flex items-center justify-center gap-6 sm:gap-10">
-              <Image src="/images/branding/alma-azul-logo-dark.png" alt="Alma Azul Academy" width={1544} height={833} sizes="160px" className="h-auto w-32 sm:w-40" />
-              <span aria-hidden="true" className="text-2xl font-light text-ink/30">×</span>
-              <Image src={C.partner.logo} alt="Cápsula Bar" width={640} height={453} sizes="112px" className="h-auto w-20 sm:w-24" />
-            </div>
-            <p className="max-w-xl text-balance text-xl leading-8 text-ink/70">{C.partner.description}</p>
-          </div>
-        </div>
-      </section>
-
       {/* 7. Encerramento — base ainda fechada */}
       <section className="bg-white p-3 sm:p-5">
         <div className="relative isolate overflow-hidden rounded-4xl bg-ink text-white">
-          <Image src={C.hero.image.desktop} alt="" fill sizes="100vw" className="object-cover" />
-          <div className="absolute inset-0 bg-ink/80" />
+          <Image src={C.capsula.image.desktop} alt="" fill sizes="100vw" className="object-cover" />
+          <div className="absolute inset-0 bg-ink/75" />
           <div className="container relative z-10 py-20 sm:py-28">
             <div className="max-w-3xl">
               <ComingSoonBadge tone="dark" />

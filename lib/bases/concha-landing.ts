@@ -8,6 +8,9 @@
  * Paranoá — ainda não foram produzidos na nova base. Por isso aparecem sempre
  * com `mediaCredit`, e nenhuma foto é associada a um roteiro específico.
  *
+ * As fotos em `capsula` são do próprio lugar (Cápsula, às margens do Lago
+ * Paranoá): levam legenda, não o selo de registro temporário.
+ *
  * Originais: pasta "Capsula + Alma Azul" no Google Drive. Em `public/` ficam só
  * os derivados otimizados (WebP e MP4 H.264 sem áudio).
  */
@@ -28,8 +31,6 @@ export const CONCHA_LANDING = {
     },
   },
   partner: {
-    title: "Alma Azul × Cápsula",
-    description: "Duas experiências de Brasília se encontram às margens do Paranoá.",
     logo: `${IMG}/capsula-bar-logo.webp`,
     video: {
       desktop: `${VID}/capsula-logo-animada-960.mp4`,
@@ -46,11 +47,31 @@ export const CONCHA_LANDING = {
       poster: `${IMG}/brasilia-vista-da-agua-poster.webp`,
     },
   },
-  intro: {
-    title: "Uma nova saída. Novos caminhos. A mesma Alma Azul.",
-    description:
-      "A chegada da Alma Azul à Concha Acústica abre novas possibilidades para explorar o Lago Paranoá. Remadas contemplativas, experiências em horários especiais e novos caminhos para descobrir Brasília a partir da água.",
-    partner: "Em parceria com Cápsula Bar.",
+  // Cápsula como nova base. Só fatos fornecidos pela Alma Azul: origem na
+  // Chapada dos Veadeiros, chegada ao Lago Paranoá e Lia Braga como idealizadora.
+  capsula: {
+    eyebrow: "Nossa nova base",
+    title: "Da Chapada ao Lago Paranoá.",
+    paragraphs: [
+      "O Cápsula nasceu do que foi construído na Chapada dos Veadeiros: natureza, música, arte e gente se encontrando sem pressa. Agora essa essência chega às margens do Lago Paranoá, como um refúgio para desacelerar o ritmo da cidade.",
+      "É aqui que nasce a nova base da Alma Azul. A experiência começa antes da canoa — na chegada, no pé na areia, na luz que muda sobre a água.",
+    ],
+    image: {
+      desktop: `${IMG}/capsula-lago-por-do-sol-desktop.webp`,
+      mobile: `${IMG}/capsula-lago-por-do-sol-mobile.webp`,
+      alt: "Cápsula às margens do Lago Paranoá ao pôr do sol, com palmeiras e o píer sobre a água",
+      caption: "Cápsula, às margens do Lago Paranoá",
+    },
+    encounter: {
+      title: "Um encontro natural.",
+      text: "Dois projetos diferentes, movidos pela mesma vontade de aproximar pessoas, natureza e presença. O Cápsula pela arte, pela música e pela acolhida. A Alma Azul pela água e pelo movimento.",
+    },
+    details: [
+      { src: `${IMG}/capsula-arte-lago.webp`, width: 1000, height: 1400, alt: "Escultura vazada de São Jorge no Cápsula, com o Lago Paranoá ao entardecer ao fundo", caption: "Arte e lago, no mesmo horizonte" },
+      { src: `${IMG}/capsula-noite-encontro.webp`, width: 1600, height: 1070, alt: "Pessoas reunidas no pátio de areia do Cápsula à noite, entre árvores iluminadas", caption: "Noite de inauguração do Cápsula" },
+    ],
+    founder: { eyebrow: "Por trás do Cápsula", name: "Lia Braga", role: "Idealizadora do Cápsula." },
+    cta: "Ver as experiências da nova base",
   },
   experiences: {
     title: "Experiências da Concha",
