@@ -14,12 +14,13 @@ import {
   ShieldAlert,
 } from "lucide-react";
 
+import { BaseComparison, BaseDashboardTabs } from "@/components/admin/base-dashboard";
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { PaymentReviewPanel } from "@/components/admin/payment-review-panel";
 import { AdminErrorState } from "@/components/admin/states";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
-import { getAdminDashboard, getPaymentsNeedingReview } from "@/lib/admin/data";
+import { getAdminBaseDashboard, getAdminDashboard, getPaymentsNeedingReview, listAdminBases } from "@/lib/admin/data";
 import type { PaymentReviewReport } from "@/lib/admin/types";
 import { formatAdminDateTime, formatCurrency } from "@/lib/admin/format";
 import { formatSessionDateTime } from "@/lib/sessions/date-time";
@@ -38,8 +39,18 @@ const cards = [
 
 export default async function AdminDashboardPage() {
   const context = await requireAdmin();
+  const { bases, migrationPending } = await listAdminBases();
   try {
     const metrics = await getAdminDashboard(context.profile.userId);
+
+    // Comparação entre bases. Uma falha aqui (migration ainda não aplicada)
+    // não afeta os números consolidados acima, que continuam vindo da RPC original.
+    const comparison = await Promise.all(
+      bases.map(async (base) => ({
+        base,
+        metrics: migrationPending ? null : await getAdminBaseDashboard(context.profile.userId, base.id).catch(() => null),
+      })),
+    );
 
     // A fila de revisão é informação secundária: se a migration de
     // confiabilidade ainda não estiver aplicada neste ambiente, o dashboard
@@ -54,11 +65,12 @@ export default async function AdminDashboardPage() {
     return (
       <div>
         <AdminPageHeader
-          eyebrow="Visão operacional"
+          eyebrow="Visão geral · todas as bases"
           title={`Olá, ${context.profile.displayName.split(" ")[0]}.`}
-          description="Acompanhe as próximas experiências e os principais números da operação."
+          description="Números consolidados da Alma Azul. Use as abas para entrar na operação de cada base."
           action={<Link href="/admin/sessoes?novo=1" className={buttonVariants()}>Nova sessão</Link>}
         />
+        <BaseDashboardTabs bases={bases} current={null} />
 
         <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores do painel">
           <article className="rounded-3xl bg-ink p-6 text-white sm:col-span-2">
@@ -132,6 +144,8 @@ export default async function AdminDashboardPage() {
           </article>
         </section>
 
+        <BaseComparison rows={comparison} />
+
         <PaymentReviewPanel report={review} />
       </div>
     );
@@ -139,6 +153,7 @@ export default async function AdminDashboardPage() {
     return (
       <div>
         <AdminPageHeader eyebrow="Visão operacional" title="Dashboard" description="Acompanhe a operação da Alma Azul." />
+        <BaseDashboardTabs bases={bases} current={null} />
         <div className="mt-8"><AdminErrorState description="A migration administrativa pode ainda não ter sido aplicada no Supabase deste ambiente." /></div>
       </div>
     );

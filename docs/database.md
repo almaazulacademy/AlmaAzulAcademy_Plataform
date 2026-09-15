@@ -43,11 +43,12 @@ Para o banco legado específico, a cópia operacional está em `supabase/bootstr
 - `CANCELLED`
 - `ARCHIVED` (adicionado pela migration `202608040001_session_archived_status.sql`; sessão com histórico de reservas removida pelo admin em vez de excluída — some das páginas públicas e da agenda padrão, mas reservas, pagamentos e relatórios permanecem intactos)
 
-O status de `experiences` é `text` com check para `DRAFT`, `PUBLISHED` ou `ARCHIVED`.
+O status de `experiences` é `text` com check para `DRAFT`, `PUBLISHED`, `COMING_SOON` ou `ARCHIVED` (`COMING_SOON` veio com a migration multi-base; só `PUBLISHED` é reservável, e só em base `ACTIVE`).
 
 ## Relacionamentos
 
 ```text
+bases       1 ─── N experiences   (multi-base: ver multi-base.md)
 experiences 1 ─── N sessions
 experiences 1 ─── N reservations
 sessions    1 ─── N reservations
@@ -236,6 +237,7 @@ Não há policy pública de leitura para `reservations` ou `payment_events`; pri
 | `202608020001_legacy_schema_compatibility.sql` | Bootstrap idempotente e não destrutivo para o schema legado |
 | `202608240001_admin_change_reservation_session.sql` | Histórico tipado e RPC transacional da troca administrativa de turma |
 | `202608310001_admin_cross_experience_rescheduling.sql` | Reagendamento entre experiências: histórico com as duas experiências, invariante reserva ↔ sessão ↔ experiência e evolução das três RPCs |
+| `202609150001_multi_base.sql` | Tabela `bases`, `experiences.base_id`/`is_exclusive`/`modality`, status `COMING_SOON`, invariante "publicada só em base ativa", Concha Acústica em breve, RPCs públicas do catálogo e `admin_base_dashboard_metrics`. Detalhes em [multi-base.md](multi-base.md) |
 
 ## RPCs administrativas
 

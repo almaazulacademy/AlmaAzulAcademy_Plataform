@@ -1,5 +1,23 @@
 # Changelog
 
+## Sprint 7.0 — Arquitetura multi-base e Base Concha Acústica (em breve)
+
+- Auditoria de experiências, sessões, reservas, pagamentos, admin, banco, páginas públicas, componentes e navegação antes de qualquer alteração. Detalhes e decisões em [docs/multi-base.md](docs/multi-base.md).
+- Nova hierarquia **Alma Azul → Base → Experiência → Sessão → Reserva**. Tabela `bases` com status `ACTIVE`, `COMING_SOON` e `INACTIVE`; `experiences.base_id`, `is_exclusive` e `modality`.
+- A base de sessões e reservas é derivada da experiência — sem coluna redundante. Todo o histórico passou a ser **Base Lago Norte** pelo preenchimento de `experiences.base_id`; nenhuma reserva, sessão ou pagamento foi reescrito.
+- **Base Concha Acústica** (parceria com o Cápsula Bar) criada como `COMING_SOON`, com Caminhos do Paranoá, Remada Nascer do Sol, Remada Sunset e Remada Lua Cheia, todas em breve. Nenhuma sessão, preço ou capacidade foi criado.
+- Bloqueio de reserva no banco sem tocar nas RPCs de reserva e pagamento: experiência só pode ser publicada em base ativa (`BASE_NOT_ACTIVE`), sessão só pode existir em base ativa (`SESSION_BASE_NOT_ACTIVE`), e a pré-reserva já exigia experiência publicada.
+- Base obrigatória: backfill explícito para Lago Norte só do que já existia, sem valor padrão no banco. O painel exige a base ao criar e editar experiências; a base trava depois da primeira sessão (`EXPERIENCE_BASE_LOCKED`).
+- `modality` é só apresentação: sessões, vagas, reservas, receita, dashboard e status continuam por experiência e base (validado em Postgres).
+- Mídia separada entre base (espaço) e experiência; `/bases/concha-acustica` pronta para receber fotos e vídeos locais do espaço; fotos temporárias do Lago Norte marcadas como "Imagem ilustrativa" e listadas em `TEMPORARY_BASE_MEDIA`.
+- Bloqueadores para ativar a Concha registrados no código e em `docs/multi-base.md`: local de encontro por base nas comunicações e base no Google Sheets.
+- Imersão Paranoá marcada como **exclusiva da Base Lago Norte**, com selo no site.
+- Site: seção "Escolha onde viver a Alma Azul" na Home, novas páginas `/bases`, `/bases/lago-norte`, `/bases/concha-acustica` e `/experiencias` (filtro por base, uma linha por base em cada modalidade), selo reutilizável "Em breve", faixa da base na landing da experiência e páginas explicativas para URL manual de experiência ou sessão em breve.
+- Navegação: Experiências · Bases · Sobre · Acompanhar reserva · Reservar (agenda geral). A Imersão saiu do menu principal. Nenhuma URL existente mudou.
+- Admin: Dashboard separado em Visão geral, Lago Norte e Concha Acústica, com comparação entre bases, estados vazios e filtro de base em Sessões e Reservas. Nova RPC `admin_base_dashboard_metrics`; `admin_dashboard_metrics` segue intacta.
+- Migration `202609150001_multi_base.sql` aditiva e idempotente, validada em Postgres sobre toda a cadeia de migrations (instalação limpa e schema legado), incluindo o fluxo de pré-reserva e confirmação do Lago Norte após a migration. Postcheck em `supabase/diagnostics/multi_base_postcheck.sql`.
+- Acrescenta 26 testes (migration, base obrigatória, catálogo, agrupamento, bloqueio de reserva, mídia, filtros e navegação).
+
 ## Sprint 6.7 — E-mail de confirmação mais completo
 
 - Auditoria do fluxo de e-mail antes de qualquer alteração: o template vive em `lib/reservations/confirmation-email.ts` (funções puras), o envio em `lib/reservations/confirmation-email-service.ts`, e os dados vêm da RPC `reservation_confirmation_email` — nome, código, experiência, `starts_at` da sessão e quantidade.

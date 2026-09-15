@@ -9,11 +9,19 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { label: "Experiências", href: "/#experiencias" },
+  { label: "Experiências", href: "/experiencias" },
+  { label: "Bases", href: "/bases" },
   { label: "Sobre", href: "/#sobre" },
-  { label: "Imersão Paranoá", href: "/experiencias/imersao-paranoa" },
   { label: "Acompanhar reserva", href: "/acompanhar-reserva" },
 ];
+
+/**
+ * "Reservar" leva para a agenda geral, não para uma experiência específica.
+ * A agenda só lista turmas com reserva aberta — hoje, todas da Base Lago
+ * Norte, cada uma identificada com a sua base — então quem já quer reservar
+ * não ganha nenhuma etapa extra, e uma base "em breve" nunca aparece ali.
+ */
+const RESERVE_HREF = "/agenda";
 
 type NavbarProps = {
   overlay?: boolean;
@@ -95,10 +103,10 @@ export function Navbar({ overlay = false }: NavbarProps) {
             </Link>
           ))}
           <Link
-            href="/experiencias/imersao-paranoa#reservas"
+            href={RESERVE_HREF}
             className={buttonVariants({ variant: overlay && !scrolled ? "light" : "default", size: "sm" })}
           >
-            Reservar vaga
+            Reservar
           </Link>
         </nav>
 
@@ -142,11 +150,11 @@ export function Navbar({ overlay = false }: NavbarProps) {
           ))}
         </nav>
         <Link
-          href="/experiencias/imersao-paranoa#reservas"
+          href={RESERVE_HREF}
           onClick={() => setOpen(false)}
           className={cn(buttonVariants({ size: "lg" }), "mt-auto")}
         >
-          Reservar vaga
+          Reservar
         </Link>
       </div>
     </header>

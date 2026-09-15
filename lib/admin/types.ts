@@ -30,13 +30,16 @@ export type AdminSessionFilters = {
   query: string;
   status: SessionStatusFilter;
   experienceId: string;
+  /** Slug da base (`?base=`). Vazio = todas as bases. */
+  base: string;
   period: SessionPeriodFilter;
   from: string;
   to: string;
   sort: SessionSort;
 };
 
-export const EXPERIENCE_STATUSES = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
+// COMING_SOON: aparece no site como "em breve", sem agenda nem reserva.
+export const EXPERIENCE_STATUSES = ["DRAFT", "PUBLISHED", "COMING_SOON", "ARCHIVED"] as const;
 export type ExperienceStatus = (typeof EXPERIENCE_STATUSES)[number];
 
 export const ADMIN_ROLES = ["ADMIN", "OPERATOR"] as const;
@@ -163,6 +166,35 @@ export type AdminExperience = {
   sessionsCount: number;
   createdAt: string;
   updatedAt: string;
+  /** Ausentes enquanto a migration multi-base não estiver aplicada (tudo é Lago Norte). */
+  baseId?: string | null;
+  baseSlug?: string | null;
+  baseName?: string | null;
+  isExclusive?: boolean;
+};
+
+export type AdminBase = {
+  id: string;
+  slug: string;
+  name: string;
+  status: "ACTIVE" | "COMING_SOON" | "INACTIVE";
+  locationLabel: string;
+  partnerName: string | null;
+  displayOrder: number;
+};
+
+export type AdminBaseDashboard = Omit<AdminDashboardMetrics, "paymentReview"> & {
+  experiencesCount: number;
+  sessionsCount: number;
+  cancelledReservations: number;
+  upcomingSessions: Array<{
+    id: string;
+    experienceTitle: string;
+    startsAt: string;
+    status: string;
+    capacity: number;
+    remainingSpots: number;
+  }>;
 };
 
 export type AdminSession = {
@@ -215,6 +247,8 @@ export type AdminReservationDetails = AdminReservation & {
 
 export type AdminReservationFilters = {
   date: string;
+  /** Slug da base (`?base=`), aplicado sobre a experiência da reserva. */
+  base: string;
   experienceId: string;
   status: ReservationStatus | "";
   name: string;
@@ -247,6 +281,8 @@ export type AdminSessionInput = {
 };
 
 export type AdminExperienceInput = {
+  /** Obrigatória: nenhuma experiência é criada ou salva sem base explícita. */
+  baseId: string;
   title: string;
   summary: string;
   description: string;

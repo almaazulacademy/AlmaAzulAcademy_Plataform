@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { ArrowUpRight, MapPin } from "lucide-react";
+import { ArrowUpRight, MapPin, Sparkles } from "lucide-react";
 
 import { EditorialImage } from "@/components/editorial-image";
 import { cn } from "@/lib/utils";
 
-export type ExperienceCardData = { title: string; eyebrow: string; summary: string; location: string; image: string | null; imageAlt: string; href: string };
+export type ExperienceCardData = { title: string; eyebrow: string; summary: string; location: string; badge?: string; image: string | null; imageAlt: string; href: string };
 
 export function ExperienceCard({ experience, featured = false }: { experience: ExperienceCardData; featured?: boolean }) {
   return (
@@ -24,6 +24,12 @@ export function ExperienceCard({ experience, featured = false }: { experience: E
       <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/20 to-transparent" />
       <div className="relative mt-auto flex w-full items-end justify-between gap-6 p-7 sm:p-9 lg:p-11">
         <div>
+          {experience.badge ? (
+            <p className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase leading-none tracking-[0.14em] text-forest">
+              <Sparkles aria-hidden="true" className="size-3.5 shrink-0" />
+              {experience.badge}
+            </p>
+          ) : null}
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
             {experience.eyebrow}
           </p>

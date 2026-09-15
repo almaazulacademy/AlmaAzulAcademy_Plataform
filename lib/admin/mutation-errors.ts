@@ -89,6 +89,24 @@ export function adminMutationError(error: unknown) {
   if (message.includes("INCOMPLETE_EDITORIAL_CONTENT")) {
     return { status: 400, message: "Complete o conteúdo editorial obrigatório antes de publicar." };
   }
+  if (message.includes("SESSION_BASE_NOT_ACTIVE")) {
+    return { status: 409, message: "Esta experiência pertence a uma base que ainda não está ativa. Sessões só podem ser criadas em bases em operação." };
+  }
+  if (message.includes("BASE_NOT_ACTIVE")) {
+    return { status: 409, message: "Esta experiência pertence a uma base que ainda não está ativa e não pode ser publicada. Use o status Em breve." };
+  }
+  if (message.includes("BASE_REQUIRED") || /null value in column "base_id"/.test(message)) {
+    return { status: 400, message: "Selecione a base da experiência." };
+  }
+  if (message.includes("BASE_NOT_FOUND")) {
+    return { status: 400, message: "A base escolhida não existe." };
+  }
+  if (message.includes("EXPERIENCE_BASE_LOCKED")) {
+    return { status: 409, message: "A base não pode ser alterada depois que a experiência recebe sessões: elas, as reservas e a receita pertencem à base original." };
+  }
+  if (message.includes("BASE_HAS_PUBLISHED_EXPERIENCES")) {
+    return { status: 409, message: "A base ainda tem experiências publicadas. Retire-as antes de mudar o status da base." };
+  }
   if (message.includes("ADMIN_FORBIDDEN")) {
     return { status: 403, message: "Seu acesso administrativo não está ativo." };
   }

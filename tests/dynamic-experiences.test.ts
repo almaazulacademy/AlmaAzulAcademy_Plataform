@@ -20,6 +20,7 @@ test("contrato editorial valida publicação completa e permite rascunho incompl
 
 test("publicação administrativa é bloqueada quando o editorial está incompleto", () => {
   const base = {
+    baseId: "3b12f1df-5232-4804-897e-917bf397618a",
     title: "Experiência de teste",
     summary: "Resumo editorial válido para o cadastro.",
     description: "Descrição editorial válida para manter o registro em rascunho.",

@@ -6,6 +6,7 @@ import type {
   SessionSort,
   SessionStatusFilter,
 } from "./types.ts";
+import { LAGO_NORTE_SLUG } from "../bases/types.ts";
 import { formatSessionDate, formatSessionDateShort, formatSessionTime, toSessionDateTimeLocal } from "../sessions/date-time.ts";
 
 // Vocabulário da URL. Os valores em português já eram usados por
@@ -59,6 +60,7 @@ export const DEFAULT_SESSION_FILTERS: AdminSessionFilters = {
   query: "",
   status: "ACTIVE",
   experienceId: "",
+  base: "",
   period: "ALL",
   from: "",
   to: "",
@@ -97,6 +99,7 @@ export function sessionFiltersFrom(params: SearchParams): AdminSessionFilters {
     query: valueOf(params, "busca"),
     status: SESSION_STATUS_PARAMS[valueOf(params, "filtro")] ?? DEFAULT_SESSION_FILTERS.status,
     experienceId: valueOf(params, "experiencia"),
+    base: valueOf(params, "base").toLowerCase(),
     period: SESSION_PERIOD_PARAMS[valueOf(params, "periodo")] ?? DEFAULT_SESSION_FILTERS.period,
     from: isoDate(valueOf(params, "de")),
     to: isoDate(valueOf(params, "ate")),
@@ -123,6 +126,7 @@ export function sessionSearchParams(filters: AdminSessionFilters) {
   if (filters.query) params.set("busca", filters.query);
   if (filters.status !== DEFAULT_SESSION_FILTERS.status) params.set("filtro", sessionStatusParam(filters.status));
   if (filters.experienceId) params.set("experiencia", filters.experienceId);
+  if (filters.base) params.set("base", filters.base);
   if (filters.period !== DEFAULT_SESSION_FILTERS.period) params.set("periodo", sessionPeriodParam(filters.period));
   if (filters.from) params.set("de", filters.from);
   if (filters.to) params.set("ate", filters.to);
@@ -203,11 +207,19 @@ function sortSessions(sessions: AdminSession[], sort: SessionSort, now: Date) {
   });
 }
 
-export function applySessionFilters(sessions: AdminSession[], filters: AdminSessionFilters, now = new Date()) {
+// `experienceBases` liga experiência → slug da base. Uma experiência fora do
+// mapa é da Base Lago Norte, a única que existia antes do multi-base.
+export function applySessionFilters(
+  sessions: AdminSession[],
+  filters: AdminSessionFilters,
+  now = new Date(),
+  experienceBases: Map<string, string> = new Map(),
+) {
   const matched = sessions.filter(
     (session) =>
       matchesStatus(session, filters.status) &&
       (!filters.experienceId || session.experienceId === filters.experienceId) &&
+      (!filters.base || (experienceBases.get(session.experienceId) ?? LAGO_NORTE_SLUG) === filters.base) &&
       matchesPeriod(session, filters.period, now) &&
       matchesRange(session, filters.from, filters.to) &&
       matchesQuery(session, filters.query),

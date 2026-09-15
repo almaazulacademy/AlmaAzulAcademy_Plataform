@@ -3,7 +3,8 @@ import { SessionsManager } from "@/components/admin/sessions-manager";
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { AdminErrorState } from "@/components/admin/states";
 import { requireAdmin } from "@/lib/admin/auth";
-import { listAdminExperiences, listAdminSessionsFiltered } from "@/lib/admin/data";
+import { parseAdminBaseFilter } from "@/lib/admin/base-filter";
+import { listAdminBases, listAdminExperiences, listAdminSessionsFiltered } from "@/lib/admin/data";
 import { sessionFiltersFrom } from "@/lib/admin/session-filters";
 import { isSheetSyncEnabled } from "@/lib/integrations/google-sheets/service";
 
@@ -14,19 +15,17 @@ type SearchParams = Record<string, string | string[] | undefined>;
 export default async function AdminSessionsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const context = await requireAdmin();
   const params = await searchParams;
-  const filters = sessionFiltersFrom(params);
   try {
-    const [sessions, experiences] = await Promise.all([
-      listAdminSessionsFiltered(context.profile.userId, filters),
-      listAdminExperiences(context.profile.userId),
-    ]);
+    const [{ bases }, experiences] = await Promise.all([listAdminBases(), listAdminExperiences(context.profile.userId)]);
+    const filters = { ...sessionFiltersFrom(params), base: parseAdminBaseFilter(params.base, bases) };
+    const sessions = await listAdminSessionsFiltered(context.profile.userId, filters, experiences);
     return (
       <SessionsManager
         sessions={sessions}
         experiences={experiences}
         initiallyOpen={params.novo === "1"}
         filters={filters}
-        filtersSlot={<SessionFilters filters={filters} experiences={experiences} />}
+        filtersSlot={<SessionFilters filters={filters} experiences={experiences} bases={bases} />}
         sheetSyncEnabled={isSheetSyncEnabled()}
       />
     );

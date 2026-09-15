@@ -19,6 +19,9 @@ const styles: Record<string, string> = {
   NEVER_SYNCED: "bg-slate-100 text-slate-700 ring-slate-500/15",
   SENT: "bg-emerald-50 text-emerald-800 ring-emerald-600/15",
   NEVER_SENT: "bg-slate-100 text-slate-700 ring-slate-500/15",
+  COMING_SOON: "bg-sky-50 text-sky-800 ring-sky-600/15",
+  ACTIVE: "bg-emerald-50 text-emerald-800 ring-emerald-600/15",
+  INACTIVE: "bg-slate-100 text-slate-700 ring-slate-500/15",
 };
 
 const labels: Record<string, string> = {
@@ -40,6 +43,9 @@ const labels: Record<string, string> = {
   NEVER_SYNCED: "Não sincronizado",
   SENT: "Enviado",
   NEVER_SENT: "Não enviado",
+  COMING_SOON: "Em breve",
+  ACTIVE: "Em operação",
+  INACTIVE: "Inativa",
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {

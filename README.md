@@ -30,15 +30,19 @@ Não presuma que reservas ou pagamentos estejam ativos em produção sem confirm
 
 | Rota | Finalidade |
 | --- | --- |
-| `/` | Home institucional |
+| `/` | Home institucional, com as bases da Alma Azul |
+| `/bases` | Todas as bases (Lago Norte, Concha Acústica) |
+| `/bases/[slug]` | Landing de uma base: experiências, localização e status |
 | `/agenda` | Agenda geral com as próximas sessões de todas as experiências |
+| `/experiencias` | Vitrine de experiências com filtro por base (`?base=`) |
 | `/experiencias/[slug]` | Landing pública da experiência e próximas sessões |
 | `/imersao-paranoa` | Redirect permanente (308) para `/experiencias/imersao-paranoa` |
 | `/reservar/[sessionId]` | Formulário e resumo da sessão |
 | `/acompanhar-reserva` | Recuperação segura por CPF + código |
 | `/pagamento/retorno` | Retorno e verificação do checkout |
 | `/login` | Login administrativo com Supabase Auth |
-| `/admin` | Dashboard operacional protegido |
+| `/admin` | Dashboard: visão geral consolidada e comparação entre bases |
+| `/admin/bases/[slug]` | Dashboard de uma base |
 | `/admin/sessoes` | Criação e gestão de sessões |
 | `/admin/reservas` | Filtros, detalhes e ações sobre reservas |
 | `/admin/experiencias` | Cadastro e publicação de experiências |
@@ -149,6 +153,7 @@ O push não comprova sozinho que o deployment terminou. Verifique o dashboard, l
 - [PROJECT.md](PROJECT.md) — visão e princípios do produto
 - [CHANGELOG.md](CHANGELOG.md) — histórico confirmado por sprint
 - [docs/architecture.md](docs/architecture.md) — arquitetura, rotas e componentes
+- [docs/multi-base.md](docs/multi-base.md) — bases, status "em breve", dashboards por base, abertura da Concha Acústica e desenho dos roteiros
 - [docs/database.md](docs/database.md) — schema, RPCs, RLS, capacidade e migrations
 - [docs/editorial-experiences.md](docs/editorial-experiences.md) — contrato editorial, rotas dinâmicas, preview e ativação
 - [docs/deployment.md](docs/deployment.md) — recuperação, ambientes e Vercel

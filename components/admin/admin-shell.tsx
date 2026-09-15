@@ -9,6 +9,7 @@ import {
   CalendarDays,
   LayoutDashboard,
   LogOut,
+  MapPin,
   Menu,
   Settings,
   Waves,
@@ -17,17 +18,18 @@ import {
 
 import { ToastProvider, useToast } from "@/components/admin/toast-provider";
 import { cn } from "@/lib/utils";
-import type { AdminProfile } from "@/lib/admin/types";
+import type { AdminBase, AdminProfile } from "@/lib/admin/types";
 
-const navigation = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+const operations = [
   { href: "/admin/sessoes", label: "Sessões", icon: CalendarDays },
   { href: "/admin/reservas", label: "Reservas", icon: BookOpenCheck },
   { href: "/admin/experiencias", label: "Experiências", icon: Waves },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ];
 
-function AdminShellContent({ children, profile }: { children: ReactNode; profile: AdminProfile }) {
+type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; badge?: string };
+
+function AdminShellContent({ children, profile, bases }: { children: ReactNode; profile: AdminProfile; bases: AdminBase[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const { notify } = useToast();
@@ -54,6 +56,43 @@ function AdminShellContent({ children, profile }: { children: ReactNode; profile
     }
   };
 
+  // O dashboard é separado por base: visão geral consolidada e uma entrada por
+  // unidade, para entrar direto na operação de cada uma.
+  const dashboard: NavItem[] = [
+    { href: "/admin", label: "Visão geral", icon: LayoutDashboard },
+    ...bases.map((base) => ({
+      href: `/admin/bases/${base.slug}`,
+      label: base.name,
+      icon: MapPin,
+      badge: base.status === "COMING_SOON" ? "Em breve" : base.status === "INACTIVE" ? "Inativa" : undefined,
+    })),
+  ];
+
+  const renderItem = (item: NavItem) => {
+    const active = item.href === "/admin" ? pathname === item.href : pathname.startsWith(item.href);
+    const Icon = item.icon;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => setMobileOpen(false)}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
+          active ? "bg-white text-ink shadow-sm" : "text-white/65 hover:bg-white/10 hover:text-white",
+        )}
+      >
+        <Icon className="size-[18px] shrink-0" />
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        {item.badge ? (
+          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]", active ? "bg-sky-50 text-sky-800" : "bg-white/10 text-white/60")}>
+            {item.badge}
+          </span>
+        ) : null}
+      </Link>
+    );
+  };
+
   const sidebar = (
     <aside className="flex h-full w-72 flex-col border-r border-white/10 bg-ink px-5 py-6 text-white">
       <div className="flex items-center justify-between px-2">
@@ -65,25 +104,15 @@ function AdminShellContent({ children, profile }: { children: ReactNode; profile
         </button>
       </div>
 
-      <nav className="mt-10 space-y-1" aria-label="Navegação administrativa">
-        {navigation.map((item) => {
-          const active = item.href === "/admin" ? pathname === item.href : pathname.startsWith(item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setMobileOpen(false)}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
-                active ? "bg-white text-ink shadow-sm" : "text-white/65 hover:bg-white/10 hover:text-white",
-              )}
-            >
-              <Icon className="size-[18px]" /> {item.label}
-            </Link>
-          );
-        })}
+      <nav className="mt-10 space-y-6 overflow-y-auto" aria-label="Navegação administrativa">
+        <div>
+          <p className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">Dashboard</p>
+          <div className="space-y-1">{dashboard.map(renderItem)}</div>
+        </div>
+        <div>
+          <p className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">Operação</p>
+          <div className="space-y-1">{operations.map(renderItem)}</div>
+        </div>
       </nav>
 
       <div className="mt-auto border-t border-white/10 pt-5">
@@ -127,6 +156,6 @@ function AdminShellContent({ children, profile }: { children: ReactNode; profile
   );
 }
 
-export function AdminShell({ children, profile }: { children: ReactNode; profile: AdminProfile }) {
-  return <ToastProvider><AdminShellContent profile={profile}>{children}</AdminShellContent></ToastProvider>;
+export function AdminShell({ children, profile, bases = [] }: { children: ReactNode; profile: AdminProfile; bases?: AdminBase[] }) {
+  return <ToastProvider><AdminShellContent profile={profile} bases={bases}>{children}</AdminShellContent></ToastProvider>;
 }
