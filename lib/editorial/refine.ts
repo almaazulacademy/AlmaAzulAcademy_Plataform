@@ -1,6 +1,8 @@
 import type { PublicExperience } from "./experience.ts";
+import { revisePublicCopy } from "./public-copy.ts";
 
 export function refinePublicExperience(experience: PublicExperience): PublicExperience {
+  experience = revisePublicCopy(experience);
   if (experience.slug === "imersao-paranoa") {
     return {
       ...experience,

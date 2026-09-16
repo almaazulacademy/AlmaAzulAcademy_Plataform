@@ -26,7 +26,7 @@ export const imersaoParanoaEditorial: ExperienceEditorial = {
     title: "Explore o lado mais preservado do Lago Paranoá.",
     paragraphs: [
       "Uma experiência de 1h30 navegando pelo Lago Paranoá por um dos lugares mais preservados e belos de Brasília: o Córrego do Torto.",
-      "No caminho passamos por paisagens que poucas pessoas conhecem, fazemos uma pausa para banho em uma prainha no meio do lago e encerramos tudo com um lanche colaborativo na nossa base.",
+      "No caminho passamos por paisagens que poucas pessoas conhecem e fazemos uma pausa para banho em uma prainha no meio do lago.",
     ],
     image: { src: "/images/experiences/imersao-paranoa/corredor-corrego-do-torto/img-2672.webp", alt: "Canoas saindo do corredor verde em direção ao lago" },
   },
@@ -61,7 +61,6 @@ export const imersaoParanoaEditorial: ExperienceEditorial = {
       { icon: "LifeBuoy", title: "Equipamentos", description: "Coletes salva-vidas e remos preparados para a experiência." },
       { icon: "Compass", title: "Instrutores em cada canoa", description: "Acompanhamento próximo da equipe Alma Azul durante todo o percurso." },
       { icon: "ShieldCheck", title: "Instrução para iniciantes", description: "Orientação completa antes da saída, mesmo para quem nunca remou." },
-      { icon: "Sparkles", title: "Lanche colaborativo", description: "Encontro na base ao final, com café preto por conta da casa." },
       { icon: "Droplets", title: "Banho no lago", description: "Uma pausa para entrar na água e aproveitar o Lago Paranoá." },
     ],
   },

@@ -33,11 +33,11 @@ test("conteúdo editorial segue os textos aprovados sem seções ou ofertas adic
   assert.equal(editorial.quickFacts.length, 8);
   assert.equal(editorial.about.paragraphs.length, 3);
   assert.equal(editorial.steps.items.length, 3);
-  assert.equal(editorial.included.items.length, 9);
+  assert.equal(editorial.included.items.length, 8);
   assert.equal(editorial.whatToBring.items.length, 6);
-  assert.equal(editorial.faq.items.length, 3);
+  assert.equal(editorial.faq.items.length, 2);
   const operationalContent = JSON.stringify({ about: editorial.about, steps: editorial.steps, included: editorial.included });
-  assert.doesNotMatch(operationalContent, /frutas|lanche|fogueira|percurso específico/i);
+  assert.doesNotMatch(operationalContent, /frutas|lanche|café|fogueira|percurso específico/i);
 });
 
 test("assets selecionados existem em WebP, são únicos e Linux-safe", () => {
@@ -60,7 +60,7 @@ test("assets selecionados existem em WebP, são únicos e Linux-safe", () => {
   assert.equal(hashes.size, expected.length);
 });
 
-test("FAQ compartilhado inclui tolerância e combina somente as três perguntas específicas", () => {
+test("FAQ compartilhado inclui tolerância e combina somente as duas perguntas específicas", () => {
   const editorial = sunriseEditorial();
   assert.equal(DEFAULT_EXPERIENCE_FAQ_ITEMS.length, 11);
   assert.deepEqual(DEFAULT_EXPERIENCE_FAQ_ITEMS.at(-1), {
@@ -68,8 +68,8 @@ test("FAQ compartilhado inclui tolerância e combina somente as três perguntas 
     answer: "Há tolerância de até 20 minutos após o horário de chegada programado. Depois desse período, a saída poderá acontecer sem o participante para não comprometer a experiência do grupo.",
   });
   const combined = resolveExperienceFaq(editorial.faq);
-  assert.equal(combined.items.length, 14);
-  assert.deepEqual(combined.items.slice(-3).map((item) => item.question), ["Que horas devo chegar?", "Faz frio pela manhã?", "Tem café da manhã?"]);
+  assert.equal(combined.items.length, 13);
+  assert.deepEqual(combined.items.slice(-2).map((item) => item.question), ["Que horas devo chegar?", "Faz frio pela manhã?"]);
   assert.equal(new Set(combined.items.map((item) => item.question)).size, combined.items.length);
 });
 

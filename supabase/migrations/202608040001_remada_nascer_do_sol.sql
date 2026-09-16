@@ -139,7 +139,7 @@ begin
       "title": "Remada do Nascer do Sol",
       "paragraphs": [
         "A Remada do Nascer do Sol é um convite para começar o dia de uma forma diferente: dentro de uma canoa havaiana, sobre as águas tranquilas do Lago Paranoá e cercado pelos sons da natureza.",
-        "Durante a experiência, o grupo acompanha as primeiras luzes da manhã, faz pausas para banho no meio do lago e em uma prainha e compartilha um café preto ainda dentro da canoa.",
+        "Durante a experiência, o grupo acompanha as primeiras luzes da manhã e faz pausas para banho no meio do lago e em uma prainha.",
         "O retorno acontece no início da manhã, com o sol iluminando Brasília e deixando o restante do dia mais leve."
       ],
       "image": {
@@ -150,7 +150,7 @@ begin
     "gallery": {
       "eyebrow": "Galeria",
       "title": "Remada do Nascer do Sol",
-      "description": "Uma remada nas primeiras luzes do dia, com banho no lago, café preto dentro da canoa e os sons da natureza ao redor.",
+      "description": "Uma remada nas primeiras luzes do dia, com banho no lago e os sons da natureza ao redor.",
       "images": [
         { "src": "/images/experiences/remada-nascer-do-sol/remada-nascer-do-sol-galeria-01.webp", "alt": "Canoa havaiana vista de frente nas águas do Lago Paranoá ao amanhecer" },
         { "src": "/images/experiences/remada-nascer-do-sol/remada-nascer-do-sol-galeria-02.webp", "alt": "Canoa havaiana navegando sob o céu alaranjado do amanhecer" },
@@ -168,7 +168,7 @@ begin
       "items": [
         { "title": "Recepção e preparação", "description": "O encontro acontece na base da Alma Azul Academy. A equipe recebe o grupo, entrega os equipamentos e apresenta as orientações para a experiência." },
         { "title": "Instrução e remada", "description": "Antes de entrar na água, todos recebem instruções de segurança e técnica de remada. Depois, seguimos pelo Lago Paranoá em um ritmo confortável, acompanhando o despertar da manhã." },
-        { "title": "Banho e café na canoa", "description": "Durante o percurso, fazemos pausas para banho no meio do lago e em uma prainha. Também compartilhamos um café preto dentro da canoa enquanto contemplamos as primeiras luzes do dia." }
+        { "title": "Banho no lago", "description": "Durante o percurso, fazemos pausas para banho no meio do lago e em uma prainha enquanto contemplamos as primeiras luzes do dia." }
       ]
     },
     "included": {
@@ -182,7 +182,6 @@ begin
         { "icon": "Compass", "title": "Instrutores em cada canoa", "description": "" },
         { "icon": "ShieldCheck", "title": "Instrução completa para iniciantes", "description": "" },
         { "icon": "Droplets", "title": "Paradas para banho", "description": "" },
-        { "icon": "Sparkles", "title": "Café preto compartilhado dentro da canoa", "description": "" },
         { "icon": "Sparkles", "title": "Fotos registradas pelos instrutores", "description": "" },
         { "icon": "Droplets", "title": "Acesso ao banheiro e à ducha da base", "description": "" }
       ]
@@ -204,8 +203,7 @@ begin
       "title": "Antes de entrar na água.",
       "items": [
         { "question": "Que horas devo chegar?", "answer": "A chegada está programada para 5h50, para que o grupo possa se preparar com tranquilidade antes da saída às 6h." },
-        { "question": "Faz frio pela manhã?", "answer": "Pode fazer frio nas primeiras horas do dia, principalmente antes do sol nascer. Recomendamos levar um agasalho leve." },
-        { "question": "Tem café da manhã?", "answer": "Não servimos café da manhã ou lanche. Durante a remada, compartilhamos um café preto dentro da canoa." }
+        { "question": "Faz frio pela manhã?", "answer": "Pode fazer frio nas primeiras horas do dia, principalmente antes do sol nascer. Recomendamos levar um agasalho leve." }
       ]
     },
     "reservations": {
@@ -219,7 +217,7 @@ begin
     },
     "seo": {
       "title": "Remada do Nascer do Sol no Lago Paranoá | Alma Azul Academy",
-      "description": "Veja Brasília despertar de dentro de uma canoa havaiana. Remada de 1h30 com banho no lago, café preto na canoa, fotos e acompanhamento completo."
+      "description": "Veja Brasília despertar de dentro de uma canoa havaiana. Remada de 1h30 com banho no lago, fotos e acompanhamento completo."
     }
   }
   $editorial$::jsonb;
@@ -244,7 +242,7 @@ begin
         $1 #> '{gallery,images}',
         $1 #> '{included,items}',
         true,
-        'Uma remada nas primeiras luzes do dia, com banho no lago, café preto dentro da canoa e os sons da natureza ao redor.',
+        'Uma remada nas primeiras luzes do dia, com banho no lago e os sons da natureza ao redor.',
         7000,
         28,
         'PUBLISHED',
@@ -283,7 +281,7 @@ begin
     values (
       'remada-nascer-do-sol',
       'Remada do Nascer do Sol',
-      'Uma remada nas primeiras luzes do dia, com banho no lago, café preto dentro da canoa e os sons da natureza ao redor.',
+      'Uma remada nas primeiras luzes do dia, com banho no lago e os sons da natureza ao redor.',
       'Uma experiência ao amanhecer para contemplar o despertar de Brasília, mergulhar no Lago Paranoá e começar o dia com mais energia e leveza.',
       90,
       7000,
