@@ -41,11 +41,11 @@ export const CONCHA_LANDING = {
   // Entrada do Cápsula: primeira imagem da parceria, antes da seção que conta a história.
   impact: {
     title: "A experiência começa aqui.",
-    description: "A nova base da Alma Azul nasce conectada ao Cápsula, às margens do Lago Paranoá.",
+    description: "A nova base da Alma Azul nasce conectada ao Cápsula Bar, às margens do Lago Paranoá.",
     image: {
       desktop: `${IMG}/capsula-entrada-desktop.webp`,
       mobile: `${IMG}/capsula-entrada-mobile.webp`,
-      alt: "Entrada do Cápsula Bar iluminada à noite, sob uma árvore, com o letreiro do Cápsula",
+      alt: "Entrada do Cápsula Bar iluminada à noite, sob uma árvore, com o letreiro do Cápsula Bar",
     },
     // Endereço do Cápsula. Ponto de encontro das experiências continua sendo
     // divulgado junto com a programação — a base segue fechada.
@@ -54,36 +54,36 @@ export const CONCHA_LANDING = {
   // Cápsula como nova base. Só fatos fornecidos pela Alma Azul: origem na
   // Chapada dos Veadeiros, chegada ao Lago Paranoá e Lia Braga como idealizadora.
   capsula: {
-    eyebrow: "Conheça o Cápsula",
+    eyebrow: "Conheça o Cápsula Bar",
     title: "Da Chapada ao Lago Paranoá.",
     paragraphs: [
-      "O Cápsula nasceu do que foi construído na Chapada dos Veadeiros pelo olhar de Lia Braga, unindo paixão, natureza, música e arte. Agora essa essência chega às margens do Lago Paranoá, como um refúgio para desacelerar o ritmo da cidade.",
+      "O Cápsula Bar nasceu do que foi construído na Chapada dos Veadeiros pelo olhar de Lia Braga, unindo paixão, natureza, música e arte. Agora essa essência chega às margens do Lago Paranoá, como um refúgio para desacelerar o ritmo da cidade.",
       "É aqui que nasce a nova base da Alma Azul. A experiência começa antes da canoa — na chegada, no pé na areia, na luz que muda sobre a água.",
     ],
     image: {
       desktop: `${IMG}/capsula-lago-por-do-sol-desktop.webp`,
       mobile: `${IMG}/capsula-lago-por-do-sol-mobile.webp`,
-      alt: "Cápsula às margens do Lago Paranoá ao pôr do sol, com palmeiras e o píer sobre a água",
-      caption: "Cápsula, às margens do Lago Paranoá",
+      alt: "Cápsula Bar às margens do Lago Paranoá ao pôr do sol, com palmeiras e o píer sobre a água",
+      caption: "Cápsula Bar, às margens do Lago Paranoá",
     },
     encounter: {
       title: "Um encontro natural.",
-      text: "Dois projetos diferentes, movidos pela mesma vontade de aproximar pessoas, natureza e presença. O Cápsula pela arte, pela música e pela acolhida. A Alma Azul pela água e pelo movimento.",
+      text: "Dois projetos diferentes, movidos pela mesma vontade de aproximar pessoas, natureza e presença. O Cápsula Bar pela arte, pela música e pela acolhida. A Alma Azul pela água e pelo movimento.",
     },
     details: [
-      { src: `${IMG}/capsula-arte-lago.webp`, width: 1000, height: 1400, alt: "Escultura vazada de São Jorge no Cápsula, com o Lago Paranoá ao entardecer ao fundo", caption: "Arte e lago, no mesmo horizonte" },
-      { src: `${IMG}/capsula-noite-encontro.webp`, width: 1600, height: 1070, alt: "Pessoas reunidas no pátio de areia do Cápsula à noite, entre árvores iluminadas", caption: "Noite de inauguração do Cápsula" },
+      { src: `${IMG}/capsula-arte-lago.webp`, width: 1000, height: 1400, alt: "Escultura vazada de São Jorge no Cápsula Bar, com o Lago Paranoá ao entardecer ao fundo", caption: "Arte e lago, no mesmo horizonte" },
+      { src: `${IMG}/capsula-noite-encontro.webp`, width: 1600, height: 1070, alt: "Pessoas reunidas no pátio de areia do Cápsula Bar à noite, entre árvores iluminadas", caption: "Noite de inauguração do Cápsula Bar" },
     ],
     founder: {
-      eyebrow: "Por trás do Cápsula",
+      eyebrow: "Por trás do Cápsula Bar",
       name: "Lia Braga",
-      role: "Idealizadora do Cápsula.",
-      photo: { src: `${IMG}/capsula-lia-braga.webp`, width: 1000, height: 1250, alt: "Lia Braga, idealizadora do Cápsula, no espaço às margens do Lago Paranoá" },
+      role: "Idealizadora do Cápsula Bar.",
+      photo: { src: `${IMG}/capsula-lia-braga.webp`, width: 1000, height: 1250, alt: "Lia Braga, idealizadora do Cápsula Bar, no espaço às margens do Lago Paranoá" },
     },
     cta: "Ver as experiências da nova base",
   },
   experiences: {
-    eyebrow: "Base Alma Azul · Cápsula",
+    eyebrow: "Base Alma Azul · Cápsula Bar",
     title: "Experiências de Canoa Havaiana",
     description: "A programação ainda não está aberta. Estas são as remadas planejadas para a nova base.",
     items: [
