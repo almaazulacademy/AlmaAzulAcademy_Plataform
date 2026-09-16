@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { label: "Experiências", href: "/experiencias" },
   { label: "Bases", href: "/bases" },
-  { label: "Sobre", href: "/#sobre" },
+  { label: "Quem Somos", href: "/quem-somos" },
   { label: "Acompanhar reserva", href: "/acompanhar-reserva" },
 ];
 
