@@ -38,22 +38,26 @@ export const CONCHA_LANDING = {
       poster: `${IMG}/capsula-logo-animada-poster.webp`,
     },
   },
+  // Entrada do Cápsula: primeira imagem da parceria, antes da seção que conta a história.
   impact: {
-    title: "Brasília vista da água",
-    description: "A cidade muda quando o ponto de vista muda.",
-    video: {
-      desktop: `${VID}/brasilia-vista-da-agua-1280.mp4`,
-      mobile: `${VID}/brasilia-vista-da-agua-854.mp4`,
-      poster: `${IMG}/brasilia-vista-da-agua-poster.webp`,
+    title: "A experiência começa aqui.",
+    description: "A nova base da Alma Azul nasce conectada ao Cápsula, às margens do Lago Paranoá.",
+    image: {
+      desktop: `${IMG}/capsula-entrada-desktop.webp`,
+      mobile: `${IMG}/capsula-entrada-mobile.webp`,
+      alt: "Entrada do Cápsula Bar iluminada à noite, sob uma árvore, com o letreiro do Cápsula",
     },
+    // Endereço do Cápsula. Ponto de encontro das experiências continua sendo
+    // divulgado junto com a programação — a base segue fechada.
+    address: { line: "SHTN Trecho 1, Lote 8", hint: "Próximo à Concha Acústica" },
   },
   // Cápsula como nova base. Só fatos fornecidos pela Alma Azul: origem na
   // Chapada dos Veadeiros, chegada ao Lago Paranoá e Lia Braga como idealizadora.
   capsula: {
-    eyebrow: "Nossa nova base",
+    eyebrow: "Conheça o Cápsula",
     title: "Da Chapada ao Lago Paranoá.",
     paragraphs: [
-      "O Cápsula nasceu do que foi construído na Chapada dos Veadeiros: natureza, música, arte e gente se encontrando sem pressa. Agora essa essência chega às margens do Lago Paranoá, como um refúgio para desacelerar o ritmo da cidade.",
+      "O Cápsula nasceu do que foi construído na Chapada dos Veadeiros pelo olhar de Lia Braga, unindo paixão, natureza, música e arte. Agora essa essência chega às margens do Lago Paranoá, como um refúgio para desacelerar o ritmo da cidade.",
       "É aqui que nasce a nova base da Alma Azul. A experiência começa antes da canoa — na chegada, no pé na areia, na luz que muda sobre a água.",
     ],
     image: {
@@ -70,17 +74,23 @@ export const CONCHA_LANDING = {
       { src: `${IMG}/capsula-arte-lago.webp`, width: 1000, height: 1400, alt: "Escultura vazada de São Jorge no Cápsula, com o Lago Paranoá ao entardecer ao fundo", caption: "Arte e lago, no mesmo horizonte" },
       { src: `${IMG}/capsula-noite-encontro.webp`, width: 1600, height: 1070, alt: "Pessoas reunidas no pátio de areia do Cápsula à noite, entre árvores iluminadas", caption: "Noite de inauguração do Cápsula" },
     ],
-    founder: { eyebrow: "Por trás do Cápsula", name: "Lia Braga", role: "Idealizadora do Cápsula." },
+    founder: {
+      eyebrow: "Por trás do Cápsula",
+      name: "Lia Braga",
+      role: "Idealizadora do Cápsula.",
+      photo: { src: `${IMG}/capsula-lia-braga.webp`, width: 1000, height: 1250, alt: "Lia Braga, idealizadora do Cápsula, no espaço às margens do Lago Paranoá" },
+    },
     cta: "Ver as experiências da nova base",
   },
   experiences: {
-    title: "Experiências da Concha",
-    description: "A programação ainda não está aberta. Estas são as experiências planejadas para a nova base.",
+    eyebrow: "Base Alma Azul · Cápsula",
+    title: "Experiências de Canoa Havaiana",
+    description: "A programação ainda não está aberta. Estas são as remadas planejadas para a nova base.",
     items: [
       {
         title: "Caminhos do Paranoá",
         summary: "Uma remada para descobrir Brasília por outro ponto de vista.",
-        routes: ["Rota Atalaia", "Rota Prainha"],
+        routes: ["Rota JK · Ermida", "Rota Prainha"],
         image: { src: `${IMG}/experiencia-caminhos-do-paranoa.webp`, alt: "Canoa havaiana da Alma Azul no Lago Paranoá com a Ponte JK ao fundo", position: "50% 62%" },
       },
       {
@@ -111,7 +121,7 @@ export const CONCHA_LANDING = {
       { src: `${IMG}/caminhos-do-paranoa-ambiente-02.webp`, alt: "Grupo remando em canoa havaiana sob céu azul no Lago Paranoá" },
     ],
     routes: [
-      { title: "Rota Atalaia", description: "Uma remada em direção ao trecho de onde podemos contemplar a região da Pontinha do Atalaia." },
+      { title: "Rota JK · Ermida", description: "Uma remada contemplativa da Ponte JK, com parada na prainha da Ermida Dom Bosco." },
       { title: "Rota Prainha", description: "Remada em direção à região da prainha do Clube do Congresso." },
     ],
     note: "Duração, distância e nível de cada roteiro serão divulgados junto com a programação.",

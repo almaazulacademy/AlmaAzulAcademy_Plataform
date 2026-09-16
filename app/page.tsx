@@ -91,9 +91,9 @@ export default async function HomePage() {
 
       <Section
         id="bases"
-        eyebrow={bases.length === 2 ? "Uma Alma Azul · duas bases" : "Uma Alma Azul · nossas bases"}
+        eyebrow={bases.length === 2 ? "Mesma essência · duas bases" : "Mesma essência · nossas bases"}
         title="Escolha onde viver a Alma Azul"
-        description="Cada base tem o seu cenário e as suas experiências no Lago Paranoá. O jeito Alma Azul de estar na água é o mesmo em todas."
+        description="Cada base tem o seu cenário peculiar. A essência da Alma Azul de viver o Lago Paranoá é a mesma."
         tone="white"
       >
         <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">

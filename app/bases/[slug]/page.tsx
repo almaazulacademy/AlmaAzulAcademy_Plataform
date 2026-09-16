@@ -18,6 +18,7 @@ import { Section } from "@/components/section";
 import { buttonVariants } from "@/components/ui/button";
 import { baseStatusLabel, experiencesForBase, isBaseBookable } from "@/lib/bases/availability";
 import { basePageContent } from "@/lib/bases/content";
+import { publicExperienceTitle } from "@/lib/bases/labels";
 import { getPublicBase, listCatalogExperiences, listPublicBases } from "@/lib/bases/data";
 import { isTemporaryMedia, TEMPORARY_MEDIA_LABEL } from "@/lib/bases/media";
 
@@ -120,7 +121,7 @@ export default async function BasePage({ params }: Props) {
               <div className="border-t border-ink/10 pt-6">
                 <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">Experiências</dt>
                 <dd className="mt-2 font-semibold text-forest">
-                  {experiences.length ? experiences.map((experience) => experience.title).join(" · ") : "Em definição"}
+                  {experiences.length ? experiences.map((experience) => publicExperienceTitle(experience.title)).join(" · ") : "Em definição"}
                 </dd>
               </div>
             </dl>

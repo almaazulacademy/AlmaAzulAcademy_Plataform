@@ -24,12 +24,12 @@ export default async function BasesPage() {
 
       <section className="container py-12 sm:py-16 lg:py-24">
         <header className="max-w-3xl">
-          <p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-lake">Uma Alma Azul · {bases.length} bases</p>
+          <p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-lake">Mesma essência · {bases.length} bases</p>
           <h1 className="text-balance text-4xl font-medium leading-[1.03] tracking-[-0.045em] text-forest sm:text-5xl lg:text-6xl">
             Escolha onde viver a Alma Azul
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/65">
-            Cada base tem o seu cenário e as suas experiências no Lago Paranoá. O jeito Alma Azul de estar na água é o mesmo em todas.
+            Cada base tem o seu cenário peculiar. A essência da Alma Azul de viver o Lago Paranoá é a mesma.
           </p>
         </header>
 

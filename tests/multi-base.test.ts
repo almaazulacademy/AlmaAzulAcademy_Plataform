@@ -344,6 +344,14 @@ test("landing da Concha é só conteúdo: sem reserva, com mídia local e leve",
   for (const src of [CONCHA_LANDING.capsula.image.desktop, ...CONCHA_LANDING.capsula.details.map((detail) => detail.src)]) {
     assert.equal(isTemporaryMedia("concha-acustica", src), false, src);
   }
-  assert.deepEqual(Object.keys(CONCHA_LANDING.capsula.founder).sort(), ["eyebrow", "name", "role"]);
+  // Lia Braga: só nome, papel e retrato — nada de biografia inventada.
+  assert.deepEqual(Object.keys(CONCHA_LANDING.capsula.founder).sort(), ["eyebrow", "name", "photo", "role"]);
+  assert.match(CONCHA_LANDING.capsula.founder.photo.alt, /Lia Braga/);
+  // Nomes públicos padronizados entre as bases.
+  const { publicExperienceTitle } = await import("../lib/bases/labels.ts");
+  assert.equal(publicExperienceTitle("Remada Nascer do Sol"), "Remada do Nascer do Sol");
+  assert.equal(publicExperienceTitle("Remada Lua Cheia"), "Remada da Lua Cheia");
+  assert.equal(publicExperienceTitle("Imersão Paranoá"), "Imersão Paranoá");
+  assert.equal(/Atalaia/.test(copy), false);
   assert.match(source("app/bases/[slug]/page.tsx"), /ConchaLanding/);
 });
