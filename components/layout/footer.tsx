@@ -32,6 +32,7 @@ export async function Footer() {
               <Link href="/" className="transition-colors hover:text-white">Início</Link>
               <Link href="/experiencias" className="transition-colors hover:text-white">Experiências</Link>
               <Link href="/agenda" className="transition-colors hover:text-white">Agenda</Link>
+              <Link href="/quem-somos" className="transition-colors hover:text-white">Quem Somos</Link>
               <Link href="/acompanhar-reserva" className="transition-colors hover:text-white">Acompanhar reserva</Link>
             </div>
           </div>
