@@ -73,6 +73,14 @@ create trigger reservations_ensure_checkin_token
 -- 3. Backfill: reservas já confirmadas ------------------------------------------
 --
 -- Só toca linhas CONFIRMED sem token. Reexecutar não altera nada.
+--
+-- Efeito colateral conhecido e aceito: o trigger `reservations_set_updated_at`
+-- move `updated_at` dessas reservas para o horário da migration. Analisado sem
+-- consequência operacional: ordenação e filtros do painel usam created_at /
+-- starts_at; Sheets, e-mail e cron usam integration_sync_jobs.updated_at; a
+-- reconciliação de pagamento só olha updated_at de reservas EXPIRED (o
+-- backfill só toca CONFIRMED). O único reflexo é o indicador "última
+-- atualização" do dashboard, que passa a mostrar o horário da migration.
 update public.reservations
 set checkin_token = gen_random_uuid()
 where status = 'CONFIRMED'
