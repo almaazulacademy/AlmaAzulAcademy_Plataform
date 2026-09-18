@@ -23,6 +23,8 @@ import {
 } from "@/lib/email";
 import { sanitizeEmailErrorCode, type EmailProvider } from "@/lib/email/email-provider";
 import { logEmail } from "@/lib/email/observability";
+import { deliverQrReminder } from "@/lib/checkin/qr-reminder";
+import { maskIdentifier } from "@/lib/payments/observability";
 import {
   buildCheckinReminderEmail,
   deliverReservationConfirmationEmail,
@@ -240,7 +242,7 @@ export function isConfirmationEmailEnabled() {
 }
 
 export type CheckinReminderResult = {
-  outcome: "SENT" | "DISABLED" | "NOT_AVAILABLE" | "FAILED";
+  outcome: "SENT" | "DISABLED" | "NOT_AVAILABLE" | "FAILED" | "SENT_NOT_RECORDED";
   errorCode?: string;
 };
 
@@ -250,6 +252,10 @@ export type CheckinReminderResult = {
  * Fora da fila de confirmação de propósito — aquela garante um único e-mail de
  * confirmação por reserva, e este reenvio é uma ação humana deliberada, que pode
  * se repetir. O token vem do banco e nunca é regenerado aqui.
+ *
+ * CHECKIN_QR_RESENT só é gravado depois de o provedor confirmar o envio
+ * (`admin_reservation_qr_email_complete`). A RPC antiga
+ * `admin_reservation_qr_email`, que gravava antes, não é mais usada.
  */
 export async function sendCheckinReminderEmail(actorUserId: string, reservationId: string): Promise<CheckinReminderResult> {
   const provider = getEmailProvider();
@@ -258,22 +264,38 @@ export async function sendCheckinReminderEmail(actorUserId: string, reservationI
   if (!admin) return { outcome: "DISABLED" };
 
   const startedAt = Date.now();
-  try {
-    const payload = await admin.rpc("admin_reservation_qr_email", { p_actor_id: actorUserId, p_reservation_id: reservationId });
-    if (payload.error) {
-      if (payload.error.message.includes("RESERVATION_NOT_CONFIRMED")) return { outcome: "NOT_AVAILABLE", errorCode: "NOT_CONFIRMED" };
-      throw new Error("PAYLOAD_UNAVAILABLE");
-    }
-    const data = parseReservationConfirmationData(payload.data);
-    const message = data ? buildCheckinReminderEmail(data) : null;
-    if (!message) return { outcome: "NOT_AVAILABLE", errorCode: "PAYLOAD_EMPTY" };
+  const result = await deliverQrReminder({
+    load: async () => {
+      const payload = await admin.rpc("admin_reservation_qr_email_payload", { p_actor_id: actorUserId, p_reservation_id: reservationId });
+      if (payload.error) throw new Error(payload.error.message);
+      return payload.data;
+    },
+    build: (payload) => {
+      const data = parseReservationConfirmationData(payload);
+      return data ? buildCheckinReminderEmail(data) : null;
+    },
+    send: (message) => provider.send(message),
+    record: async () => {
+      const recorded = await admin.rpc("admin_reservation_qr_email_complete", { p_actor_id: actorUserId, p_reservation_id: reservationId });
+      if (recorded.error || recorded.data !== true) throw new Error("AUDIT_UNAVAILABLE");
+    },
+    sanitizeError: sanitizeEmailErrorCode,
+  });
 
-    await provider.send(message);
+  if (result.outcome === "SENT") {
     logEmail({ stage: "checkin_reminder", outcome: "sent", reservationId, provider: provider.name, durationMs: Date.now() - startedAt });
-    return { outcome: "SENT" };
-  } catch (error) {
-    const errorCode = sanitizeEmailErrorCode(error);
-    logEmail({ stage: "checkin_reminder", outcome: "failed", reservationId, provider: provider.name, errorCode });
-    return { outcome: "FAILED", errorCode: error instanceof Error && error.message === "PAYLOAD_UNAVAILABLE" ? "PAYLOAD_UNAVAILABLE" : errorCode };
+  } else if (result.outcome === "SENT_NOT_RECORDED") {
+    // Estado ambíguo: o cliente provavelmente recebeu. Nunca esconder.
+    console.error("[email]", {
+      scope: "notifications.email",
+      stage: "checkin_reminder",
+      outcome: "sent_not_recorded",
+      reservationId: maskIdentifier(reservationId),
+      provider: provider.name,
+      errorCode: result.errorCode,
+    });
+  } else if (result.outcome === "FAILED") {
+    logEmail({ stage: "checkin_reminder", outcome: "failed", reservationId, provider: provider.name, errorCode: result.errorCode });
   }
+  return result;
 }
