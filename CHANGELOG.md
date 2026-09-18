@@ -1,5 +1,14 @@
 # Changelog
 
+## Recuperação de senha da equipe
+
+- "Esqueci minha senha" no login para ADMIN, OPERATOR e INSTRUCTOR: `/esqueci-senha` pede o link, `/redefinir-senha` cria a nova senha.
+- O link é gerado com `auth.admin.generateLink` (o Supabase não envia nada) e o e-mail sai pelo Resend com o layout da Alma Azul. Nenhuma configuração nova no painel do Supabase.
+- A resposta do pedido é sempre a mesma, exista a conta ou não. Só contas ativas em `admin_users` recebem o link, com limite de 1 pedido a cada 2 minutos e 5 por hora por conta.
+- Abrir o link não o consome, porque antivírus e visualizadores de e-mail abrem links sozinhos: o token só é validado ao salvar a nova senha. A página não envia Referer.
+- Depois da troca, todas as sessões da conta são encerradas e a pessoa entra pelo login normal da equipe, que confere papel e status de novo.
+- Auditoria em `admin_audit_log`: PASSWORD_RESET_REQUESTED e PASSWORD_RESET_COMPLETED.
+
 ## Acesso de instrutores à Lista de Presença
 
 - Novo perfil **INSTRUCTOR** em `admin_users` (a tabela de perfis que já existia), sem tabela paralela. O admin atual segue identificado pela mesma linha, sem lógica por e-mail.

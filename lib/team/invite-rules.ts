@@ -33,6 +33,16 @@ export const INVITE_STATE_MESSAGES: Record<Exclude<InviteState, "VALID">, { titl
   },
 };
 
+/** Regra única de senha da equipe: cadastro por convite e redefinição. */
+export function passwordErrors(password: string, confirmation: string): { password?: string; passwordConfirmation?: string } {
+  if (password.length < PASSWORD_MIN_LENGTH || password.length > 72) {
+    return { password: `A senha precisa ter entre ${PASSWORD_MIN_LENGTH} e 72 caracteres.` };
+  }
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return { password: "Use letras e números na senha." };
+  if (password !== confirmation) return { passwordConfirmation: "As senhas não conferem." };
+  return {};
+}
+
 export type SignupInput = { token: string; name: string; email: string; password: string };
 
 /** Validação do formulário. Nenhum campo de papel é aceito: o papel vem do convite, no servidor. */
@@ -51,12 +61,8 @@ export function validateSignupInput(value: unknown):
   if (!isInviteToken(token)) errors.form = INVITE_STATE_MESSAGES.INVALID.description;
   if (name.length < 2 || name.length > 80) errors.name = "Informe seu nome (até 80 caracteres).";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) errors.email = "Informe um e-mail válido.";
-  if (password.length < PASSWORD_MIN_LENGTH || password.length > 72) {
-    errors.password = `A senha precisa ter entre ${PASSWORD_MIN_LENGTH} e 72 caracteres.`;
-  } else if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    errors.password = "Use letras e números na senha.";
-  }
-  if (!errors.password && password !== confirmation) errors.passwordConfirmation = "As senhas não conferem.";
+  const passwordProblem = passwordErrors(password, confirmation);
+  Object.assign(errors, passwordProblem);
 
   return Object.keys(errors).length ? { success: false, errors } : { success: true, data: { token, name, email, password } };
 }

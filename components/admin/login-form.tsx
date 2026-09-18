@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { LogIn } from "lucide-react";
@@ -60,6 +61,9 @@ export function LoginForm({ next }: { next: string | null }) {
         <input name="password" type="password" autoComplete="current-password" className={inputClass} placeholder="Sua senha" disabled={loading} required />
         {errors.password ? <span className={fieldErrorClass}>{errors.password}</span> : null}
       </label>
+      <p className="-mt-2 text-right text-sm">
+        <Link href="/esqueci-senha" className="font-medium text-lake hover:underline">Esqueci minha senha</Link>
+      </p>
       {errors.form ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{errors.form}</p> : null}
       <Button type="submit" className="w-full" disabled={loading}>
         <LogIn className="size-4" /> {loading ? "Entrando..." : "Entrar"}

@@ -79,7 +79,7 @@ const CLOSING_PARAGRAPHS = [
 ] as const;
 
 /** Paleta da marca, espelhando as variáveis de `app/globals.css`. */
-const BRAND = {
+export const BRAND = {
   ink: "#14312c",
   paper: "#f7f5ef",
   mist: "#e9eee8",
@@ -125,7 +125,7 @@ function firstName(fullName: string) {
 }
 
 /** Escapa o que vai para dentro do HTML. Nome de cliente é entrada de usuário. */
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -325,7 +325,7 @@ function checkinHtml(data: ReservationConfirmationData) {
 }
 
 /** Moldura comum aos e-mails: cabeçalho da marca, corpo e rodapé de contato. */
-function emailLayout({ title, preheader, heading, body }: { title: string; preheader: string; heading: string; body: string }) {
+export function emailLayout({ title, preheader, heading, body }: { title: string; preheader: string; heading: string; body: string }) {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
