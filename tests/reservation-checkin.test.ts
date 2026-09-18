@@ -15,6 +15,7 @@ import {
   localDateKey,
   presenceState,
 } from "../lib/checkin/token.ts";
+import { resolveCheckinOrigin } from "../lib/checkin/origin.ts";
 import {
   checkinErrorResponse,
   parseAttendanceSession,
@@ -69,6 +70,52 @@ test("o QR carrega só a URL com o token, sem dado pessoal", () => {
   assert.equal(url, `https://www.almaazulacademy.com.br/checkin/${TOKEN}`);
   for (const personal of ["João", "joao@", "AZ7K2M9QX1", "11110000"]) assert.ok(!url.includes(personal));
   assert.equal(checkinQrImageUrl(TOKEN), `https://www.almaazulacademy.com.br/api/checkin/qr/${TOKEN}`);
+});
+
+// --- Origem do QR (Preview x Produção) ----------------------------------------
+
+const PROD = "https://www.almaazulacademy.com.br";
+
+test("origem do QR: variável explícita tem prioridade", () => {
+  assert.equal(resolveCheckinOrigin({ CHECKIN_PUBLIC_ORIGIN: "https://staging.exemplo.com/qualquer" }), "https://staging.exemplo.com");
+  assert.equal(
+    resolveCheckinOrigin({ CHECKIN_PUBLIC_ORIGIN: "https://staging.exemplo.com", VERCEL_ENV: "preview", VERCEL_URL: "x.vercel.app" }),
+    "https://staging.exemplo.com",
+  );
+  assert.equal(resolveCheckinOrigin({ CHECKIN_PUBLIC_ORIGIN: "http://localhost:3000" }), "http://localhost:3000");
+});
+
+test("origem do QR: valor explícito inseguro ou inválido é ignorado", () => {
+  assert.equal(resolveCheckinOrigin({ CHECKIN_PUBLIC_ORIGIN: "http://evil.example" }), PROD);
+  assert.equal(resolveCheckinOrigin({ CHECKIN_PUBLIC_ORIGIN: "javascript:alert(1)" }), PROD);
+  assert.equal(resolveCheckinOrigin({ CHECKIN_PUBLIC_ORIGIN: "   " }), PROD);
+});
+
+test("origem do QR: Preview da Vercel usa a URL da branch e, na falta, a do deploy", () => {
+  assert.equal(
+    resolveCheckinOrigin({ VERCEL_ENV: "preview", VERCEL_BRANCH_URL: "app-git-feat.vercel.app", VERCEL_URL: "app-abc123.vercel.app" }),
+    "https://app-git-feat.vercel.app",
+  );
+  assert.equal(resolveCheckinOrigin({ VERCEL_ENV: "preview", VERCEL_URL: "app-abc123.vercel.app" }), "https://app-abc123.vercel.app");
+  assert.equal(resolveCheckinOrigin({ VERCEL_ENV: "preview" }), PROD);
+});
+
+test("origem do QR: produção e local usam o domínio oficial, mesmo com VERCEL_URL", () => {
+  assert.equal(resolveCheckinOrigin({ VERCEL_ENV: "production", VERCEL_URL: "app-abc123.vercel.app" }), PROD);
+  assert.equal(resolveCheckinOrigin({}), PROD);
+  assert.equal(resolveCheckinOrigin({ VERCEL_ENV: "development", VERCEL_URL: "localhost:3000" }), PROD);
+});
+
+test("links do QR seguem a origem resolvida (Preview) e não mudam SITE_URL", () => {
+  const origin = resolveCheckinOrigin({ VERCEL_ENV: "preview", VERCEL_BRANCH_URL: "app-git-feat.vercel.app" });
+  assert.equal(checkinUrl(TOKEN, origin), `https://app-git-feat.vercel.app/checkin/${TOKEN}`);
+  assert.equal(checkinQrImageUrl(TOKEN, origin), `https://app-git-feat.vercel.app/api/checkin/qr/${TOKEN}`);
+  assert.equal(extractCheckinToken(checkinUrl(TOKEN, origin)), TOKEN);
+  assert.match(source("lib/site.ts"), /export const SITE_URL = "https:\/\/www\.almaazulacademy\.com\.br";/);
+  // Só o check-in usa a nova origem.
+  for (const path of ["app/layout.tsx", "app/api/reservations/route.ts", "lib/site.ts"]) {
+    assert.doesNotMatch(source(path), /resolveCheckinOrigin|CHECKIN_PUBLIC_ORIGIN/, path);
+  }
 });
 
 test("só aceita UUID v4 aleatório como token", () => {

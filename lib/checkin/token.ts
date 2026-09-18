@@ -9,7 +9,7 @@
  * gerado pelo banco na confirmação e nunca muda.
  */
 
-import { SITE_URL } from "../site.ts";
+import { resolveCheckinOrigin } from "./origin.ts";
 
 const TOKEN_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -20,12 +20,12 @@ export function isCheckinToken(value: unknown): value is string {
 }
 
 /** URL gravada no QR. Aberta por um celular qualquer, só valida o QR. */
-export function checkinUrl(token: string, origin: string = SITE_URL) {
+export function checkinUrl(token: string, origin: string = resolveCheckinOrigin()) {
   return `${origin.replace(/\/$/, "")}${CHECKIN_PATH}/${token.toLowerCase()}`;
 }
 
 /** Imagem PNG do QR, usada no e-mail (cliente de e-mail não renderiza SVG nem data URI). */
-export function checkinQrImageUrl(token: string, origin: string = SITE_URL) {
+export function checkinQrImageUrl(token: string, origin: string = resolveCheckinOrigin()) {
   return `${origin.replace(/\/$/, "")}/api/checkin/qr/${token.toLowerCase()}`;
 }
 
