@@ -53,10 +53,10 @@ async function legacy() {
   return db;
 }
 
-async function as(db: PGlite, uid: string, sql: string) {
+async function as<T = Record<string, unknown>>(db: PGlite, uid: string, sql: string) {
   await db.exec(`set test.uid = '${uid}'; set role authenticated;`);
   try {
-    return await db.query(sql);
+    return await db.query<T>(sql);
   } finally {
     await db.exec("reset role; reset test.uid;");
   }
@@ -82,12 +82,12 @@ test("depois da correção: role não é gravável e is_admin segue admin_users"
 
   // Mesmo que alguém já tenha role = 'admin' em profiles, isso não vale mais nada.
   await db.exec(`update public.profiles set role = 'admin' where id = '${USER}'`);
-  assert.equal((await as(db, USER, "select public.is_admin() as ok")).rows[0].ok, false);
-  assert.equal((await as(db, ADMIN, "select public.is_admin() as ok")).rows[0].ok, true);
+  assert.equal((await as<{ ok: boolean }>(db, USER, "select public.is_admin() as ok")).rows[0].ok, false);
+  assert.equal((await as<{ ok: boolean }>(db, ADMIN, "select public.is_admin() as ok")).rows[0].ok, true);
 
   // O que continua funcionando: editar o próprio nome/telefone e a leitura pública.
   await as(db, USER, "update public.profiles set full_name = 'Nome', phone = '61' where id = auth.uid()");
-  assert.equal((await as(db, USER, "select count(*)::int as n from public.experiences")).rows[0].n, 1);
+  assert.equal((await as<{ n: number }>(db, USER, "select count(*)::int as n from public.experiences")).rows[0].n, 1);
 });
 
 test("ambiente sem o schema legado: a migration não falha", async () => {

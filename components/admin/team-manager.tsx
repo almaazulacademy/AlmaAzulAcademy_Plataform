@@ -55,11 +55,17 @@ export function TeamManager({ instructors, invites }: { instructors: TeamInstruc
     if (!created) return;
     try {
       await navigator.clipboard.writeText(created.url);
-      setCopied(true);
-      notify({ title: "Link copiado", description: "Cole no WhatsApp do instrutor." });
     } catch {
-      notify({ title: "Não foi possível copiar", description: "Selecione o link e copie manualmente.", variant: "error" });
+      // Navegadores que negam a Clipboard API (permissão, WebView): cópia pelo campo.
+      const field = document.querySelector<HTMLInputElement>('input[aria-label="Link do convite"]');
+      field?.select();
+      if (!field || !document.execCommand("copy")) {
+        notify({ title: "Não foi possível copiar", description: "O link está selecionado: copie manualmente.", variant: "error" });
+        return;
+      }
     }
+    setCopied(true);
+    notify({ title: "Link copiado", description: "Cole no WhatsApp do instrutor." });
   };
 
   const whatsappText = created
