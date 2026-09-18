@@ -22,3 +22,14 @@ where n.nspname = 'public'
 select has_table_privilege('authenticated', 'public.instructor_invites', 'select') as authenticated_reads_invites,
        has_table_privilege('authenticated', 'public.admin_users', 'update') as authenticated_updates_admin_users,
        has_table_privilege('authenticated', 'public.admin_users', 'insert') as authenticated_inserts_admin_users;
+
+-- 202609200000 (profiles.role lockdown). Esperado: tudo false, exceto
+-- authenticated_updates_profile_name = true.
+select
+  has_column_privilege('authenticated', 'public.profiles', 'role', 'update') as authenticated_updates_profile_role,
+  has_column_privilege('anon', 'public.profiles', 'role', 'update')          as anon_updates_profile_role,
+  has_table_privilege('authenticated', 'public.profiles', 'insert')          as authenticated_inserts_profiles,
+  has_table_privilege('authenticated', 'public.experiences', 'update')       as authenticated_updates_experiences,
+  has_table_privilege('authenticated', 'public.sessions', 'delete')          as authenticated_deletes_sessions,
+  has_column_privilege('authenticated', 'public.profiles', 'full_name', 'update') as authenticated_updates_profile_name,
+  pg_get_functiondef('public.is_admin()'::regprocedure) ilike '%is_active_admin%' as is_admin_uses_admin_users;
