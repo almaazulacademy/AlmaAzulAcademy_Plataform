@@ -1,5 +1,17 @@
 # Changelog
 
+## Acesso de instrutores à Lista de Presença
+
+- Novo perfil **INSTRUCTOR** em `admin_users` (a tabela de perfis que já existia), sem tabela paralela. O admin atual segue identificado pela mesma linha, sem lógica por e-mail.
+- `is_active_admin` passa a exigir role ADMIN ou OPERATOR. Antes ela olhava só `is_active`; como todas as RPCs administrativas se autorizam por ela, essa mudança fecha todo o painel para instrutores no banco. As quatro RPCs da Lista de Presença passam a usar `is_active_checkin_staff`. Para instrutor, o lookup do QR não devolve o e-mail do cliente.
+- Envio e reenvio de QR por e-mail (individual e em lote) continuam só para ADMIN.
+- Convites em `instructor_invites`, guardando só o SHA-256 do token (256 bits), com validade de 7 dias, uso único e cancelamento. O consumo é atômico (`instructor_invite_claim`, com `for update`) e cria o perfil INSTRUCTOR na mesma transação. O cadastro desfaz o usuário do Auth se o consumo falhar.
+- `/admin/equipe` (só ADMIN): gerar convite, copiar ou enviar pelo WhatsApp, listar instrutores com status, data de criação e último acesso, desativar ou reativar, e cancelar convites.
+- `/instrutor/cadastro?invite=…` para o cadastro, e a área `/instrutor` com layout próprio e somente as turmas do dia, o quadro de check-in e o scanner de QR. O instrutor que tenta abrir `/admin/*` é levado para `/instrutor`, e as rotas `/api/admin/*` respondem 403.
+- Auditoria em `admin_audit_log`: INSTRUCTOR_INVITE_CREATED, INSTRUCTOR_INVITE_USED, INSTRUCTOR_INVITE_REVOKED, INSTRUCTOR_REGISTERED, INSTRUCTOR_DEACTIVATED e INSTRUCTOR_REACTIVATED. O check-in continua registrando `checked_in_by`.
+- Migration `202609200001_instructor_access.sql` aditiva e idempotente, com rollback só para revisão e postcheck em `supabase/diagnostics/instructor_access_postcheck.sql`.
+- Novos testes em Postgres real (PGlite) cobrindo autorização das RPCs, convites, concorrência e rollback do cadastro, além de uma varredura de guards em todas as rotas.
+
 ## Sprint 7.0 — Arquitetura multi-base e Base Concha Acústica (em breve)
 
 - Auditoria de experiências, sessões, reservas, pagamentos, admin, banco, páginas públicas, componentes e navegação antes de qualquer alteração. Detalhes e decisões em [docs/multi-base.md](docs/multi-base.md).
