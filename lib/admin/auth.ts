@@ -7,7 +7,8 @@ import type { Session } from "@supabase/supabase-js";
 import { ADMIN_ACCESS_COOKIE, ADMIN_COOKIE_BASE, ADMIN_REFRESH_COOKIE } from "@/lib/admin/auth-cookies";
 import { authErrorDetails, describeAuthFailure } from "@/lib/admin/auth-errors";
 import { requestPasswordSession } from "@/lib/admin/password-auth";
-import type { AdminContext, AdminProfile, AdminRole } from "@/lib/admin/types";
+import { canManageTeam, INSTRUCTOR_HOME, isAdminRole, isStaffRole } from "@/lib/admin/roles";
+import type { AdminContext, AdminRole, StaffContext, StaffProfile, StaffRole } from "@/lib/admin/types";
 import { getSupabaseAdminClient, getSupabaseAuthConfigurationSummary, getSupabaseServerClient, getSupabaseUserClient } from "@/lib/supabase/server";
 
 type AdminMembershipRow = {
@@ -19,15 +20,11 @@ type AdminMembershipRow = {
 
 type MembershipResult =
   | { membership: AdminMembershipRow; state: "AUTHORIZED" }
-  | { membership: null; state: "NOT_AUTHORIZED" | "NOT_CONFIGURED" | "QUERY_ERROR" };
+  | { membership: null; state: "NOT_AUTHORIZED" | "INACTIVE" | "NOT_CONFIGURED" | "QUERY_ERROR" };
 
 export type AdminLoginResult =
-  | { success: true; session: Session; profile: AdminProfile }
+  | { success: true; session: Session; profile: StaffProfile }
   | { success: false; status: number; message: string };
-
-function isAdminRole(value: string): value is AdminRole {
-  return value === "ADMIN" || value === "OPERATOR";
-}
 
 function authLog(requestId: string, stage: string, details: Record<string, unknown> = {}) {
   // Temporary diagnostic logging. Never include email, password, JWTs or refresh tokens.
@@ -52,13 +49,14 @@ async function getMembership(userId: string, requestId = "session") : Promise<Me
     return { membership: null, state: "QUERY_ERROR" };
   }
   const membership = result.data as AdminMembershipRow | null;
-  if (!membership?.is_active || !isAdminRole(membership.role)) {
+  if (!membership?.is_active || !isStaffRole(membership.role)) {
     authLog(requestId, "membership_not_authorized", {
       rowFound: Boolean(membership),
       active: membership?.is_active ?? null,
-      validRole: membership ? isAdminRole(membership.role) : false,
+      validRole: membership ? isStaffRole(membership.role) : false,
     });
-    return { membership: null, state: "NOT_AUTHORIZED" };
+    const inactive = Boolean(membership) && !membership?.is_active && isStaffRole(membership?.role);
+    return { membership: null, state: inactive ? "INACTIVE" : "NOT_AUTHORIZED" };
   }
   authLog(requestId, "membership_authorized", { role: membership.role });
   return { membership, state: "AUTHORIZED" };
@@ -104,12 +102,13 @@ export async function authenticateAdminCredentials(email: string, password: stri
     await supabase.auth.signOut().catch(() => undefined);
     const messages = {
       NOT_AUTHORIZED: "Usuário autenticado, mas sem acesso administrativo ativo.",
+      INACTIVE: "Seu acesso foi desativado. Fale com a administração da Alma Azul.",
       NOT_CONFIGURED: "Variável ausente: SUPABASE_SERVICE_ROLE_KEY.",
       QUERY_ERROR: "Usuário autenticado, mas ocorreu um erro ao consultar admin_users.",
     } as const;
     return {
       success: false,
-      status: membershipResult.state === "NOT_AUTHORIZED" ? 403 : 503,
+      status: membershipResult.state === "NOT_AUTHORIZED" || membershipResult.state === "INACTIVE" ? 403 : 503,
       message: messages[membershipResult.state],
     };
   }
@@ -121,7 +120,7 @@ export async function authenticateAdminCredentials(email: string, password: stri
       userId: login.user.id,
       email: login.user.email ?? email,
       displayName: membershipResult.membership.display_name,
-      role: membershipResult.membership.role as AdminRole,
+      role: membershipResult.membership.role as StaffRole,
     },
   };
 }
@@ -142,7 +141,11 @@ export function clearAdminSessionCookies(response: NextResponse) {
   response.cookies.set(ADMIN_REFRESH_COOKIE, "", { ...ADMIN_COOKIE_BASE, maxAge: 0 });
 }
 
-export async function getAdminContextFromAccessToken(accessToken: string): Promise<AdminContext | null> {
+/**
+ * Qualquer pessoa da equipe com login ativo (ADMIN, OPERATOR ou INSTRUCTOR).
+ * Use só onde o instrutor também pode entrar: a Lista de Presença.
+ */
+export async function getStaffContextFromAccessToken(accessToken: string): Promise<StaffContext | null> {
   const userClient = getSupabaseUserClient(accessToken);
   if (!userClient) return null;
 
@@ -159,19 +162,49 @@ export async function getAdminContextFromAccessToken(accessToken: string): Promi
       userId: userResult.data.user.id,
       email: userResult.data.user.email ?? "",
       displayName: membershipResult.membership.display_name,
-      role: membershipResult.membership.role as AdminRole,
+      role: membershipResult.membership.role as StaffRole,
     },
   };
 }
 
-export const getAdminContext = cache(async (): Promise<AdminContext | null> => {
+/** Só ADMIN/OPERATOR. Um instrutor logado recebe null aqui. */
+export async function getAdminContextFromAccessToken(accessToken: string): Promise<AdminContext | null> {
+  const context = await getStaffContextFromAccessToken(accessToken);
+  return toAdminContext(context);
+}
+
+function toAdminContext(context: StaffContext | null): AdminContext | null {
+  if (!context || !isAdminRole(context.profile.role)) return null;
+  return { profile: { ...context.profile, role: context.profile.role as AdminRole } };
+}
+
+export const getStaffContext = cache(async (): Promise<StaffContext | null> => {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(ADMIN_ACCESS_COOKIE)?.value ?? "";
-  return accessToken ? getAdminContextFromAccessToken(accessToken) : null;
+  return accessToken ? getStaffContextFromAccessToken(accessToken) : null;
 });
 
+export const getAdminContext = cache(async (): Promise<AdminContext | null> => toAdminContext(await getStaffContext()));
+
+/** Painel administrativo. Instrutor é mandado para a própria área. */
 export async function requireAdmin() {
-  const context = await getAdminContext();
-  if (!context) redirect("/login");
+  const staff = await getStaffContext();
+  const context = toAdminContext(staff);
+  if (context) return context;
+  if (staff) redirect(`${INSTRUCTOR_HOME}?acesso=negado`);
+  redirect("/login");
+}
+
+/** Gestão da equipe: só ADMIN. */
+export async function requireTeamManager() {
+  const context = await requireAdmin();
+  if (!canManageTeam(context.profile.role)) redirect("/admin");
+  return context;
+}
+
+/** Lista de Presença: qualquer pessoa da equipe com acesso ativo. */
+export async function requireCheckinStaff(next = INSTRUCTOR_HOME) {
+  const context = await getStaffContext();
+  if (!context) redirect(`/login?next=${encodeURIComponent(next)}`);
   return context;
 }

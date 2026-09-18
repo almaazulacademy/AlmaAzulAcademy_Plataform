@@ -23,6 +23,9 @@ function clearAuthCookies(response: NextResponse) {
 }
 
 export async function middleware(request: NextRequest) {
+  // Cadastro por convite é público: o convite é a credencial.
+  if (request.nextUrl.pathname === "/instrutor/cadastro") return NextResponse.next();
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   const configured = Boolean(url && key && !url?.includes("your-project"));
@@ -79,5 +82,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*", "/preview/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*", "/preview/:path*", "/instrutor/:path*"],
 };

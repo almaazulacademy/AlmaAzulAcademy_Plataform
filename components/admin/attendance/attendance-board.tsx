@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, Minus, Plus, RotateCcw, ScanLine, UserCheck, X } from "lucide-react";
 
 import { QrScanner } from "@/components/admin/attendance/qr-scanner";
@@ -41,7 +41,24 @@ function timeOf(value: string | null) {
   return value ? formatSessionTime(value) : "";
 }
 
-export function AttendanceBoard({ session, initialToken }: { session: AttendanceSession; initialToken: string | null }) {
+// Onde a Lista de Presença está montada: painel (/admin/presenca) ou área do
+// instrutor (/instrutor). Os links internos do quadro seguem o mesmo lugar.
+const BasePathContext = createContext("/admin/presenca");
+
+export function AttendanceBoard({ session, initialToken, basePath = "/admin/presenca" }: {
+  session: AttendanceSession;
+  initialToken: string | null;
+  basePath?: string;
+}) {
+  return (
+    <BasePathContext.Provider value={basePath}>
+      <AttendanceBoardContent session={session} initialToken={initialToken} />
+    </BasePathContext.Provider>
+  );
+}
+
+function AttendanceBoardContent({ session, initialToken }: { session: AttendanceSession; initialToken: string | null }) {
+  const basePath = useContext(BasePathContext);
   const router = useRouter();
   const [scanning, setScanning] = useState(false);
   const [sheet, setSheet] = useState<Sheet | null>(null);
@@ -131,7 +148,7 @@ export function AttendanceBoard({ session, initialToken }: { session: Attendance
 
   return (
     <div className="pb-32">
-      <Link href={`/admin/presenca?data=${session.startsAt ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(session.startsAt)) : ""}`} className="inline-flex h-11 items-center gap-2 rounded-full px-3 text-sm font-semibold text-ink hover:bg-ink/5">
+      <Link href={`${basePath}?data=${session.startsAt ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(session.startsAt)) : ""}`} className="inline-flex h-11 items-center gap-2 rounded-full px-3 text-sm font-semibold text-ink hover:bg-ink/5">
         <ArrowLeft className="size-4" /> Turmas do dia
       </Link>
 
@@ -254,6 +271,7 @@ const primary = "flex h-14 w-full items-center justify-center gap-2 rounded-full
 const secondary = "flex h-14 w-full items-center justify-center gap-2 rounded-full bg-white text-lg font-semibold text-ink ring-1 ring-ink/15 transition active:scale-[0.98] disabled:opacity-50";
 
 function SheetBody({ sheet, onClose, onScanNext, onEdit, onSubmit }: Parameters<typeof CheckinSheet>[0]) {
+  const basePath = useContext(BasePathContext);
   if (sheet.kind === "loading") {
     return <p className="py-10 text-center text-lg text-ink/70" aria-live="polite">Identificando reserva…</p>;
   }
@@ -299,7 +317,7 @@ function SheetBody({ sheet, onClose, onScanNext, onEdit, onSubmit }: Parameters<
         </div>
         <p className="mt-3 text-sm text-ink/60">Nenhuma presença foi registrada.</p>
         <div className="mt-6 space-y-3">
-          <Link href={`/admin/presenca/${sheet.reservation.sessionId}`} className={primary} onClick={onClose}>Abrir experiência correta</Link>
+          <Link href={`${basePath}/${sheet.reservation.sessionId}`} className={primary} onClick={onClose}>Abrir experiência correta</Link>
           <button type="button" className={secondary} onClick={onScanNext}><ScanLine className="size-5" /> Escanear próximo</button>
         </div>
       </div>

@@ -7,7 +7,8 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { LoginForm } from "@/components/admin/login-form";
 import { ToastProvider } from "@/components/admin/toast-provider";
 import { buttonVariants } from "@/components/ui/button";
-import { getAdminContext } from "@/lib/admin/auth";
+import { getStaffContext } from "@/lib/admin/auth";
+import { homeForRole } from "@/lib/admin/roles";
 
 export const metadata: Metadata = {
   title: "Login",
@@ -15,10 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  const existing = await getAdminContext();
-  if (existing) redirect("/admin");
+  const existing = await getStaffContext();
+  if (existing) redirect(homeForRole(existing.profile.role));
   const params = await searchParams;
-  const destination = params.next?.startsWith("/admin") ? params.next : "/admin";
+  const next = typeof params.next === "string" ? params.next : null;
 
   return (
     <ToastProvider>
@@ -50,12 +51,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <div className="mt-12 grid size-12 place-items-center rounded-2xl bg-forest text-white">
               <ShieldCheck className="size-5" />
             </div>
-            <p className="mt-7 text-xs font-semibold uppercase tracking-[0.2em] text-lake">Acesso administrativo</p>
+            <p className="mt-7 text-xs font-semibold uppercase tracking-[0.2em] text-lake">Acesso da equipe</p>
             <h1 className="mt-3 text-4xl font-semibold tracking-[-0.05em] sm:text-5xl">Bem-vinda.</h1>
             <p className="mt-4 max-w-sm leading-7 text-ink/60">
-              Entre com sua conta autorizada do Supabase para acessar sessões, reservas e experiências.
+              Entre com sua conta da Alma Azul. Administração e instrutores usam o mesmo acesso.
             </p>
-            <LoginForm destination={destination} />
+            <LoginForm next={next} />
             <Link href="/" className={buttonVariants({ variant: "ghost", className: "mt-5" })}>
               <ArrowLeft className="size-4" /> Voltar ao site
             </Link>

@@ -166,7 +166,7 @@ export function parsePublicCheckinTicket(value: unknown): PublicCheckinTicket | 
 /** Motivo de recusa do banco → status HTTP e texto para o instrutor. */
 export function checkinErrorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes("ADMIN_FORBIDDEN")) return { status: 403, code: "FORBIDDEN", message: "Sem acesso administrativo ativo." };
+  if (message.includes("ADMIN_FORBIDDEN")) return { status: 403, code: "FORBIDDEN", message: "Seu acesso não está ativo ou não permite esta ação." };
   if (message.includes("CHECKIN_ALREADY_DONE")) return { status: 409, code: "ALREADY_DONE", message: "Check-in já realizado para esta reserva." };
   if (message.includes("CHECKIN_WRONG_SESSION")) return { status: 409, code: "WRONG_SESSION", message: "Este QR pertence a outra experiência." };
   if (message.includes("CHECKIN_INVALID_COUNT")) return { status: 400, code: "INVALID_COUNT", message: "Quantidade de presentes inválida para esta reserva." };

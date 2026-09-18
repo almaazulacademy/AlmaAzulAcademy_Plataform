@@ -7,10 +7,12 @@ import { LogIn } from "lucide-react";
 import { fieldErrorClass, inputClass, labelClass } from "@/components/admin/form-styles";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
+import { loginDestination } from "@/lib/admin/roles";
+import type { StaffRole } from "@/lib/admin/types";
 
-type ErrorResponse = { message?: string; errors?: Record<string, string> };
+type LoginResponse = { message?: string; errors?: Record<string, string>; profile?: { role?: StaffRole } };
 
-export function LoginForm({ destination }: { destination: string }) {
+export function LoginForm({ next }: { next: string | null }) {
   const router = useRouter();
   const { notify } = useToast();
   const [loading, setLoading] = useState(false);
@@ -28,14 +30,15 @@ export function LoginForm({ destination }: { destination: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
       });
-      const payload = await response.json().catch(() => ({})) as ErrorResponse;
+      const payload = await response.json().catch(() => ({})) as LoginResponse;
       if (!response.ok) {
         setErrors(payload.errors ?? { form: payload.message ?? "Não foi possível entrar." });
         notify({ title: "Acesso não realizado", description: payload.message ?? "Revise os dados informados.", variant: "error" });
         return;
       }
-      notify({ title: "Login realizado", description: "Bem-vinda ao painel Alma Azul." });
-      router.replace(destination);
+      const role = payload.profile?.role ?? "INSTRUCTOR";
+      notify({ title: "Login realizado", description: role === "INSTRUCTOR" ? "Bem-vindo à Lista de Presença." : "Bem-vinda ao painel Alma Azul." });
+      router.replace(loginDestination(role, next));
       router.refresh();
     } catch {
       setErrors({ form: "Não foi possível conectar ao serviço de autenticação." });
@@ -59,7 +62,7 @@ export function LoginForm({ destination }: { destination: string }) {
       </label>
       {errors.form ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{errors.form}</p> : null}
       <Button type="submit" className="w-full" disabled={loading}>
-        <LogIn className="size-4" /> {loading ? "Entrando..." : "Entrar no painel"}
+        <LogIn className="size-4" /> {loading ? "Entrando..." : "Entrar"}
       </Button>
     </form>
   );
