@@ -10,7 +10,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 
-import { buildReservationConfirmationEmail } from "../../lib/reservations/confirmation-email.ts";
+import { buildCheckinReminderEmail, buildReservationConfirmationEmail } from "../../lib/reservations/confirmation-email.ts";
 
 const email = buildReservationConfirmationEmail({
   reservationId: "11110000-0000-4000-8000-000000000001",
@@ -20,11 +20,27 @@ const email = buildReservationConfirmationEmail({
   quantity: Number(process.argv[2] ?? "1") || 1,
   experienceTitle: "Imersão Paranoá",
   startsAt: "2026-09-06T12:00:00.000Z",
+  // Token fictício, só para desenhar a seção do QR.
+  checkinToken: "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b",
+});
+const reminder = buildCheckinReminderEmail({
+  reservationId: "11110000-0000-4000-8000-000000000001",
+  publicCode: "AZ7K2M9QX1",
+  fullName: "João Gonçalves",
+  email: "exemplo@exemplo.com",
+  quantity: Number(process.argv[2] ?? "1") || 1,
+  experienceTitle: "Imersão Paranoá",
+  startsAt: "2026-09-06T12:00:00.000Z",
+  checkinToken: "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b",
 });
 
 mkdirSync(".preview", { recursive: true });
 writeFileSync(".preview/confirmacao.html", email.html, "utf8");
 writeFileSync(".preview/confirmacao.txt", email.text, "utf8");
+if (reminder) {
+  writeFileSync(".preview/lembrete-qr.html", reminder.html, "utf8");
+  writeFileSync(".preview/lembrete-qr.txt", reminder.text, "utf8");
+}
 
 console.info(`Assunto: ${email.subject}`);
 console.info("HTML  : .preview/confirmacao.html");

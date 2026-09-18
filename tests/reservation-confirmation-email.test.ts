@@ -38,6 +38,7 @@ function data(overrides: Partial<ReservationConfirmationData> = {}): Reservation
     quantity: 1,
     experienceTitle: "Imersão Paranoá",
     startsAt: "2026-09-06T12:00:00.000Z", // 09:00 em Brasília
+    checkinToken: null,
     ...overrides,
   };
 }

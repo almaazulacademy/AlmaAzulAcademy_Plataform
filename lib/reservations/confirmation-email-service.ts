@@ -24,7 +24,9 @@ import {
 import { sanitizeEmailErrorCode, type EmailProvider } from "@/lib/email/email-provider";
 import { logEmail } from "@/lib/email/observability";
 import {
+  buildCheckinReminderEmail,
   deliverReservationConfirmationEmail,
+  parseReservationConfirmationData,
   type ConfirmationEmailResult,
 } from "@/lib/reservations/confirmation-email";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
@@ -235,4 +237,43 @@ export async function getConfirmationEmailState(reservationId: string): Promise<
 /** true quando o provedor de e-mail está configurado neste ambiente. */
 export function isConfirmationEmailEnabled() {
   return getEmailProvider() !== null;
+}
+
+export type CheckinReminderResult = {
+  outcome: "SENT" | "DISABLED" | "NOT_AVAILABLE" | "FAILED";
+  errorCode?: string;
+};
+
+/**
+ * "Reenviar QR Code": lembrete com o QR **existente**.
+ *
+ * Fora da fila de confirmação de propósito — aquela garante um único e-mail de
+ * confirmação por reserva, e este reenvio é uma ação humana deliberada, que pode
+ * se repetir. O token vem do banco e nunca é regenerado aqui.
+ */
+export async function sendCheckinReminderEmail(actorUserId: string, reservationId: string): Promise<CheckinReminderResult> {
+  const provider = getEmailProvider();
+  if (!provider) return { outcome: "DISABLED" };
+  const admin = getSupabaseAdminClient();
+  if (!admin) return { outcome: "DISABLED" };
+
+  const startedAt = Date.now();
+  try {
+    const payload = await admin.rpc("admin_reservation_qr_email", { p_actor_id: actorUserId, p_reservation_id: reservationId });
+    if (payload.error) {
+      if (payload.error.message.includes("RESERVATION_NOT_CONFIRMED")) return { outcome: "NOT_AVAILABLE", errorCode: "NOT_CONFIRMED" };
+      throw new Error("PAYLOAD_UNAVAILABLE");
+    }
+    const data = parseReservationConfirmationData(payload.data);
+    const message = data ? buildCheckinReminderEmail(data) : null;
+    if (!message) return { outcome: "NOT_AVAILABLE", errorCode: "PAYLOAD_EMPTY" };
+
+    await provider.send(message);
+    logEmail({ stage: "checkin_reminder", outcome: "sent", reservationId, provider: provider.name, durationMs: Date.now() - startedAt });
+    return { outcome: "SENT" };
+  } catch (error) {
+    const errorCode = sanitizeEmailErrorCode(error);
+    logEmail({ stage: "checkin_reminder", outcome: "failed", reservationId, provider: provider.name, errorCode });
+    return { outcome: "FAILED", errorCode: error instanceof Error && error.message === "PAYLOAD_UNAVAILABLE" ? "PAYLOAD_UNAVAILABLE" : errorCode };
+  }
 }

@@ -12,6 +12,8 @@ type ConfirmationDialogProps = {
   description: string;
   confirmLabel: string;
   requireReason?: boolean;
+  /** "neutral" para ações comuns (ex.: reenviar e-mail); o padrão é destrutivo. */
+  tone?: "danger" | "neutral";
   onClose: () => void;
   onConfirm: (reason: string) => Promise<void>;
 };
@@ -22,6 +24,7 @@ export function ConfirmationDialog({
   description,
   confirmLabel,
   requireReason = false,
+  tone = "danger",
   onClose,
   onConfirm,
 }: ConfirmationDialogProps) {
@@ -74,7 +77,7 @@ export function ConfirmationDialog({
     }}>
       <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-soft sm:p-8" role="dialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-description">
         <div className="flex items-start justify-between gap-4">
-          <div className="grid size-11 place-items-center rounded-2xl bg-red-50 text-red-700">
+          <div className={tone === "danger" ? "grid size-11 place-items-center rounded-2xl bg-red-50 text-red-700" : "grid size-11 place-items-center rounded-2xl bg-mist text-forest"}>
             <AlertTriangle className="size-5" />
           </div>
           <button type="button" onClick={onClose} disabled={loading} className="grid size-9 place-items-center rounded-full text-ink/50 hover:bg-ink/5" aria-label="Fechar confirmação">
@@ -92,7 +95,7 @@ export function ConfirmationDialog({
         {error ? <p className={fieldErrorClass} role="alert">{error}</p> : null}
         <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Voltar</Button>
-          <Button type="button" onClick={submit} disabled={loading} className="bg-red-700 hover:bg-red-800">
+          <Button type="button" onClick={submit} disabled={loading} className={tone === "danger" ? "bg-red-700 hover:bg-red-800" : undefined}>
             {loading ? "Processando..." : confirmLabel}
           </Button>
         </div>
