@@ -3,7 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import { getAdminContext } from "@/lib/admin/auth";
+import { getStaffContext } from "@/lib/admin/auth";
+import { isAdminRole } from "@/lib/admin/roles";
 import { renderCheckinQrSvg } from "@/lib/checkin/qr-image";
 import { isCheckinToken } from "@/lib/checkin/token";
 import { getPublicCheckinTicket } from "@/lib/checkin/data";
@@ -23,15 +24,17 @@ export const dynamic = "force-dynamic";
  * data e as vagas — sem nome, e-mail, telefone ou código da reserva. Nada aqui
  * registra presença.
  *
- * Para um instrutor logado que leu o QR com a câmera nativa do celular, a página
- * encaminha para o painel, onde a presença é confirmada com autenticação.
+ * Para alguém da equipe logado que leu o QR com a câmera nativa do celular, a
+ * página encaminha para a Lista de Presença (painel ou área do instrutor), onde a
+ * presença é confirmada com autenticação.
  */
 export default async function CheckinTicketPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   if (!isCheckinToken(token)) notFound();
   const normalized = token.toLowerCase();
 
-  if (await getAdminContext().catch(() => null)) redirect(`/admin/presenca/qr/${normalized}`);
+  const staff = await getStaffContext().catch(() => null);
+  if (staff) redirect(isAdminRole(staff.profile.role) ? `/admin/presenca/qr/${normalized}` : `/instrutor/qr/${normalized}`);
 
   const ticket = await getPublicCheckinTicket(normalized).catch(() => null);
   const svg = ticket ? await renderCheckinQrSvg(normalized) : null;

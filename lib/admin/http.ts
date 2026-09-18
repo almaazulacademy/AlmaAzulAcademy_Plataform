@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getAdminContext } from "@/lib/admin/auth";
+import { getAdminContext, getStaffContext } from "@/lib/admin/auth";
+import { canManageTeam } from "@/lib/admin/roles";
 import { adminMutationError } from "@/lib/admin/mutation-errors";
 
 export function isSameOriginRequest(request: Request) {
@@ -38,14 +39,37 @@ export function isSameOriginRequest(request: Request) {
   return allowed.has(origin);
 }
 
+const INVALID_SESSION = "Sessão administrativa inválida ou expirada.";
+const FORBIDDEN = "Seu perfil não tem permissão para esta função.";
+
+function denied(status: 401 | 403) {
+  return NextResponse.json({ message: status === 401 ? INVALID_SESSION : FORBIDDEN }, { status });
+}
+
+/**
+ * Rotas administrativas: só ADMIN/OPERATOR. Um instrutor com sessão válida
+ * recebe 403 (e não 401), para não ser tratado como sessão expirada.
+ */
 export async function authorizeAdminApi() {
+  const staff = await getStaffContext();
+  if (!staff) return { context: null, response: denied(401) };
   const context = await getAdminContext();
-  if (!context) {
-    return {
-      context: null,
-      response: NextResponse.json({ message: "Sessão administrativa inválida ou expirada." }, { status: 401 }),
-    };
-  }
+  if (!context) return { context: null, response: denied(403) };
+  return { context, response: null };
+}
+
+/** Gestão da equipe: só ADMIN. */
+export async function authorizeTeamManagerApi() {
+  const authorization = await authorizeAdminApi();
+  if (!authorization.context) return authorization;
+  if (!canManageTeam(authorization.context.profile.role)) return { context: null, response: denied(403) };
+  return authorization;
+}
+
+/** Lista de Presença: qualquer pessoa da equipe com acesso ativo, inclusive instrutor. */
+export async function authorizeCheckinApi() {
+  const context = await getStaffContext();
+  if (!context) return { context: null, response: denied(401) };
   return { context, response: null };
 }
 

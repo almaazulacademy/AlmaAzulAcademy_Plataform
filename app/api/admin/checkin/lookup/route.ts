@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { authorizeAdminApi } from "@/lib/admin/http";
+import { authorizeCheckinApi } from "@/lib/admin/http";
 import { isUuid } from "@/lib/admin/validation";
 import { lookupCheckin } from "@/lib/checkin/data";
 import { checkinErrorResponse } from "@/lib/checkin/parse";
@@ -11,7 +11,7 @@ import { extractCheckinToken } from "@/lib/checkin/token";
  * Só leitura: nunca registra presença.
  */
 export async function GET(request: Request) {
-  const authorization = await authorizeAdminApi();
+  const authorization = await authorizeCheckinApi();
   if (!authorization.context) return authorization.response;
 
   const params = new URL(request.url).searchParams;

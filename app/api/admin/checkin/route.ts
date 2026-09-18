@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { authorizeAdminApi, isSameOriginRequest } from "@/lib/admin/http";
+import { authorizeCheckinApi, isSameOriginRequest } from "@/lib/admin/http";
 import { isUuid } from "@/lib/admin/validation";
 import { registerCheckin } from "@/lib/checkin/data";
 import { checkinErrorResponse } from "@/lib/checkin/parse";
@@ -9,14 +9,14 @@ import { checkinErrorResponse } from "@/lib/checkin/parse";
  * Registra, corrige ou desfaz a presença de uma reserva.
  *
  * O navegador só sugere; quem decide é `admin_register_checkin`, que confere
- * admin ativo, reserva confirmada, turma esperada, limite de vagas e check-in
+ * equipe ativa (admin ou instrutor), reserva confirmada, turma esperada, limite de vagas e check-in
  * duplicado sob lock da linha.
  */
 export async function POST(request: Request) {
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ message: "Origem da solicitação inválida." }, { status: 403 });
   }
-  const authorization = await authorizeAdminApi();
+  const authorization = await authorizeCheckinApi();
   if (!authorization.context) return authorization.response;
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;

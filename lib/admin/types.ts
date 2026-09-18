@@ -45,6 +45,11 @@ export type ExperienceStatus = (typeof EXPERIENCE_STATUSES)[number];
 export const ADMIN_ROLES = ["ADMIN", "OPERATOR"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
+// Equipe com login: os papéis administrativos mais o instrutor, que só opera a
+// Lista de Presença. O papel vem sempre de `admin_users`, nunca do cliente.
+export const STAFF_ROLES = [...ADMIN_ROLES, "INSTRUCTOR"] as const;
+export type StaffRole = (typeof STAFF_ROLES)[number];
+
 export const PAYMENT_STATUSES = ["PENDING", "PAID", "PAID_AFTER_EXPIRATION", "NOT_PAID"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
@@ -57,6 +62,12 @@ export type AdminProfile = {
 
 export type AdminContext = {
   profile: AdminProfile;
+};
+
+export type StaffProfile = Omit<AdminProfile, "role"> & { role: StaffRole };
+
+export type StaffContext = {
+  profile: StaffProfile;
 };
 
 export type AdminDashboardMetrics = {

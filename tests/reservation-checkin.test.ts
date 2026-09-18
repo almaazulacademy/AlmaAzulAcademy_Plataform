@@ -299,15 +299,11 @@ test("a página pública do QR não devolve dado pessoal", () => {
 
 // --- Rotas ------------------------------------------------------------------
 
-test("rotas de check-in e reenvio exigem sessão administrativa", () => {
-  for (const path of [
-    "app/api/admin/checkin/route.ts",
-    "app/api/admin/checkin/lookup/route.ts",
-    "app/api/admin/reservations/[reservationId]/resend-qr/route.ts",
-  ]) {
-    const code = source(path);
-    assert.match(code, /authorizeAdminApi\(\)/, path);
+test("check-in exige sessão da equipe; reenvio de QR exige sessão administrativa", () => {
+  for (const path of ["app/api/admin/checkin/route.ts", "app/api/admin/checkin/lookup/route.ts"]) {
+    assert.match(source(path), /authorizeCheckinApi\(\)/, path);
   }
+  assert.match(source("app/api/admin/reservations/[reservationId]/resend-qr/route.ts"), /authorizeAdminApi\(\)/);
   assert.match(source("app/api/admin/checkin/route.ts"), /isSameOriginRequest/);
   assert.match(source("middleware.ts"), /"\/api\/admin\/:path\*"/);
 });
