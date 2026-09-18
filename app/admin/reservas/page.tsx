@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Filter, Search, X } from "lucide-react";
+import { ClipboardCheck, Filter, Search, X } from "lucide-react";
 
 import { inputClass, labelClass } from "@/components/admin/form-styles";
 import { AdminPageHeader } from "@/components/admin/page-header";
@@ -58,7 +58,7 @@ export default async function AdminReservationsPage({ searchParams }: { searchPa
     const hasFilters = Object.values(filters).some(Boolean);
     return (
       <div>
-        <AdminPageHeader eyebrow="Atendimento" title="Reservas" description="Localize participantes, acompanhe pagamentos e execute ações operacionais com auditoria." />
+        <AdminPageHeader eyebrow="Atendimento" title="Reservas" description="Localize participantes, acompanhe pagamentos e execute ações operacionais com auditoria." action={<Link href="/admin/presenca" className={buttonVariants({ variant: "outline", size: "sm" })}><ClipboardCheck className="size-4" /> Lista de Presença</Link>} />
         <form method="get" className="mt-8 rounded-3xl border border-ink/10 bg-white p-5 sm:p-6" aria-label="Filtros de reservas">
           <div className="flex items-center gap-2"><Filter className="size-4 text-lake" /><h2 className="text-sm font-semibold">Filtros</h2></div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

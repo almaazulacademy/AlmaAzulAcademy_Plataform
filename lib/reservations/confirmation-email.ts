@@ -16,6 +16,7 @@
  * para que o teste verifique exatamente o texto que o cliente lê.
  */
 
+import { checkinQrImageUrl, checkinUrl, isCheckinToken } from "../checkin/token.ts";
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE, INSTAGRAM_LINK, WHATSAPP_NUMBER } from "../contact.ts";
 import { formatSessionDate, formatSessionTime } from "../sessions/date-time.ts";
 import { SITE_NAME, SITE_URL } from "../site.ts";
@@ -96,7 +97,20 @@ export type ReservationConfirmationData = {
   quantity: number;
   experienceTitle: string;
   startsAt: string;
+  /**
+   * Token do QR de check-in. null enquanto a migration do check-in não estiver
+   * aplicada: o e-mail sai como antes, só sem a seção do QR.
+   */
+  checkinToken: string | null;
 };
+
+/** Seção do QR de check-in. Constantes exportadas para o teste ler o mesmo texto. */
+export const CHECKIN_TITLE = "Seu QR Code de check-in";
+
+export const CHECKIN_NOTE =
+  "No dia da experiência, apresente este QR Code à nossa equipe para realizar seu check-in na Alma Azul.";
+
+export const CHECKIN_LINK_LABEL = "Abrir meu QR Code";
 
 export type ConfirmationEmail = {
   to: string;
@@ -151,6 +165,23 @@ function detailRows(data: ReservationConfirmationData) {
 
 // --- Versão em texto puro ----------------------------------------------------
 
+function vagasLabel(quantity: number) {
+  return `${quantity} ${quantity === 1 ? "vaga" : "vagas"}`;
+}
+
+/** Bloco do QR no texto puro: sem imagem, o link é a alternativa. */
+function checkinText(data: ReservationConfirmationData) {
+  if (!data.checkinToken) return [];
+  return [
+    CHECKIN_TITLE.toUpperCase(),
+    CHECKIN_NOTE,
+    `Responsável: ${data.fullName}`,
+    `Vagas reservadas: ${vagasLabel(data.quantity)}`,
+    `${CHECKIN_LINK_LABEL}: ${checkinUrl(data.checkinToken)}`,
+    "",
+  ];
+}
+
 function buildText(data: ReservationConfirmationData) {
   const rows = detailRows(data).map(([label, value]) => `${label}: ${value}`);
 
@@ -161,6 +192,7 @@ function buildText(data: ReservationConfirmationData) {
     "",
     ...rows,
     "",
+    ...checkinText(data),
     "Localização",
     MEETING_LOCATION,
     "",
@@ -246,30 +278,64 @@ function bulletList(items: readonly string[]) {
                     </table>`;
 }
 
-function buildHtml(data: ReservationConfirmationData) {
-  const rows = detailRows(data)
+/**
+ * Seção destacada do QR. A imagem é um PNG servido pelo site — Gmail e Outlook
+ * não exibem SVG nem data URI — e o botão abaixo abre a mesma página caso a
+ * imagem seja bloqueada. Nenhum dos dois carrega dado pessoal: só o token.
+ */
+function checkinHtml(data: ReservationConfirmationData) {
+  if (!data.checkinToken) return "";
+  const rows: Array<[string, string]> = [
+    ["Responsável", data.fullName],
+    ["Experiência", data.experienceTitle],
+    ["Data", formatSessionDate(data.startsAt)],
+    ["Horário", formatSessionTime(data.startsAt)],
+    ["Vagas reservadas", vagasLabel(data.quantity)],
+  ];
+  const details = rows
     .map(([label, value]) => `
                       <tr>
-                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:14px;color:${BRAND.ink};opacity:0.6;">${escapeHtml(label)}</td>
-                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:15px;font-weight:600;color:${BRAND.ink};text-align:right;">${escapeHtml(value)}</td>
+                        <td style="padding:6px 0;font-size:13px;color:${BRAND.ink};opacity:0.6;text-align:left;">${escapeHtml(label)}</td>
+                        <td style="padding:6px 0;font-size:14px;font-weight:600;color:${BRAND.ink};text-align:right;">${escapeHtml(value)}</td>
                       </tr>`)
     .join("");
 
-  const closing = CLOSING_PARAGRAPHS
-    .map((text) => `
-              <p style="margin:0 0 14px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(text)}</p>`)
-    .join("");
+  return `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;">
+                <tr>
+                  <td align="center" style="padding:24px 18px;background-color:${BRAND.tint};border:2px solid ${BRAND.lake};border-radius:18px;">
+                    <p style="margin:0;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:${BRAND.lake};font-weight:700;">${escapeHtml(CHECKIN_TITLE)}</p>
+                    <p style="margin:10px 0 18px;font-size:15px;line-height:23px;color:${BRAND.ink};">${escapeHtml(CHECKIN_NOTE)}</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+                      <tr><td style="padding:12px;background-color:#ffffff;border-radius:14px;">
+                        <img src="${checkinQrImageUrl(data.checkinToken)}" width="220" height="220" alt="QR Code de check-in" style="display:block;width:220px;height:220px;max-width:100%;border:0;">
+                      </td></tr>
+                    </table>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 0;">${details}
+                    </table>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px auto 0;">
+                      <tr><td style="border-radius:999px;background-color:${BRAND.forest};">
+                        <a href="${checkinUrl(data.checkinToken)}" style="display:inline-block;padding:13px 24px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">${escapeHtml(CHECKIN_LINK_LABEL)}</a>
+                      </td></tr>
+                    </table>
+                    <p style="margin:10px 0 0;font-size:12px;line-height:18px;color:${BRAND.ink};opacity:0.6;">Se a imagem não carregar, toque no botão acima.</p>
+                  </td>
+                </tr>
+              </table>`;
+}
 
+/** Moldura comum aos e-mails: cabeçalho da marca, corpo e rodapé de contato. */
+function emailLayout({ title, preheader, heading, body }: { title: string; preheader: string; heading: string; body: string }) {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>${escapeHtml(reservationConfirmationSubject(data.publicCode))}</title>
+<title>${escapeHtml(title)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:${BRAND.paper};">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Sua reserva ${escapeHtml(data.publicCode)} está confirmada.</div>
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};">
     <tr>
       <td align="center" style="padding:24px 12px;">
@@ -277,31 +343,11 @@ function buildHtml(data: ReservationConfirmationData) {
           <tr>
             <td style="padding:28px 28px 20px;background-color:${BRAND.forest};">
               <p style="margin:0;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:${BRAND.sand};">${escapeHtml(SITE_NAME)}</p>
-              <h1 style="margin:10px 0 0;font-size:26px;line-height:32px;font-weight:600;color:#ffffff;">Reserva confirmada</h1>
+              <h1 style="margin:10px 0 0;font-size:26px;line-height:32px;font-weight:600;color:#ffffff;">${escapeHtml(heading)}</h1>
             </td>
           </tr>
           <tr>
-            <td style="padding:28px;font-family:${SANS};">
-              <p style="margin:0 0 16px;font-size:17px;line-height:26px;font-weight:600;color:${BRAND.ink};">Olá, ${escapeHtml(firstName(data.fullName))}!</p>
-              <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">Sua reserva está confirmada. Será um prazer receber você para essa experiência!</p>
-
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;margin:0 0 20px;">
-                <tr><td style="padding:4px 0;">
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}
-                  </table>
-                </td></tr>
-              </table>
-${highlightCard("Localização", MEETING_LOCATION)}
-${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
-              <div style="height:12px;line-height:12px;">&nbsp;</div>
-${infoSection(PREPARATION_TITLE, bulletList(PREPARATION_ITEMS))}
-${infoSection(DURATION_TITLE, paragraph(DURATION_NOTE))}
-${infoSection(CANCELLATION_TITLE, paragraph(CANCELLATION_NOTE))}
-${infoSection(GROUP_TITLE, paragraph(GROUP_NOTE))}
-              <div style="height:24px;line-height:24px;">&nbsp;</div>
-${closing}
-              <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">Até breve!</p>
-              <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">Equipe ${escapeHtml(SITE_NAME)}</p>
+            <td style="padding:28px;font-family:${SANS};">${body}
             </td>
           </tr>
           <tr>
@@ -324,6 +370,50 @@ ${closing}
 </html>`;
 }
 
+function buildHtml(data: ReservationConfirmationData) {
+  const rows = detailRows(data)
+    .map(([label, value]) => `
+                      <tr>
+                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:14px;color:${BRAND.ink};opacity:0.6;">${escapeHtml(label)}</td>
+                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:15px;font-weight:600;color:${BRAND.ink};text-align:right;">${escapeHtml(value)}</td>
+                      </tr>`)
+    .join("");
+
+  const closing = CLOSING_PARAGRAPHS
+    .map((text) => `
+              <p style="margin:0 0 14px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(text)}</p>`)
+    .join("");
+
+  return emailLayout({
+    title: reservationConfirmationSubject(data.publicCode),
+    preheader: `Sua reserva ${data.publicCode} está confirmada.`,
+    heading: "Reserva confirmada",
+    body: `
+              <p style="margin:0 0 16px;font-size:17px;line-height:26px;font-weight:600;color:${BRAND.ink};">Olá, ${escapeHtml(firstName(data.fullName))}!</p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">Sua reserva está confirmada. Será um prazer receber você para essa experiência!</p>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;margin:0 0 20px;">
+                <tr><td style="padding:4px 0;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}
+                  </table>
+                </td></tr>
+              </table>
+${checkinHtml(data)}
+${highlightCard("Localização", MEETING_LOCATION)}
+${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
+              <div style="height:12px;line-height:12px;">&nbsp;</div>
+${infoSection(PREPARATION_TITLE, bulletList(PREPARATION_ITEMS))}
+${infoSection(DURATION_TITLE, paragraph(DURATION_NOTE))}
+${infoSection(CANCELLATION_TITLE, paragraph(CANCELLATION_NOTE))}
+${infoSection(GROUP_TITLE, paragraph(GROUP_NOTE))}
+              <div style="height:24px;line-height:24px;">&nbsp;</div>
+${closing}
+              <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">Até breve!</p>
+              <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">Equipe ${escapeHtml(SITE_NAME)}</p>
+`,
+  });
+}
+
 export function buildReservationConfirmationEmail(data: ReservationConfirmationData): ConfirmationEmail {
   return {
     to: data.email,
@@ -331,6 +421,82 @@ export function buildReservationConfirmationEmail(data: ReservationConfirmationD
     html: buildHtml(data),
     text: buildText(data),
   };
+}
+
+// --- Lembrete com o QR ("Reenviar QR Code") ---------------------------------
+
+export function checkinReminderSubject(experienceTitle: string) {
+  return `Seu QR Code de check-in — ${experienceTitle}`;
+}
+
+/**
+ * Lembrete enviado pelo painel. Reaproveita a mesma seção do QR — e o mesmo
+ * token — da confirmação. Exige token: sem ele não há o que reenviar.
+ */
+export function buildCheckinReminderEmail(data: ReservationConfirmationData): ConfirmationEmail | null {
+  if (!data.checkinToken) return null;
+  const greeting = `Olá, ${firstName(data.fullName)}!`;
+  const intro = "Passando para confirmar sua experiência na Alma Azul Academy.";
+  const summary: Array<[string, string]> = [
+    ["Experiência", data.experienceTitle],
+    ["Data", formatSessionDate(data.startsAt)],
+    ["Horário", formatSessionTime(data.startsAt)],
+    ["Vagas reservadas", vagasLabel(data.quantity)],
+  ];
+  const instruction = "No dia da experiência, apresente o QR Code abaixo à nossa equipe para realizar seu check-in.";
+
+  const text = [
+    greeting,
+    "",
+    intro,
+    "",
+    ...summary.map(([label, value]) => `${label}: ${value}`),
+    "",
+    instruction,
+    `${CHECKIN_LINK_LABEL}: ${checkinUrl(data.checkinToken)}`,
+    "",
+    `Local: ${MEETING_LOCATION}`,
+    MEETING_TOLERANCE_NOTE,
+    "",
+    "Nos vemos na água!",
+    SITE_NAME,
+    "",
+    "—",
+    `WhatsApp: ${formatWhatsappNumber()}`,
+    `E-mail: ${CONTACT_EMAIL}`,
+    SITE_URL,
+  ].join("\n");
+
+  const summaryRows = summary
+    .map(([label, value]) => `
+                      <tr>
+                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:14px;color:${BRAND.ink};opacity:0.6;">${escapeHtml(label)}</td>
+                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:15px;font-weight:600;color:${BRAND.ink};text-align:right;">${escapeHtml(value)}</td>
+                      </tr>`)
+    .join("");
+
+  const html = emailLayout({
+    title: checkinReminderSubject(data.experienceTitle),
+    preheader: "Seu QR Code de check-in para a experiência na Alma Azul.",
+    heading: "Nos vemos na água!",
+    body: `
+              <p style="margin:0 0 16px;font-size:17px;line-height:26px;font-weight:600;color:${BRAND.ink};">${escapeHtml(greeting)}</p>
+              <p style="margin:0 0 20px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(intro)}</p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;margin:0 0 20px;">
+                <tr><td style="padding:4px 0;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${summaryRows}
+                  </table>
+                </td></tr>
+              </table>
+${checkinHtml(data)}
+${highlightCard("Localização", MEETING_LOCATION)}
+${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
+              <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">Nos vemos na água!</p>
+              <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">${escapeHtml(SITE_NAME)}</p>
+`,
+  });
+
+  return { to: data.email, subject: checkinReminderSubject(data.experienceTitle), html, text };
 }
 
 // --- Leitura defensiva do que vem do banco ----------------------------------
@@ -364,6 +530,7 @@ export function parseReservationConfirmationData(value: unknown): ReservationCon
     quantity: Math.max(1, asNumber(row.quantity)),
     experienceTitle: asString(row.experienceTitle),
     startsAt: asString(row.startsAt),
+    checkinToken: isCheckinToken(row.checkinToken) ? row.checkinToken.toLowerCase() : null,
   };
 
   if (!data.reservationId || !data.publicCode || !data.fullName || !data.startsAt) return null;

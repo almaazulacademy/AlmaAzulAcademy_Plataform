@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CalendarClock, CheckCircle2, Copy, ExternalLink, Mail, MailCheck, MessageCircle, RotateCcw, SearchCheck, Sheet, XCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, Copy, ExternalLink, Mail, MailCheck, MessageCircle, QrCode, RotateCcw, SearchCheck, Sheet, XCircle } from "lucide-react";
 
 import { ChangeSessionDialog } from "@/components/admin/change-session-dialog";
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
@@ -11,12 +11,12 @@ import { Button } from "@/components/ui/button";
 import { reservationMessage } from "@/lib/admin/format";
 import type { ReservationStatus } from "@/lib/reservations/types";
 
-type Action = "confirm" | "cancel" | null;
+type Action = "confirm" | "cancel" | "resendQr" | null;
 type ApiPayload = { message?: string };
 type VerifyPayload = { success?: boolean; outcome?: string; message?: string };
 type SyncPayload = { success?: boolean; outcome?: string; errorCode?: string; message?: string };
 
-export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false, showSheetSync = false, showEmailResend = false }: {
+export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false, showSheetSync = false, showEmailResend = false, showQrResend = false }: {
   reservationId: string;
   status: ReservationStatus;
   fullName: string;
@@ -27,6 +27,8 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   showMessageButton?: boolean;
   showSheetSync?: boolean;
   showEmailResend?: boolean;
+  /** "Reenviar QR Code": só em reserva confirmada com e-mail configurado. */
+  showQrResend?: boolean;
 }) {
   const router = useRouter();
   const { notify } = useToast();
@@ -99,6 +101,15 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
     }
   };
 
+  // Reenvia o QR existente para o e-mail cadastrado. Nunca gera outro token.
+  const resendQr = async () => {
+    const response = await fetch(`/api/admin/reservations/${reservationId}/resend-qr`, { method: "POST" });
+    const payload = await response.json().catch(() => ({})) as SyncPayload;
+    if (!response.ok || !payload.success) throw new Error(payload.message ?? "Não foi possível enviar o QR Code.");
+    notify({ title: "QR Code enviado com sucesso.", description: `Enviado para ${email}.` });
+    setAction(null);
+  };
+
   const copy = async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -158,6 +169,11 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
             <Sheet className="size-4" /> {syncing ? "Sincronizando…" : "Sincronizar planilha"}
           </Button>
         ) : null}
+        {showQrResend && status === "CONFIRMED" ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => setAction("resendQr")}>
+            <QrCode className="size-4" /> Reenviar QR Code
+          </Button>
+        ) : null}
         {showEmailResend ? (
           <Button type="button" size="sm" variant="ghost" disabled={resending} onClick={resendEmail}>
             <MailCheck className="size-4" /> {resending ? "Enviando…" : "Reenviar e-mail"}
@@ -175,6 +191,15 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
         open={changingSession}
         reservationId={reservationId}
         onClose={() => setChangingSession(false)}
+      />
+      <ConfirmationDialog
+        open={action === "resendQr"}
+        title={`Reenviar QR Code para ${email}?`}
+        description="O cliente recebe um lembrete com a experiência, data, horário, vagas e o mesmo QR Code de check-in. Nenhum QR novo é gerado."
+        confirmLabel="Reenviar QR Code"
+        tone="neutral"
+        onClose={() => setAction(null)}
+        onConfirm={resendQr}
       />
       <ConfirmationDialog
         open={action === "confirm"}

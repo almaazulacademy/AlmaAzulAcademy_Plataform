@@ -7,6 +7,8 @@ import { StatusBadge } from "@/components/admin/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
 import { getAdminReservation, listAdminReservationSessionChanges } from "@/lib/admin/data";
+import { lookupCheckin } from "@/lib/checkin/data";
+import { PRESENCE_LABELS, presenceState } from "@/lib/checkin/token";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency, formatMaskedCpf } from "@/lib/admin/format";
 import { isUuid } from "@/lib/admin/validation";
 import { getSheetSyncState, isSheetSyncEnabled } from "@/lib/integrations/google-sheets/service";
@@ -37,6 +39,12 @@ export default async function AdminReservationDetailPage({ params }: { params: P
   const emailEnabled = isConfirmationEmailEnabled();
   const emailState = emailEnabled ? await getConfirmationEmailState(reservation.id) : null;
   const emailStatus = emailState?.status === "SYNCED" ? "SENT" : emailState?.status ?? "NEVER_SENT";
+
+  // Presença (check-in). Informativo e tolerante: sem a migration aplicada, o
+  // detalhe continua igual.
+  const checkin = reservation.status === "CONFIRMED"
+    ? await lookupCheckin(context.profile.userId, { reservationId: reservation.id }).catch(() => null)
+    : null;
 
   const fields = [
     ["Nome", reservation.fullName],
@@ -140,8 +148,22 @@ export default async function AdminReservationDetailPage({ params }: { params: P
           </ul>
         </section>
       ) : null}
+      {checkin ? (
+        <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">Presença</h2>
+            <span className="rounded-full bg-mist px-2.5 py-1 text-xs font-semibold text-ink">{PRESENCE_LABELS[presenceState(checkin.quantity, checkin.checkedInCount)]}</span>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-ink/60">
+            {checkin.checkedInCount === null
+              ? `Aguardando check-in. ${checkin.hasToken ? "O QR Code de check-in já foi gerado para esta reserva." : "O QR Code será gerado quando a migration de check-in for aplicada."}`
+              : `${checkin.checkedInCount} de ${checkin.quantity} presentes · check-in ${checkin.checkinMethod === "QR" ? "por QR Code" : "manual"} em ${formatAdminDateTime(checkin.checkedInAt)}${checkin.checkedInByName ? ` por ${checkin.checkedInByName}` : ""}.`}
+          </p>
+          <Link href={`/admin/presenca/${checkin.sessionId}`} className="mt-4 inline-flex text-sm font-semibold text-lake hover:underline">Abrir lista de presença da turma</Link>
+        </section>
+      ) : null}
       <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Observações</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/60">{reservation.notes ?? "Nenhuma observação informada."}</p></section>
-      <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Ações</h2><p className="mt-2 text-sm text-ink/50">A mensagem é apenas preparada; revise antes do envio.</p><div className="mt-5"><ReservationActions reservationId={reservation.id} status={reservation.status} fullName={reservation.fullName} phone={reservation.phone} email={reservation.email} publicCode={reservation.publicCode} checkoutUrl={reservation.checkoutUrl} showMessageButton showSheetSync={sheetEnabled} showEmailResend={emailEnabled} /></div></section>
+      <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Ações</h2><p className="mt-2 text-sm text-ink/50">A mensagem é apenas preparada; revise antes do envio.</p><div className="mt-5"><ReservationActions reservationId={reservation.id} status={reservation.status} fullName={reservation.fullName} phone={reservation.phone} email={reservation.email} publicCode={reservation.publicCode} checkoutUrl={reservation.checkoutUrl} showMessageButton showSheetSync={sheetEnabled} showEmailResend={emailEnabled} showQrResend={emailEnabled} /></div></section>
     </div>
   );
 }

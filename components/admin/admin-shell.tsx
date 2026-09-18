@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   BookOpenCheck,
   CalendarDays,
+  ClipboardCheck,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -23,6 +24,7 @@ import type { AdminBase, AdminProfile } from "@/lib/admin/types";
 const operations = [
   { href: "/admin/sessoes", label: "Sessões", icon: CalendarDays },
   { href: "/admin/reservas", label: "Reservas", icon: BookOpenCheck },
+  { href: "/admin/presenca", label: "Lista de Presença", icon: ClipboardCheck },
   { href: "/admin/experiencias", label: "Experiências", icon: Waves },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ];
