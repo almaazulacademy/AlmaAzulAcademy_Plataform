@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, ChevronRight, Users } from "lucide-react";
 
+import { QrBulkSender } from "@/components/admin/attendance/qr-bulk-sender";
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { AdminEmptyState, AdminErrorState } from "@/components/admin/states";
 import { requireAdmin } from "@/lib/admin/auth";
@@ -42,6 +43,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
         eyebrow="Reservas"
         title="Lista de Presença"
         description="Escolha a turma, escaneie o QR Code do cliente ou faça o check-in manual."
+        action={context.profile.role === "ADMIN" ? <QrBulkSender /> : undefined}
       />
 
       <nav className="mt-6 flex flex-wrap items-center gap-2" aria-label="Escolher dia">
