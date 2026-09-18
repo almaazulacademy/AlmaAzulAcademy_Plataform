@@ -13,11 +13,13 @@ import {
   MapPin,
   Menu,
   Settings,
+  UsersRound,
   Waves,
   X,
 } from "lucide-react";
 
 import { ToastProvider, useToast } from "@/components/admin/toast-provider";
+import { canManageTeam } from "@/lib/admin/roles";
 import { cn } from "@/lib/utils";
 import type { AdminBase, AdminProfile } from "@/lib/admin/types";
 
@@ -113,7 +115,9 @@ function AdminShellContent({ children, profile, bases }: { children: ReactNode; 
         </div>
         <div>
           <p className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">Operação</p>
-          <div className="space-y-1">{operations.map(renderItem)}</div>
+          <div className="space-y-1">
+            {(canManageTeam(profile.role) ? [...operations, { href: "/admin/equipe", label: "Equipe", icon: UsersRound }] : operations).map(renderItem)}
+          </div>
         </div>
       </nav>
 
