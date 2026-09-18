@@ -20,6 +20,8 @@
 --      concluído, e só depois do envio. Falha de e-mail não grava auditoria:
 --      a reserva continua elegível para nova tentativa.
 --   4. Nenhum token é gerado aqui. Reserva sem token não é elegível.
+--   5. O reenvio individual ("Reenviar QR Code") passa a seguir a mesma regra:
+--      carrega o payload (seção 6a), envia e só então registra (seção 6b).
 
 -- Corte do rollout: a partir daqui o e-mail automático de confirmação já sai
 -- com o QR (PR #17 em produção às 16:02 UTC; margem até 16:10).
@@ -195,13 +197,73 @@ begin
 end;
 $$;
 
--- 6. Grants --------------------------------------------------------------------
+-- 6. Reenvio individual em duas etapas -----------------------------------------
+--
+-- Substituem, no código novo, a antiga `admin_reservation_qr_email`, que grava
+-- CHECKIN_QR_RESENT ANTES do envio. A antiga fica intocada nesta migration: o
+-- código em produção ainda a usa até o deploy deste PR. Depois dele, nada a
+-- chama mais e ela pode ser removida numa limpeza futura.
+
+-- 6a. Payload: só leitura. Não gera token, não grava auditoria, não altera nada.
+create or replace function public.admin_reservation_qr_email_payload(p_actor_id uuid, p_reservation_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  current_status text;
+  current_token uuid;
+begin
+  if not public.is_active_admin(p_actor_id) then
+    raise exception 'ADMIN_FORBIDDEN' using errcode = '42501';
+  end if;
+
+  select status::text, checkin_token into current_status, current_token
+  from public.reservations where id = p_reservation_id;
+
+  if current_status is null or current_status <> 'CONFIRMED' then
+    raise exception 'RESERVATION_NOT_CONFIRMED' using errcode = '22023';
+  end if;
+  if current_token is null then
+    raise exception 'RESERVATION_WITHOUT_TOKEN' using errcode = '22023';
+  end if;
+
+  return public.reservation_confirmation_email(p_reservation_id);
+end;
+$$;
+
+-- 6b. Registro do envio: chamado só depois de o provedor confirmar o envio.
+create or replace function public.admin_reservation_qr_email_complete(p_actor_id uuid, p_reservation_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_active_admin(p_actor_id) then
+    raise exception 'ADMIN_FORBIDDEN' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.reservations where id = p_reservation_id) then
+    raise exception 'RESERVATION_NOT_FOUND' using errcode = 'P0002';
+  end if;
+
+  insert into public.admin_audit_log (actor_user_id, action, entity_type, entity_id, metadata)
+  values (p_actor_id, 'CHECKIN_QR_RESENT', 'RESERVATION', p_reservation_id, jsonb_build_object('source', 'INDIVIDUAL'));
+  return true;
+end;
+$$;
+
+-- 7. Grants --------------------------------------------------------------------
 revoke all on function public.checkin_qr_bulk_cutoff() from public, anon, authenticated;
 revoke all on function public.checkin_qr_bulk_eligibility(uuid) from public, anon, authenticated;
 revoke all on function public.admin_checkin_qr_bulk_candidates(uuid) from public, anon, authenticated;
 revoke all on function public.admin_checkin_qr_bulk_claim(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.admin_checkin_qr_bulk_complete(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.admin_checkin_qr_bulk_fail(uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.admin_reservation_qr_email_payload(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.admin_reservation_qr_email_complete(uuid, uuid) from public, anon, authenticated;
 
 grant execute on function public.checkin_qr_bulk_cutoff() to service_role;
 grant execute on function public.checkin_qr_bulk_eligibility(uuid) to service_role;
@@ -209,3 +271,5 @@ grant execute on function public.admin_checkin_qr_bulk_candidates(uuid) to servi
 grant execute on function public.admin_checkin_qr_bulk_claim(uuid, uuid) to service_role;
 grant execute on function public.admin_checkin_qr_bulk_complete(uuid, uuid) to service_role;
 grant execute on function public.admin_checkin_qr_bulk_fail(uuid, uuid, text) to service_role;
+grant execute on function public.admin_reservation_qr_email_payload(uuid, uuid) to service_role;
+grant execute on function public.admin_reservation_qr_email_complete(uuid, uuid) to service_role;

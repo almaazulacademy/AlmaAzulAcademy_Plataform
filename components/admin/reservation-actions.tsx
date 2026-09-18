@@ -105,6 +105,12 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   const resendQr = async () => {
     const response = await fetch(`/api/admin/reservations/${reservationId}/resend-qr`, { method: "POST" });
     const payload = await response.json().catch(() => ({})) as SyncPayload;
+    if (payload.outcome === "SENT_NOT_RECORDED") {
+      // Estado ambíguo: fecha o diálogo para não convidar a um reenvio imediato.
+      setAction(null);
+      notify({ title: "Envio não registrado", description: payload.message, variant: "error" });
+      return;
+    }
     if (!response.ok || !payload.success) throw new Error(payload.message ?? "Não foi possível enviar o QR Code.");
     notify({ title: "QR Code enviado com sucesso.", description: `Enviado para ${email}.` });
     setAction(null);

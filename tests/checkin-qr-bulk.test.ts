@@ -5,10 +5,17 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 
 import { runQrBulk, type QrBulkClaim, type QrBulkDeps } from "../lib/checkin/qr-bulk.ts";
+import { deliverQrReminder } from "../lib/checkin/qr-reminder.ts";
+import { buildCheckinReminderEmail, parseReservationConfirmationData, type ConfirmationEmail } from "../lib/reservations/confirmation-email.ts";
 import { EmailProviderError, sanitizeEmailErrorCode } from "../lib/email/email-provider.ts";
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+/** Só o SQL executável: comentários mencionam a RPC antiga de propósito. */
+function statements(text: string) {
+  return text.split("\n").filter((line) => !line.trimStart().startsWith("--")).join("\n");
 }
 
 // =============================================================================
@@ -218,6 +225,125 @@ test("reserva cancelada entre a listagem e o envio é ignorada na revalidação"
   const report = await runQrBulk(ids, dbDeps(db, async () => undefined));
   assert.equal(report.sent, 2);
   assert.deepEqual(report.skipped, { NOT_CONFIRMED: 1 });
+});
+
+// =============================================================================
+// Reenvio individual ("Reenviar QR Code"): carregar → enviar → registrar
+// =============================================================================
+
+/** Liga o fluxo individual ao banco de teste; o envio é injetado (nada sai). */
+function individual(db: PGlite, reservationId: string, send: (message: ConfirmationEmail) => Promise<void>, events: string[] = [], recordFails = false) {
+  return deliverQrReminder<ConfirmationEmail>({
+    load: async () => {
+      events.push("load");
+      return (await db.query<{ j: unknown }>("select public.admin_reservation_qr_email_payload($1, $2) j", [ADMIN, reservationId])).rows[0].j;
+    },
+    build: (payload) => {
+      const data = parseReservationConfirmationData(payload);
+      return data ? buildCheckinReminderEmail(data) : null;
+    },
+    send: async (message) => { events.push("send"); await send(message); },
+    record: async () => {
+      events.push("record");
+      if (recordFails) throw new Error("AUDIT_UNAVAILABLE");
+      await db.query("select public.admin_reservation_qr_email_complete($1, $2)", [ADMIN, reservationId]);
+    },
+    sanitizeError: sanitizeEmailErrorCode,
+  });
+}
+
+async function resentAudit(db: PGlite, reservationId: string) {
+  return (await db.query<{ source: string }>(
+    "select metadata->>'source' as source from public.admin_audit_log where entity_id = $1 and action = 'CHECKIN_QR_RESENT'",
+    [reservationId],
+  )).rows.map((row) => row.source);
+}
+
+test("individual: sucesso registra CHECKIN_QR_RESENT só depois do envio, com o token existente", async () => {
+  const db = await database();
+  const token = (await tokens(db)).find((row) => row.id === R.eligible)?.t;
+  const events: string[] = [];
+  const messages: ConfirmationEmail[] = [];
+  const result = await individual(db, R.eligible, async (message) => {
+    // No momento do envio ainda não existe registro.
+    assert.deepEqual(await resentAudit(db, R.eligible), []);
+    messages.push(message);
+  }, events);
+
+  assert.deepEqual(result, { outcome: "SENT" });
+  assert.deepEqual(events, ["load", "send", "record"]);
+  assert.deepEqual(await resentAudit(db, R.eligible), ["INDIVIDUAL"]);
+  assert.ok(token && messages[0].html.includes(`/checkin/${token}`));
+  assert.equal((await tokens(db)).find((row) => row.id === R.eligible)?.t, token);
+});
+
+test("individual: falha do provedor não registra nada e a nova tentativa funciona", async () => {
+  const db = await database();
+  const before = await tokens(db);
+  const failed = await individual(db, R.eligible, async () => { throw new EmailProviderError("HTTP_503", true); });
+  assert.deepEqual(failed, { outcome: "FAILED", errorCode: "HTTP_503" });
+  assert.deepEqual(await resentAudit(db, R.eligible), []);
+
+  const retry = await individual(db, R.eligible, async () => undefined);
+  assert.equal(retry.outcome, "SENT");
+  assert.deepEqual(await resentAudit(db, R.eligible), ["INDIVIDUAL"]);
+  assert.deepEqual(await tokens(db), before);
+});
+
+test("individual: reserva não confirmada é recusada sem enviar", async () => {
+  const db = await database();
+  let sends = 0;
+  for (const id of [R.cancelled, R.expired]) {
+    const result = await individual(db, id, async () => { sends += 1; });
+    assert.deepEqual(result, { outcome: "NOT_AVAILABLE", errorCode: "NOT_CONFIRMED" });
+  }
+  assert.equal(sends, 0);
+  await assert.rejects(db.query("select public.admin_reservation_qr_email_payload($1, $2)", [OUTSIDER, R.eligible]), /ADMIN_FORBIDDEN/);
+  await assert.rejects(db.query("select public.admin_reservation_qr_email_complete($1, $2)", [OUTSIDER, R.eligible]), /ADMIN_FORBIDDEN/);
+});
+
+test("individual: reserva confirmada sem token é recusada e nenhum token é gerado", async () => {
+  const db = await database();
+  const result = await individual(db, R.noToken, async () => undefined);
+  assert.deepEqual(result, { outcome: "NOT_AVAILABLE", errorCode: "NO_TOKEN" });
+  assert.equal((await tokens(db)).find((row) => row.id === R.noToken)?.t, null);
+});
+
+test("individual: carregar o payload não altera a reserva", async () => {
+  const db = await database();
+  const snapshot = async () => (await db.query("select * from public.reservations order by id")).rows;
+  const before = await snapshot();
+  await db.query("select public.admin_reservation_qr_email_payload($1, $2)", [ADMIN, R.eligible]);
+  assert.deepEqual(await snapshot(), before);
+  assert.deepEqual(await resentAudit(db, R.eligible), []);
+});
+
+test("individual: envio ok + falha ao registrar = estado ambíguo explícito", async () => {
+  const db = await database();
+  const result = await individual(db, R.eligible, async () => undefined, [], true);
+  assert.deepEqual(result, { outcome: "SENT_NOT_RECORDED", errorCode: "AUDIT_UNAVAILABLE" });
+  const route = source("app/api/admin/reservations/[reservationId]/resend-qr/route.ts");
+  assert.match(route, /E-mail possivelmente enviado, mas não foi possível registrar o envio\. Não reenvie imediatamente\./);
+  assert.match(source("lib/reservations/confirmation-email-service.ts"), /sent_not_recorded/);
+});
+
+test("individual x lote: sucesso sai do lote; falha continua elegível", async () => {
+  const db = await database();
+  await individual(db, R.eligible, async () => undefined);
+  await individual(db, R.eligible2, async () => { throw new EmailProviderError("HTTP_500", true); });
+  assert.equal(await eligibility(db, R.eligible), "ALREADY_RESENT");
+  assert.equal(await eligibility(db, R.eligible2), "ELIGIBLE");
+  assert.deepEqual(await candidates(db), [R.eligible2, R.oldConfirmation].sort());
+});
+
+test("transição segura: RPC antiga intocada pela migration e fora do código novo", async () => {
+  const migration = statements(source("supabase/migrations/202609190001_checkin_qr_bulk.sql"));
+  assert.doesNotMatch(migration, /admin_reservation_qr_email\(/);
+  assert.doesNotMatch(source("lib/reservations/confirmation-email-service.ts"), /rpc\("admin_reservation_qr_email"/);
+  // E ela continua funcionando para o código ainda em produção.
+  const db = await database();
+  const old = await db.query<{ j: Record<string, unknown> }>("select public.admin_reservation_qr_email($1, $2) j", [ADMIN, R.eligible]);
+  assert.ok(old.rows[0].j.checkinToken);
 });
 
 // =============================================================================
