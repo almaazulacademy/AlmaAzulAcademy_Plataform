@@ -58,6 +58,51 @@ const people: Person[] = [
   },
 ];
 
+type Instructor = {
+  id: string;
+  name: string;
+  image: { src: string; alt: string; position: string };
+};
+
+const instructors: Instructor[] = [
+  {
+    id: "isabella",
+    name: "Isabella",
+    image: {
+      src: "/images/quem-somos/isabella.jpg",
+      alt: "Isabella - instrutora da Alma Azul Academy",
+      position: "50% 22%",
+    },
+  },
+  {
+    id: "marilia",
+    name: "Marília",
+    image: {
+      src: "/images/quem-somos/marilia.jpg",
+      alt: "Marília - instrutora da Alma Azul Academy",
+      position: "50% 35%",
+    },
+  },
+  {
+    id: "matheus",
+    name: "Matheus",
+    image: {
+      src: "/images/quem-somos/matheus.jpg",
+      alt: "Matheus - instrutor da Alma Azul Academy",
+      position: "50% 22%",
+    },
+  },
+  {
+    id: "thiago",
+    name: "Thiago",
+    image: {
+      src: "/images/quem-somos/thiago.jpg",
+      alt: "Thiago - instrutor da Alma Azul Academy",
+      position: "50% 22%",
+    },
+  },
+];
+
 export default function QuemSomosPage() {
   return (
     <main className="min-h-screen bg-paper pt-24">
@@ -106,6 +151,26 @@ export default function QuemSomosPage() {
       {people.map((person) => (
         <PersonSection key={person.id} person={person} />
       ))}
+
+      <section id="instrutores" aria-labelledby="instrutores-titulo" className="scroll-mt-20 bg-white py-20 sm:py-28 lg:py-32">
+        <div className="container">
+          <header className="reveal-on-scroll mx-auto max-w-2xl text-center">
+            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-lake">Equipe</p>
+            <h2
+              id="instrutores-titulo"
+              className="text-balance text-4xl font-medium leading-[0.95] tracking-[-0.05em] text-forest sm:text-5xl"
+            >
+              Nossos instrutores
+            </h2>
+          </header>
+
+          <div className="mt-14 grid grid-cols-2 gap-x-6 gap-y-10 sm:gap-x-8 sm:gap-y-12 lg:mt-16 lg:grid-cols-4 lg:gap-x-10">
+            {instructors.map((instructor) => (
+              <InstructorCard key={instructor.id} instructor={instructor} />
+            ))}
+          </div>
+        </div>
+      </section>
 
       <Footer />
       <WhatsappFloatButton />
@@ -171,5 +236,25 @@ function PersonSection({ person }: { person: Person }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function InstructorCard({ instructor }: { instructor: Instructor }) {
+  return (
+    <figure className="reveal-on-scroll text-center">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-3xl sm:rounded-4xl">
+        <Image
+          src={instructor.image.src}
+          alt={instructor.image.alt}
+          fill
+          sizes="(min-width: 1024px) 22vw, 45vw"
+          className="object-cover"
+          style={{ objectPosition: instructor.image.position }}
+        />
+      </div>
+      <figcaption className="mt-5 text-lg font-medium tracking-[-0.02em] text-ink sm:text-xl">
+        {instructor.name}
+      </figcaption>
+    </figure>
   );
 }
