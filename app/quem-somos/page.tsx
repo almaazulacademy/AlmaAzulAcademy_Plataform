@@ -66,20 +66,20 @@ type Instructor = {
 
 const instructors: Instructor[] = [
   {
-    id: "isabella",
-    name: "Isabella",
+    id: "marilia",
+    name: "Marília",
     image: {
       src: "/images/quem-somos/isabella.jpg",
-      alt: "Isabella - instrutora da Alma Azul Academy",
+      alt: "Marília - instrutora da Alma Azul Academy",
       position: "50% 22%",
     },
   },
   {
-    id: "marilia",
-    name: "Marília",
+    id: "isabella",
+    name: "Isabella",
     image: {
       src: "/images/quem-somos/marilia.jpg",
-      alt: "Marília - instrutora da Alma Azul Academy",
+      alt: "Isabella - instrutora da Alma Azul Academy",
       position: "50% 35%",
     },
   },
