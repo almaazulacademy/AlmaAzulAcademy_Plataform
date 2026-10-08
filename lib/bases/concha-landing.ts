@@ -1,8 +1,10 @@
 /**
- * Conteúdo da landing da Base Concha Acústica (em breve).
+ * Conteúdo da landing da Base Cápsula Bar — Concha Acústica.
  *
- * Só copy e mídia. Nada aqui altera banco, sessões, valores ou status: a página
- * continua fechada enquanto `bases.status` não for ACTIVE.
+ * Só copy e mídia. Nada aqui altera banco, sessões, valores ou status. A página
+ * tem dois estados, decididos por `bases.status`: fechada ("em breve") e aberta
+ * (`open`), quando as experiências publicadas ganham o caminho de reserva.
+ * Datas, valores e vagas nunca ficam aqui — vêm das sessões, no banco.
  *
  * As fotos e o vídeo com canoas são registros reais da Alma Azul no Lago
  * Paranoá — ainda não foram produzidos na nova base. Por isso aparecem sempre
@@ -22,6 +24,7 @@ export const CONCHA_LANDING = {
   mediaCredit: "Registros de experiências Alma Azul no Lago Paranoá",
   hero: {
     eyebrow: "Nova base · Em breve",
+    open: { eyebrow: "Nova base · Cápsula Bar — Concha Acústica", cta: "Ver datas e reservar" },
     title: "Alma Azul na Concha Acústica",
     description: "Uma nova forma de viver o Lago Paranoá, agora a partir de um dos lugares mais especiais de Brasília.",
     image: {
@@ -47,8 +50,8 @@ export const CONCHA_LANDING = {
       mobile: `${IMG}/capsula-entrada-mobile.webp`,
       alt: "Entrada do Cápsula Bar iluminada à noite, sob uma árvore, com o letreiro do Cápsula Bar",
     },
-    // Endereço do Cápsula. Ponto de encontro das experiências continua sendo
-    // divulgado junto com a programação — a base segue fechada.
+    // Endereço do Cápsula Bar enquanto a base não tem a localização no banco.
+    // Com a base aberta, ponto de encontro, endereço e mapa vêm de `public.bases`.
     address: { line: "SHTN Trecho 1, Lote 8", hint: "Próximo à Concha Acústica" },
   },
   // Cápsula como nova base. Só fatos fornecidos pela Alma Azul: origem na
@@ -86,24 +89,34 @@ export const CONCHA_LANDING = {
     eyebrow: "Base Alma Azul · Cápsula Bar",
     title: "Experiências de Canoa Havaiana",
     description: "A programação ainda não está aberta. Estas são as remadas planejadas para a nova base.",
+    open: {
+      description: "As reservas da nova base estão abertas. As experiências marcadas como em breve recebem datas em seguida.",
+      cta: "Ver datas e reservar",
+    },
+    // `slugs` liga cada card às experiências do catálogo: é o status delas no
+    // banco que decide se o card leva para a reserva ou mostra "Em breve".
     items: [
       {
+        slugs: ["caminhos-do-paranoa-rota-ermida-ponte-jk", "caminhos-do-paranoa-rota-prainha-do-congresso"],
         title: "Caminhos do Paranoá",
         summary: "Uma remada para descobrir Brasília por outro ponto de vista.",
-        routes: ["Rota JK · Ermida", "Rota Prainha"],
+        routes: ["Rota Ermida x Ponte JK", "Rota Prainha do Congresso"],
         image: { src: `${IMG}/experiencia-caminhos-do-paranoa.webp`, alt: "Canoa havaiana da Alma Azul no Lago Paranoá com a Ponte JK ao fundo", position: "50% 62%" },
       },
       {
+        slugs: ["remada-nascer-do-sol-concha-acustica"],
         title: "Remada do Nascer do Sol",
         summary: "O dia começando devagar, com o sol nascendo sobre o Lago Paranoá.",
         image: { src: `${IMG}/experiencia-remada-do-nascer-do-sol.webp`, alt: "Silhueta de uma canoa havaiana ao nascer do sol no Lago Paranoá", position: "50% 50%" },
       },
       {
+        slugs: ["remada-sunset-concha-acustica"],
         title: "Remada Sunset",
         summary: "As últimas luzes do dia vistas de dentro de uma canoa havaiana.",
         image: { src: `${IMG}/experiencia-remada-sunset.webp`, alt: "Canoa havaiana sob nuvens alaranjadas do pôr do sol no Lago Paranoá", position: "50% 50%" },
       },
       {
+        slugs: ["remada-lua-cheia-concha-acustica"],
         title: "Remada da Lua Cheia",
         summary: "Uma remada noturna guiada pelo ritmo da água e pela luz da lua.",
         image: { src: `${IMG}/experiencia-remada-da-lua-cheia.webp`, alt: "Canoas havaianas no Lago Paranoá com a lua cheia nascendo no horizonte", position: "50% 50%" },
@@ -121,8 +134,8 @@ export const CONCHA_LANDING = {
       { src: `${IMG}/caminhos-do-paranoa-ambiente-02.webp`, alt: "Grupo remando em canoa havaiana sob céu azul no Lago Paranoá" },
     ],
     routes: [
-      { title: "Rota JK · Ermida", description: "Uma remada contemplativa da Ponte JK, com parada na prainha da Ermida Dom Bosco." },
-      { title: "Rota Prainha", description: "Remada em direção à região da prainha do Clube do Congresso." },
+      { title: "Rota Ermida x Ponte JK", description: "Uma remada contemplativa da Ponte JK, com parada na prainha da Ermida Dom Bosco." },
+      { title: "Rota Prainha do Congresso", description: "Remada em direção à região da prainha do Clube do Congresso." },
     ],
     note: "Duração, distância e nível de cada roteiro serão divulgados junto com a programação.",
   },
@@ -130,5 +143,10 @@ export const CONCHA_LANDING = {
     title: "Uma nova base está chegando.",
     description: "A programação da Alma Azul na Concha Acústica será anunciada em breve.",
     secondaryLabel: "Ver experiências do Lago Norte",
+    open: {
+      title: "A nova base está aberta.",
+      description: "Escolha a sua data e venha remar a partir do Cápsula Bar, ao lado da Concha Acústica.",
+      cta: "Ver datas e reservar",
+    },
   },
 } as const;

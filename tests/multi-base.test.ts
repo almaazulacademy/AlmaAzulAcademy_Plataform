@@ -306,25 +306,34 @@ test("mídia da base é só local e fotos temporárias da Concha estão registra
   assert.match(source("app/bases/[slug]/page.tsx"), /BaseSpaceMedia/);
 });
 
-test("bloqueadores de ativação da Concha estão registrados no código e na documentação", () => {
-  assert.match(source("lib/reservations/confirmation-email.ts"), /BLOQUEADOR MULTI-BASE[\s\S]*bases\.address[\s\S]*export const MEETING_LOCATION/);
-  assert.match(source("lib/integrations/google-sheets/schema.ts"), /BLOQUEADOR MULTI-BASE/);
+test("bloqueadores de ativação da segunda base foram resolvidos no código e na documentação", () => {
+  // Local de encontro vem da base da reserva; a constante é só o valor do Lago Norte.
+  const email = source("lib/reservations/confirmation-email.ts");
+  assert.doesNotMatch(email, /BLOQUEADOR MULTI-BASE/);
+  assert.match(email, /parseBaseLocation\(row\) \?\? LAGO_NORTE_LOCATION/);
+  // Planilha: a base viaja no título das turmas fora do Lago Norte.
+  assert.doesNotMatch(source("lib/integrations/google-sheets/schema.ts"), /BLOQUEADOR MULTI-BASE/);
+  assert.match(source("lib/integrations/google-sheets/mapping.ts"), /export function sheetExperienceTitle/);
   const doc = source("docs/multi-base.md");
-  assert.match(doc, /## Bloqueadores antes de ativar a Concha Acústica/);
-  assert.match(doc, /MEETING_LOCATION/);
-  assert.match(doc, /Base no Google Sheets/);
+  assert.match(doc, /Cápsula Bar — Concha Acústica/);
+  assert.match(doc, /202610080001_capsula_bar_launch\.sql/);
+  assert.doesNotMatch(doc, /## Bloqueadores antes de ativar a Concha Acústica/);
 });
 
-test("landing da Concha é só conteúdo: sem reserva, com mídia local e leve", async () => {
+test("landing da Concha: mídia local e leve, sem preço nem data, e reserva só com a base ativa", async () => {
   const { CONCHA_LANDING } = await import("../lib/bases/concha-landing.ts");
   const landing = source("components/bases/concha-landing.tsx");
   const copy = JSON.stringify(CONCHA_LANDING);
-  // Nenhum caminho de compra: sem agenda, reserva, checkout, preço ou lista de espera.
-  for (const forbidden of [/\/agenda/, /reserv/i, /comprar/i, /checkout/i, /R\$/, /pre[çc]o/i, /lista de espera/i, /\/experiencias\/[a-z]/]) {
+  // Sem checkout, preço, vagas ou lista de espera: isso vem das sessões, na página da experiência.
+  for (const forbidden of [/comprar/i, /checkout/i, /R\$/, /pre[çc]o/i, /lista de espera/i]) {
     assert.equal(forbidden.test(landing) || forbidden.test(copy), false, String(forbidden));
   }
-  // A landing só substitui a página padrão enquanto a base está fechada.
-  assert.match(source("app/bases/[slug]/page.tsx"), /base\.slug === "concha-acustica" && !bookable/);
+  // O único caminho de reserva é o link para a experiência publicada, e só existe com a base ativa.
+  assert.doesNotMatch(landing, /\/agenda|\/reservar\//);
+  assert.match(landing, /const firstOpen = bookable \?/);
+  assert.match(landing, /const reserveHref = firstOpen \? `\/experiencias\/\$\{firstOpen\.slug\}` : null/);
+  // A landing editorial é a página da base nos dois estados (fechada e aberta).
+  assert.match(source("app/bases/[slug]/page.tsx"), /base\.slug === "concha-acustica"\) \{\s+return <ConchaLanding base=\{base\} fallbackBase=\{fallbackBase\} bookable=\{bookable\}/);
   // Registros do Lago Paranoá sempre identificados; nada de Drive ou URL externa.
   assert.equal(CONCHA_LANDING.mediaCredit, "Registros de experiências Alma Azul no Lago Paranoá");
   assert.equal(/https?:\/\//.test(copy), false);

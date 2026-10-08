@@ -1,3 +1,5 @@
+import type { BaseLocation } from "../bases/location.ts";
+
 export const RESERVATION_STATUSES = ["PRE_RESERVED", "CONFIRMED", "EXPIRED", "CANCELLED"] as const;
 
 export type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
@@ -23,6 +25,8 @@ export type ReservationDetails = {
   checkoutUrl: string | null;
   fullName: string;
   session: BookingSession;
+  /** Local de encontro, da base da experiência reservada. null se a base não puder ser lida. */
+  location: BaseLocation | null;
 };
 
 export type CreateReservationInput = {

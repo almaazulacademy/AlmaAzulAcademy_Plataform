@@ -6,7 +6,7 @@ import { ReservationActions } from "@/components/admin/reservation-actions";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
-import { getAdminReservation, listAdminReservationSessionChanges } from "@/lib/admin/data";
+import { getAdminReservation, listAdminExperiences, listAdminReservationSessionChanges } from "@/lib/admin/data";
 import { lookupCheckin } from "@/lib/checkin/data";
 import { PRESENCE_LABELS, presenceState } from "@/lib/checkin/token";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency, formatMaskedCpf } from "@/lib/admin/format";
@@ -46,6 +46,11 @@ export default async function AdminReservationDetailPage({ params }: { params: P
     ? await lookupCheckin(context.profile.userId, { reservationId: reservation.id }).catch(() => null)
     : null;
 
+  // Base da reserva: vem da experiência da sessão (reserva → sessão →
+  // experiência → base). Informativo; uma falha aqui não esconde o detalhe.
+  const baseName = (await listAdminExperiences(context.profile.userId).catch(() => []))
+    .find((experience) => experience.id === reservation.experienceId)?.baseName ?? null;
+
   const fields = [
     ["Nome", reservation.fullName],
     ["CPF", formatMaskedCpf(reservation.cpfLast4)],
@@ -55,6 +60,7 @@ export default async function AdminReservationDetailPage({ params }: { params: P
     ["Valor unitário", formatCurrency(reservation.unitPriceCents)],
     ["Valor total", formatCurrency(reservation.totalCents)],
     ["Sessão", `${reservation.experienceTitle} · ${formatSessionDateTime(reservation.startsAt)}`],
+    ...(baseName ? [["Base", baseName]] : []),
     ["Código da reserva", reservation.publicCode],
     ["Criada em", formatAdminDateTime(reservation.createdAt)],
     ["Expiração", formatAdminDateTime(reservation.expiresAt)],

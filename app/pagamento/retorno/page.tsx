@@ -5,6 +5,7 @@ import { CheckCircle2, Clock3, MessageCircle } from "lucide-react";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
+import { BaseLocationCard } from "@/components/bases/base-location";
 import { SessionTurma } from "@/components/reservation/session-turma";
 import { buttonVariants } from "@/components/ui/button";
 import { isUuid } from "@/lib/admin/validation";
@@ -65,14 +66,14 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
 
   // Só busca experiência e horário depois de confirmar, e só com um UUID válido:
   // evita consulta desnecessária e enumeração por parâmetro arbitrário na URL.
-  let summary: ReservationConfirmationSummary = { experienceTitle: "", startsAt: "" };
+  let summary: ReservationConfirmationSummary = { experienceTitle: "", startsAt: "", location: null };
   if (confirmed && isUuid(orderId)) {
     const admin = getSupabaseAdminClient();
     if (admin) {
       try {
         summary = await getReservationConfirmationSummary(admin, orderId);
       } catch {
-        summary = { experienceTitle: "", startsAt: "" };
+        summary = { experienceTitle: "", startsAt: "", location: null };
       }
     }
   }
@@ -103,6 +104,10 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
                   className="mx-auto mt-8 max-w-lg text-left"
                 />
               ) : null}
+
+              {/* O local vem da base da experiência reservada: uma Remada Sunset
+                  do Cápsula Bar nunca mostra o endereço do Lago Norte. */}
+              {summary.location ? <BaseLocationCard location={summary.location} className="mx-auto mt-4 max-w-lg bg-paper" /> : null}
 
               <p className="mx-auto mt-6 max-w-lg leading-7 text-ink/65">
                 Obrigado por escolher viver essa experiência com a Alma Azul Academy.

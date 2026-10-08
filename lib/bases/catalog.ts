@@ -23,6 +23,10 @@ function order(value: unknown) {
  *
  * Só é usado quando o Supabase não responde ou a migration ainda não foi
  * aplicada. Uma resposta válida do banco sempre prevalece.
+ *
+ * Fica de propósito no estado mais conservador (segunda base "em breve"): sem
+ * banco não há reserva possível, então o espelho nunca oferece uma. Nome,
+ * endereço e abertura da Base Cápsula Bar — Concha Acústica vêm do banco.
  */
 export const FALLBACK_BASES: PublicBase[] = [
   {
@@ -35,6 +39,8 @@ export const FALLBACK_BASES: PublicBase[] = [
       "É daqui que saem todas as experiências da Alma Azul hoje. Uma base à beira do Lago Paranoá, perto de um dos trechos mais preservados de Brasília, com canoas havaianas, equipamentos e instrutores prontos para receber quem nunca remou e quem já é da casa.",
     locationLabel: "Lago Norte · Brasília",
     address: "QL 5 Conjunto 5 - Lago Norte",
+    meetingPoint: null,
+    mapsUrl: null,
     partnerName: null,
     imageUrl: "/images/experiences/imersao-paranoa/lago/vista-aerea-lago.webp",
     displayOrder: 0,
@@ -49,6 +55,8 @@ export const FALLBACK_BASES: PublicBase[] = [
       "Uma nova forma de viver o Lago Paranoá: remadas que partem do coração de Brasília, com a cidade vista a partir da água. A programação ainda não está aberta.",
     locationLabel: "Concha Acústica · Brasília",
     address: null,
+    meetingPoint: null,
+    mapsUrl: null,
     partnerName: "Cápsula Bar",
     imageUrl: "/images/experiences/remada-sunset/remada-sunset-sobre.webp",
     displayOrder: 1,
@@ -124,6 +132,8 @@ export function mapPublicBase(row: Row): PublicBase | null {
     description: text(row.description),
     locationLabel: text(row.location_label),
     address: nullableText(row.address),
+    meetingPoint: nullableText(row.meeting_point),
+    mapsUrl: nullableText(row.maps_url),
     partnerName: nullableText(row.partner_name),
     imageUrl: nullableText(row.image_url),
     displayOrder: order(row.display_order),

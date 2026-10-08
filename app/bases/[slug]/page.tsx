@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Compass, Droplets, LifeBuoy, MapPin, Navigation, ShieldCheck, Sparkles, Waves, type LucideIcon } from "lucide-react";
+import { ArrowRight, Compass, Droplets, LifeBuoy, MapPin, ShieldCheck, Sparkles, Waves, type LucideIcon } from "lucide-react";
 
 import { ActiveBaseBadge, ComingSoonBadge, PartnerBadge } from "@/components/bases/badges";
+import { BaseMapLink } from "@/components/bases/base-location";
 import { BaseSpaceMedia } from "@/components/bases/base-media";
 import { BaseExperienceCard } from "@/components/bases/experience-cards";
 import { ConchaLanding } from "@/components/bases/concha-landing";
@@ -19,6 +20,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { baseStatusLabel, experiencesForBase, isBaseBookable } from "@/lib/bases/availability";
 import { basePageContent } from "@/lib/bases/content";
 import { publicExperienceTitle } from "@/lib/bases/labels";
+import { baseLocation, locationMapLink } from "@/lib/bases/location";
 import { getPublicBase, listCatalogExperiences, listPublicBases } from "@/lib/bases/data";
 import { isTemporaryMedia, TEMPORARY_MEDIA_LABEL } from "@/lib/bases/media";
 
@@ -51,14 +53,13 @@ export default async function BasePage({ params }: Props) {
   const bookable = isBaseBookable(base);
   const experiences = experiencesForBase(catalog, base.slug);
   const fallbackBase = bases.find((item) => item.slug !== base.slug && isBaseBookable(item)) ?? null;
-  const mapLink = base.address
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${base.address}, Brasília - DF`)}`
-    : null;
+  const location = baseLocation(base);
+  const mapLink = locationMapLink(location);
 
-  // Landing editorial da Concha só enquanto a base estiver fechada. Ao ativar a
-  // base, a página volta ao modelo padrão, com agenda e reservas.
-  if (base.slug === "concha-acustica" && !bookable) {
-    return <ConchaLanding base={base} fallbackBase={fallbackBase} />;
+  // A base do Cápsula Bar tem landing editorial própria, nos dois estados:
+  // fechada (só conteúdo) e aberta (com o caminho de reserva das publicadas).
+  if (base.slug === "concha-acustica") {
+    return <ConchaLanding base={base} fallbackBase={fallbackBase} bookable={bookable} experiences={experiences} />;
   }
 
   return (
@@ -98,18 +99,12 @@ export default async function BasePage({ params }: Props) {
                   <MapPin aria-hidden="true" className="mt-1 size-4 shrink-0 text-lake" />
                   <span>
                     {base.locationLabel}
+                    {base.meetingPoint ? <span className="mt-1 block text-base font-normal text-ink/60">{base.meetingPoint}</span> : null}
                     {base.address ? <span className="mt-1 block text-base font-normal text-ink/60">{base.address}</span> : null}
                   </span>
                 </dd>
                 {mapLink ? (
-                  <a
-                    href={mapLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-lake underline-offset-4 hover:underline"
-                  >
-                    <Navigation aria-hidden="true" className="size-4" /> Abrir no mapa
-                  </a>
+                  <BaseMapLink location={location} className="mt-3" />
                 ) : !bookable ? (
                   <p className="mt-2 text-sm text-ink/50">O ponto de encontro será divulgado junto com a programação.</p>
                 ) : null}

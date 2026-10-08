@@ -4,13 +4,16 @@ import { ArrowDown, ArrowRight, MapPin } from "lucide-react";
 
 import { AmbientVideo } from "@/components/bases/ambient-video";
 import { CapsulaStory } from "@/components/bases/capsula-story";
-import { ComingSoonBadge } from "@/components/bases/badges";
+import { ActiveBaseBadge, ComingSoonBadge } from "@/components/bases/badges";
+import { BaseMapLink } from "@/components/bases/base-location";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { buttonVariants } from "@/components/ui/button";
 import { CONCHA_LANDING as C } from "@/lib/bases/concha-landing";
-import type { PublicBase } from "@/lib/bases/types";
+import { isExperienceBookable } from "@/lib/bases/availability";
+import { baseLocation, locationAddressLine, locationHeadline } from "@/lib/bases/location";
+import type { CatalogExperience, PublicBase } from "@/lib/bases/types";
 
 function MediaCredit({ className }: { className?: string }) {
   return <p className={className ?? "text-xs text-white/60"}>{C.mediaCredit}</p>;
@@ -51,14 +54,35 @@ function EntrancePicture() {
 }
 
 /**
- * Landing da Base Concha Acústica enquanto a base está em breve.
+ * Landing da Base Cápsula Bar — Concha Acústica.
  *
- * Só conteúdo: nenhum caminho de compra, datas ou valores. As mídias com
- * canoas são registros da Alma Azul no Lago Paranoá (não da nova base) e são
- * sempre acompanhadas de `C.mediaCredit`.
+ * Fechada (`bookable` falso): só conteúdo, sem nenhum caminho de compra.
+ * Aberta: a mesma página, com o local de encontro vindo do banco e a reserva
+ * nas experiências que já estão publicadas — as demais seguem "em breve".
+ * Datas, valores e vagas nunca aparecem aqui: ficam na página da experiência.
+ *
+ * As mídias com canoas são registros da Alma Azul no Lago Paranoá (não da nova
+ * base) e são sempre acompanhadas de `C.mediaCredit`.
  */
-export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallbackBase: PublicBase | null }) {
+export function ConchaLanding({
+  base,
+  fallbackBase,
+  bookable = false,
+  experiences = [],
+}: {
+  base: PublicBase;
+  fallbackBase: PublicBase | null;
+  bookable?: boolean;
+  experiences?: CatalogExperience[];
+}) {
   const fallbackHref = fallbackBase ? `/bases/${fallbackBase.slug}` : "/experiencias";
+  const location = baseLocation(base);
+  const locationAddress = locationAddressLine(location);
+  // Experiência reservável de cada card: a primeira publicada entre os slugs dele.
+  const openExperience = (slugs: readonly string[]) =>
+    bookable ? experiences.find((item) => slugs.includes(item.slug) && isExperienceBookable(item, base)) ?? null : null;
+  const firstOpen = bookable ? experiences.find((item) => isExperienceBookable(item, base)) ?? null : null;
+  const reserveHref = firstOpen ? `/experiencias/${firstOpen.slug}` : null;
 
   return (
     <main>
@@ -72,13 +96,20 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
 
         <div className="container relative z-10 flex flex-1 items-end pb-20 pt-32 sm:pb-24 lg:items-center lg:pb-0">
           <div className="max-w-3xl animate-fade-up">
-            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-sand">{C.hero.eyebrow}</p>
+            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-sand">{bookable ? C.hero.open.eyebrow : C.hero.eyebrow}</p>
             <h1 className="text-balance text-[clamp(3rem,7.4vw,7rem)] font-medium leading-[0.9] tracking-[-0.06em]">{C.hero.title}</h1>
             <p className="mt-7 max-w-xl text-balance text-lg leading-8 text-white/80 sm:text-xl">{C.hero.description}</p>
 
-            <a href="#a-nova-base" className={buttonVariants({ variant: "light", size: "lg", className: "mt-9" })}>
-              Conhecer a nova base <ArrowDown className="size-4" />
-            </a>
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              {reserveHref ? (
+                <Link href={reserveHref} className={buttonVariants({ variant: "light", size: "lg" })}>
+                  {C.hero.open.cta} <ArrowRight className="size-4" />
+                </Link>
+              ) : null}
+              <a href="#a-nova-base" className={buttonVariants({ variant: reserveHref ? "outline" : "light", size: "lg", className: reserveHref ? "border-white/40 text-white hover:border-white hover:bg-white hover:text-ink" : undefined })}>
+                Conhecer a nova base <ArrowDown className="size-4" />
+              </a>
+            </div>
           </div>
         </div>
         {/* Parceria no alto à direita: presente, mas sem disputar com o título. */}
@@ -117,11 +148,19 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
             <p className="mt-5 max-w-lg text-lg leading-8 text-white/75 sm:text-xl">{C.impact.description}</p>
             <p className="mt-8 flex items-start gap-2 text-sm leading-tight text-white/60">
               <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-sand" />
-              <span>
-                {C.impact.address.line}
-                <span className="block text-white/45">{C.impact.address.hint}</span>
-              </span>
+              {base.address ? (
+                <span>
+                  {locationHeadline(location)}
+                  {locationAddress ? <span className="mt-1 block text-white/45">{locationAddress}</span> : null}
+                </span>
+              ) : (
+                <span>
+                  {C.impact.address.line}
+                  <span className="block text-white/45">{C.impact.address.hint}</span>
+                </span>
+              )}
             </p>
+            {base.address ? <BaseMapLink location={location} className="mt-4 text-sand hover:text-white" /> : null}
           </div>
         </div>
       </section>
@@ -137,20 +176,21 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
             <h2 id="experiencias-titulo" className="text-balance text-4xl font-medium leading-[1.03] tracking-[-0.045em] sm:text-5xl lg:text-6xl">
               {C.experiences.title}
             </h2>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/65">{C.experiences.description}</p>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/65">{bookable ? C.experiences.open.description : C.experiences.description}</p>
           </div>
 
           <div className="grid gap-4 sm:gap-5 lg:grid-cols-3">
             {C.experiences.items.map((item, index) => {
               const featured = index === 0;
               const routes = "routes" in item ? item.routes : null;
+              const open = openExperience(item.slugs);
               return (
                 <article
                   key={item.title}
                   className={
                     featured
-                      ? "relative isolate min-h-[520px] overflow-hidden rounded-4xl bg-ink text-white lg:col-span-3 lg:min-h-[560px]"
-                      : "relative isolate aspect-[4/5] max-w-full overflow-hidden rounded-4xl bg-ink text-white"
+                      ? "group relative isolate min-h-[520px] overflow-hidden rounded-4xl bg-ink text-white lg:col-span-3 lg:min-h-[560px]"
+                      : "group relative isolate aspect-[4/5] max-w-full overflow-hidden rounded-4xl bg-ink text-white"
                   }
                 >
                   <Image
@@ -163,7 +203,7 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
                   />
                   <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(8,28,25,0.85)_0%,rgba(8,28,25,0.2)_55%,transparent_80%)]" />
                   <div className="absolute left-5 top-5 sm:left-7 sm:top-7">
-                    <ComingSoonBadge tone="dark" />
+                    {open ? <ActiveBaseBadge tone="dark" /> : <ComingSoonBadge tone="dark" />}
                   </div>
                   <div className={featured ? "absolute inset-x-0 bottom-0 p-6 sm:p-10" : "absolute inset-x-0 bottom-0 p-6 sm:p-7"}>
                     <h3 className={featured ? "text-4xl font-medium tracking-[-0.05em] sm:text-6xl" : "text-3xl font-medium tracking-[-0.045em]"}>{item.title}</h3>
@@ -172,6 +212,16 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
                       <p className="mt-5 text-sm text-white/60">
                         Primeiros roteiros planejados: <span className="text-white/85">{routes.join(" · ")}</span>
                       </p>
+                    ) : null}
+                    {open ? (
+                      // O link cobre o card inteiro (after:inset-0): toque em qualquer ponto leva à experiência.
+                      <Link
+                        href={`/experiencias/${open.slug}`}
+                        aria-label={`${item.title} na Base ${base.name}: ver datas e reservar`}
+                        className="mt-5 inline-flex items-center gap-2 font-semibold text-white underline-offset-4 after:absolute after:inset-0 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand"
+                      >
+                        {C.experiences.open.cta} <ArrowRight aria-hidden="true" className="size-4" />
+                      </Link>
                     ) : null}
                   </div>
                 </article>
@@ -217,19 +267,32 @@ export function ConchaLanding({ base, fallbackBase }: { base: PublicBase; fallba
         </div>
       </section>
 
-      {/* 7. Encerramento — base ainda fechada */}
+      {/* 7. Encerramento — convite à reserva quando aberta, aviso de "em breve" quando fechada */}
       <section className="bg-white p-3 sm:p-5">
         <div className="relative isolate overflow-hidden rounded-4xl bg-ink text-white">
           <Image src={C.capsula.image.desktop} alt="" fill sizes="100vw" className="object-cover" />
           <div className="absolute inset-0 bg-ink/75" />
           <div className="container relative z-10 py-20 sm:py-28">
             <div className="max-w-3xl">
-              <ComingSoonBadge tone="dark" />
-              <h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.055em] sm:text-6xl">{C.closing.title}</h2>
-              <p className="mt-6 max-w-xl text-lg leading-8 text-white/70">{C.closing.description}</p>
-              <Link href={fallbackHref} className={buttonVariants({ variant: "light", size: "lg", className: "mt-9" })}>
-                {C.closing.secondaryLabel} <ArrowRight className="size-4" />
-              </Link>
+              {reserveHref ? (
+                <>
+                  <ActiveBaseBadge tone="dark" />
+                  <h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.055em] sm:text-6xl">{C.closing.open.title}</h2>
+                  <p className="mt-6 max-w-xl text-lg leading-8 text-white/70">{C.closing.open.description}</p>
+                  <Link href={reserveHref} className={buttonVariants({ variant: "light", size: "lg", className: "mt-9" })}>
+                    {C.closing.open.cta} <ArrowRight className="size-4" />
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <ComingSoonBadge tone="dark" />
+                  <h2 className="mt-6 text-balance text-5xl font-medium leading-[0.98] tracking-[-0.055em] sm:text-6xl">{C.closing.title}</h2>
+                  <p className="mt-6 max-w-xl text-lg leading-8 text-white/70">{C.closing.description}</p>
+                  <Link href={fallbackHref} className={buttonVariants({ variant: "light", size: "lg", className: "mt-9" })}>
+                    {C.closing.secondaryLabel} <ArrowRight className="size-4" />
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

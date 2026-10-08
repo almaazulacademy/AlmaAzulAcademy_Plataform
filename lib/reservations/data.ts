@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { parseBaseLocation, type BaseLocation } from "@/lib/bases/location";
 import type { BookingSession, ReservationDetails, ReservationStatus } from "@/lib/reservations/types";
 
 type Row = Record<string, unknown>;
@@ -38,7 +39,36 @@ export async function listOpenSessions(client: SupabaseClient, experienceSlug: s
   return (Array.isArray(result.data) ? result.data : []).map((row) => mapBookingSession(row as Row));
 }
 
-export type ReservationConfirmationSummary = { experienceTitle: string; startsAt: string };
+/**
+ * Localização de uma base pelo id. Nunca lança: sem base legível devolve null
+ * e a tela simplesmente não mostra o bloco de local.
+ *
+ * `select("*")` de propósito: meeting_point e maps_url só existem depois da
+ * migration de lançamento da segunda base, e pedir uma coluna ausente
+ * derrubaria a leitura inteira.
+ */
+async function getBaseLocation(client: SupabaseClient, baseId: string): Promise<BaseLocation | null> {
+  const base = await client.from("bases").select("*").eq("id", baseId).maybeSingle();
+  const row = !base.error ? (base.data as Row | null) : null;
+  if (!row) return null;
+  return parseBaseLocation({
+    baseSlug: row.slug,
+    baseName: row.name,
+    meetingPoint: row.meeting_point,
+    address: row.address,
+    mapsUrl: row.maps_url,
+  });
+}
+
+/** Local de encontro de uma experiência: experiência → base → localização. */
+async function getExperienceLocation(client: SupabaseClient, experienceId: string): Promise<BaseLocation | null> {
+  if (!experienceId) return null;
+  const experience = await client.from("experiences").select("base_id").eq("id", experienceId).maybeSingle();
+  const baseId = !experience.error ? asString(experience.data?.base_id) : "";
+  return baseId ? getBaseLocation(client, baseId) : null;
+}
+
+export type ReservationConfirmationSummary = { experienceTitle: string; startsAt: string; location: BaseLocation | null };
 
 /**
  * Experiência e horário de uma reserva, para a tela de retorno do pagamento.
@@ -46,7 +76,8 @@ export type ReservationConfirmationSummary = { experienceTitle: string; startsAt
  * Personaliza a mensagem de contato e, principalmente, permite repetir na
  * confirmação a turma que foi realmente reservada — o horário sai de
  * `sessions.starts_at` pela `session_id` da própria reserva, nunca de um texto
- * fixo. Nenhum dado pessoal é lido aqui: só título e horário.
+ * fixo. O local de encontro sai da base da experiência da reserva. Nenhum dado
+ * pessoal é lido aqui: só título, horário e base.
  *
  * Devolve campos vazios quando a reserva não existe ou a leitura falha.
  */
@@ -54,7 +85,7 @@ export async function getReservationConfirmationSummary(
   client: SupabaseClient,
   reservationId: string,
 ): Promise<ReservationConfirmationSummary> {
-  const empty: ReservationConfirmationSummary = { experienceTitle: "", startsAt: "" };
+  const empty: ReservationConfirmationSummary = { experienceTitle: "", startsAt: "", location: null };
 
   const reservation = await client
     .from("reservations")
@@ -69,16 +100,19 @@ export async function getReservationConfirmationSummary(
 
   const [experience, session] = await Promise.all([
     experienceId
-      ? client.from("experiences").select("title").eq("id", experienceId).maybeSingle()
+      ? client.from("experiences").select("title, base_id").eq("id", experienceId).maybeSingle()
       : Promise.resolve(null),
     sessionId
       ? client.from("sessions").select("starts_at").eq("id", sessionId).maybeSingle()
       : Promise.resolve(null),
   ]);
 
+  const baseId = experience && !experience.error ? asString(experience.data?.base_id) : "";
+
   return {
     experienceTitle: experience && !experience.error ? asString(experience.data?.title) : "",
     startsAt: session && !session.error ? asString(session.data?.starts_at) : "",
+    location: baseId ? await getBaseLocation(client, baseId) : null,
   };
 }
 
@@ -95,6 +129,8 @@ export async function lookupReservation(client: SupabaseClient, cpf: string, pub
   const row = firstRow(result.data);
   if (!row) return null;
 
+  const session = mapBookingSession(row);
+
   return {
     publicCode: asString(row.public_code),
     status: asString(row.reservation_status) as ReservationStatus,
@@ -103,6 +139,7 @@ export async function lookupReservation(client: SupabaseClient, cpf: string, pub
     totalCents: asNumber(row.total_cents),
     checkoutUrl: asString(row.checkout_url) || null,
     fullName: asString(row.full_name),
-    session: mapBookingSession(row),
+    session,
+    location: await getExperienceLocation(client, session.experienceId).catch(() => null),
   };
 }

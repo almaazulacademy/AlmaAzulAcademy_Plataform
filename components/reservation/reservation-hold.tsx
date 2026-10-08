@@ -4,9 +4,11 @@ import Link from "next/link";
 import { CheckCircle2, Clock3, Copy } from "lucide-react";
 import { useCallback, useState } from "react";
 
+import { BaseLocationCard } from "@/components/bases/base-location";
 import { Countdown } from "@/components/reservation/countdown";
 import { SessionTurma } from "@/components/reservation/session-turma";
 import { buttonVariants } from "@/components/ui/button";
+import type { BaseLocation } from "@/lib/bases/location";
 import type { BookingSession } from "@/lib/reservations/types";
 import { cn } from "@/lib/utils";
 
@@ -21,9 +23,11 @@ type ReservationHoldProps = {
    * sozinho, passa a sessão para o horário não sumir da tela.
    */
   session?: BookingSession;
+  /** Local de encontro da base da reserva, quando a consulta o conhece. */
+  location?: BaseLocation | null;
 };
 
-export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "Sua vaga está reservada por 2 horas.", session }: ReservationHoldProps) {
+export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "Sua vaga está reservada por 2 horas.", session, location }: ReservationHoldProps) {
   const [expired, setExpired] = useState(new Date(expiresAt).getTime() <= Date.now());
   const [copied, setCopied] = useState(false);
   const expire = useCallback(() => setExpired(true), []);
@@ -52,6 +56,7 @@ export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "S
           className="mt-8"
         />
       ) : null}
+      {location && !expired ? <BaseLocationCard location={location} className="mt-4 bg-paper" /> : null}
       {!expired && (
         <div className="mt-8 rounded-3xl bg-paper p-6">
           <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-ink/45"><Clock3 className="size-4" />Tempo restante</p>

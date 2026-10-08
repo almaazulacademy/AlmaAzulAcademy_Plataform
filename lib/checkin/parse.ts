@@ -2,6 +2,8 @@
  * Leitura defensiva do que as RPCs de check-in devolvem. Puro, para teste.
  */
 
+import { parseBaseLocation, type BaseLocation } from "../bases/location.ts";
+
 export type CheckinMethod = "QR" | "MANUAL";
 
 export type CheckinReservation = {
@@ -56,6 +58,8 @@ export type PublicCheckinTicket = {
   startsAt: string;
   quantity: number;
   checkedIn: boolean;
+  /** Local de encontro da base da reserva. null antes da migration de lançamento da segunda base. */
+  location: BaseLocation | null;
 };
 
 type Row = Record<string, unknown>;
@@ -160,6 +164,7 @@ export function parsePublicCheckinTicket(value: unknown): PublicCheckinTicket | 
     startsAt: str(row.startsAt),
     quantity: num(row.quantity),
     checkedIn: row.checkedIn === true,
+    location: parseBaseLocation(row),
   };
 }
 

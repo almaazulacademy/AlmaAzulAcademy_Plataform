@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { BaseLocationCard } from "@/components/bases/base-location";
 import { getStaffContext } from "@/lib/admin/auth";
 import { isAdminRole } from "@/lib/admin/roles";
 import { renderCheckinQrSvg } from "@/lib/checkin/qr-image";
@@ -21,8 +22,8 @@ export const dynamic = "force-dynamic";
  * Página aberta pelo QR (ou pelo botão do e-mail).
  *
  * Para o cliente, é só o ingresso: o QR em tamanho grande e a experiência, a
- * data e as vagas — sem nome, e-mail, telefone ou código da reserva. Nada aqui
- * registra presença.
+ * data, as vagas e o local de encontro da base — sem nome, e-mail, telefone ou
+ * código da reserva. Nada aqui registra presença.
  *
  * Para alguém da equipe logado que leu o QR com a câmera nativa do celular, a
  * página encaminha para a Lista de Presença (painel ou área do instrutor), onde a
@@ -53,6 +54,7 @@ export default async function CheckinTicketPage({ params }: { params: Promise<{ 
             <p className="mt-2 text-sm capitalize text-ink/70">{formatSessionDate(ticket.startsAt)}</p>
             <p className="mt-1 text-lg font-semibold text-forest">{formatSessionTime(ticket.startsAt)}</p>
             <p className="mt-3 text-sm text-ink/70">{ticket.quantity} {ticket.quantity === 1 ? "vaga reservada" : "vagas reservadas"}</p>
+            {ticket.location ? <BaseLocationCard location={ticket.location} className="mt-5 bg-paper" /> : null}
             <p className="mt-6 rounded-2xl bg-mist/70 p-4 text-sm leading-6 text-ink/75">
               {ticket.checkedIn
                 ? "Check-in já realizado. Boa remada!"
