@@ -253,6 +253,24 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+/** Base de origem: as turmas dela mantêm o título de sempre na planilha. */
+const ORIGIN_BASE_SLUG = "lago-norte";
+
+/**
+ * Título da experiência nas abas da planilha.
+ *
+ * A planilha não tem coluna de base, e a mesma modalidade existe em mais de uma
+ * ("Remada Sunset" no Lago Norte e no Cápsula Bar). Fora da base de origem o
+ * título leva o nome da base — `Remada Sunset · Cápsula Bar — Concha Acústica`
+ * — em todas as abas e no rótulo da turma. As linhas do Lago Norte não mudam.
+ */
+export function sheetExperienceTitle(session: Record<string, unknown>) {
+  const title = asString(session.experienceTitle);
+  const baseSlug = asString(session.baseSlug);
+  const baseName = asString(session.baseName).trim();
+  return baseSlug && baseSlug !== ORIGIN_BASE_SLUG && baseName ? `${title} · ${baseName}` : title;
+}
+
 export function parseSnapshot(value: unknown): SyncSnapshot | null {
   const root = asRecord(value);
   const sessionRecord = root ? asRecord(root.session) : null;
@@ -260,7 +278,7 @@ export function parseSnapshot(value: unknown): SyncSnapshot | null {
 
   const session: SessionSnapshot = {
     id: asString(sessionRecord.id),
-    experienceTitle: asString(sessionRecord.experienceTitle),
+    experienceTitle: sheetExperienceTitle(sessionRecord),
     startsAt: asString(sessionRecord.startsAt),
     durationMinutes: asNumber(sessionRecord.durationMinutes),
     capacity: asNumber(sessionRecord.capacity),

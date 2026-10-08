@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, MessageCircle, Search, XCircle } from "lucide-react";
 
+import { BaseLocationCard } from "@/components/bases/base-location";
 import { ReservationHold } from "@/components/reservation/reservation-hold";
 import { ReservationSummary } from "@/components/reservation/reservation-summary";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ function FinalReservation({ reservation }: { reservation: ReservationDetails }) 
         <p className="mt-7 text-xs font-semibold uppercase tracking-[0.18em] text-lake">Reserva {reservation.publicCode}</p>
         <h2 className="mt-4 text-4xl font-medium tracking-[-0.05em]">{confirmed ? "Reserva confirmada." : reservation.status === "EXPIRED" ? "Pré-reserva expirada." : "Reserva cancelada."}</h2>
         <p className="mt-5 leading-7 text-ink/60">{confirmed ? `Tudo certo, ${reservation.fullName.split(" ")[0]}. Sua participação está garantida.` : "Esta reserva não bloqueia mais vagas. Você pode escolher uma nova sessão quando quiser."}</p>
+        {confirmed && reservation.location ? <BaseLocationCard location={reservation.location} className="mt-7 bg-paper" /> : null}
         {!confirmed && <Link href="/agenda" className="mt-7 inline-flex font-semibold text-forest">Escolher uma nova data</Link>}
       </div>
       <ReservationSummary session={reservation.session} quantity={reservation.quantity} />
@@ -62,7 +64,7 @@ export function ReservationLookup() {
     }
   }
 
-  if (reservation?.status === "PRE_RESERVED") return <ReservationHold publicCode={reservation.publicCode} expiresAt={reservation.expiresAt} checkoutUrl={reservation.checkoutUrl} title="Sua vaga continua reservada." session={reservation.session} />;
+  if (reservation?.status === "PRE_RESERVED") return <ReservationHold publicCode={reservation.publicCode} expiresAt={reservation.expiresAt} checkoutUrl={reservation.checkoutUrl} title="Sua vaga continua reservada." session={reservation.session} location={reservation.location} />;
   if (reservation) return <FinalReservation reservation={reservation} />;
 
   return (

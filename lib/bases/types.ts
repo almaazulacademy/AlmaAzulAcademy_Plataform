@@ -16,6 +16,10 @@ export type PublicBase = {
   description: string;
   locationLabel: string;
   address: string | null;
+  /** Ponto de encontro das experiências. null = o próprio endereço. */
+  meetingPoint: string | null;
+  /** Link oficial do Google Maps da base. */
+  mapsUrl: string | null;
   partnerName: string | null;
   imageUrl: string | null;
   displayOrder: number;

@@ -109,7 +109,23 @@ A mesma tela mostra o estado: **Enviado** (com a data), **Pendente**, **Erro** (
 
 ## Conteúdo
 
-**Assunto:** `Reserva confirmada — AZ7K2M9QX1`
+O e-mail é montado pela **base da reserva** (`reserva → sessão → experiência → base`), devolvida
+pela RPC `reservation_confirmation_email`. Nunca pelo nome da experiência.
+
+| Base | Assunto | Local de encontro |
+| --- | --- | --- |
+| Lago Norte | `Reserva confirmada — AZ7K2M9QX1` | `QL 5 Conjunto 5 - Lago Norte`, sem link de mapa |
+| Demais bases (Cápsula Bar — Concha Acústica) | `Sua reserva está confirmada! 🌊 \| Alma Azul Academy` | ponto de encontro, endereço e botão **Como chegar — Google Maps**, de `public.bases` |
+
+O Lago Norte mantém o modelo anterior palavra por palavra — um teste compara o e-mail byte a
+byte com o que era gerado antes de existir base no payload. As demais bases usam o modelo novo:
+saudação própria, linhas de experiência, data, horário, duração (da sessão) e participantes, e o
+mesmo QR de check-in, tolerância, "Antes de vir", política de cancelamento e aviso do grupo. A
+frase fixa de duração ("parada para banho") é só do Lago Norte.
+
+`pnpm email:preview` gera as duas versões em `.preview/`.
+
+**Assunto (Lago Norte):** `Reserva confirmada — AZ7K2M9QX1`
 
 O corpo concentra de propósito as perguntas que hoje chegam por WhatsApp, nesta ordem:
 
@@ -128,7 +144,7 @@ Cada bloco de texto fixo é uma **constante exportada** de `lib/reservations/con
 
 Duas escolhas deliberadas:
 
-- **A localização é texto, sem link de mapa.** O projeto não tem link nem coordenada oficial em lugar nenhum — quando existir, ele entra em `MEETING_LOCATION` e no bloco de localização.
+- **No Lago Norte a localização é texto, sem link de mapa.** A base não tem link oficial cadastrado; quando tiver, basta preencher `bases.maps_url` e o botão aparece sozinho.
 - **A duração é texto fixo, não `duration_minutes`.** A RPC que alimenta o e-mail não devolve a duração, todas as experiências atuais duram 90 minutos e a frase fala também da parada para banho, que nenhum campo do banco carrega. Buscar o valor dinamicamente exigiria mexer na RPC.
 
 O e-mail **informa** a política de cancelamento; ele não abre nenhum fluxo de cancelamento, e o teste recusa qualquer link nesse sentido.
@@ -177,7 +193,7 @@ O `EMAIL_FROM` precisa ser de um domínio verificado no Resend (Domains → Add 
 pnpm email:preview
 ```
 
-Escreve `.preview/confirmacao.html` e `.preview/confirmacao.txt`. Abra o HTML no navegador e reduza a janela para conferir o comportamento no celular. `.preview/` é ignorado pelo git. Passe a quantidade como argumento para ver a linha "Pessoas": `pnpm email:preview 3`.
+Escreve `.preview/confirmacao-<base>.html` e `.txt` (e os lembretes do QR), uma versão por base. Abra o HTML no navegador e reduza a janela para conferir o comportamento no celular. `.preview/` é ignorado pelo git. Passe a quantidade como argumento para ver a linha "Pessoas": `pnpm email:preview 3`.
 
 **Enviando de verdade**, sem domínio verificado: o Resend aceita `onboarding@resend.dev` como remetente, desde que o destinatário seja o e-mail da própria conta.
 

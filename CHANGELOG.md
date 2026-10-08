@@ -1,5 +1,20 @@
 # Changelog
 
+## Lançamento da Base Cápsula Bar — Concha Acústica (11/10/2026)
+
+- A segunda base abre para reservas como **Cápsula Bar — Concha Acústica**: SHTN Trecho 1, Lote 8 — Brasília/DF, ponto de encontro em frente ao Cápsula Bar e link oficial do Google Maps. Detalhes em [docs/multi-base.md](docs/multi-base.md).
+- **Remada Sunset** publicada na nova base com a sessão de inauguração: domingo, 11/10/2026, 17h, 90 minutos, R$ 70 por pessoa, 24 vagas. Nenhuma recorrência criada.
+- Demais experiências cadastradas e prontas para receber horários, todas "em breve": Remada do Nascer do Sol, Remada da Lua Cheia e os dois roteiros de Caminhos do Paranoá (Rota Ermida x Ponte JK e Rota Prainha do Congresso). O cadastro único de Caminhos do Paranoá virou o primeiro roteiro — nada foi duplicado.
+- **Localização centralizada:** `bases` ganha `meeting_point` e `maps_url`. Site, e-mail de confirmação, lembrete do QR, ingresso de check-in e consulta da reserva leem a base da reserva (reserva → sessão → experiência → base) por `lib/bases/location.ts`. Botão "Como chegar — Google Maps" onde a base tem link oficial.
+- **E-mail por base:** o do Lago Norte continua idêntico, byte a byte (coberto por teste). As demais bases usam o modelo novo, com assunto "Sua reserva está confirmada! 🌊 | Alma Azul Academy", duração da sessão, participantes, ponto de encontro, endereço e mapa — mantendo código da reserva, QR de check-in, tolerância, o que levar, cancelamento e aviso do grupo.
+- A landing da base é preservada e passa a ter dois estados: com a base ativa, as experiências publicadas ganham "Ver datas e reservar".
+- Planilha: turmas fora do Lago Norte levam a base no título (`Remada Sunset · Cápsula Bar — Concha Acústica`). Nenhuma coluna ou linha existente muda.
+- Painel: a base aparece no detalhe da reserva. Sessões, experiências, preços e capacidades da nova base usam as mesmas telas do Lago Norte, com o filtro de base que já existia.
+- Fluxo de reserva, InfinitePay, webhook e reconciliação **não foram alterados**: nenhuma RPC de reserva ou pagamento é tocada.
+- Migration `202610080001_capsula_bar_launch.sql` aditiva e idempotente (não sobrescreve edições do painel), com preflight e postcheck em `supabase/diagnostics/capsula_bar_launch_*.sql` e relatório de evidência de envio de e-mails em `confirmation_email_delivery_report.sql`.
+- Testes em Postgres real (PGlite) com **todas** as migrations do repositório: sessão de inauguração, R$ 70 × participantes, limite de 24 vagas, pré-reserva vencida, webhook duplicado, valor divergente, e-mail único mesmo com falha do provedor, Lago Norte intocado, separação entre bases, operações do painel e schema legado de produção.
+- Segunda etapa proposta: criação de sessões recorrentes pelo painel e edição da localização da base pelo painel.
+
 ## Acesso de instrutores à Lista de Presença
 
 - Novo perfil **INSTRUCTOR** em `admin_users` (a tabela de perfis que já existia), sem tabela paralela. O admin atual segue identificado pela mesma linha, sem lógica por e-mail.

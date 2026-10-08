@@ -16,24 +16,29 @@
  * para que o teste verifique exatamente o texto que o cliente lê.
  */
 
+import {
+  LAGO_NORTE_LOCATION,
+  locationAddressLine,
+  locationHeadline,
+  MAPS_BUTTON_LABEL,
+  parseBaseLocation,
+  type BaseLocation,
+} from "../bases/location.ts";
+import { LAGO_NORTE_SLUG } from "../bases/types.ts";
 import { checkinQrImageUrl, checkinUrl, isCheckinToken } from "../checkin/token.ts";
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE, INSTAGRAM_LINK, WHATSAPP_NUMBER } from "../contact.ts";
 import { formatSessionDate, formatSessionTime } from "../sessions/date-time.ts";
 import { SITE_NAME, SITE_URL } from "../site.ts";
 
 /**
- * Endereço do ponto de encontro das experiências.
+ * Endereço do Lago Norte, a base de origem.
  *
- * Só texto: o projeto não tem link de mapa nem coordenada em lugar nenhum, e
- * inventar um aqui seria criar informação que ninguém conferiu. Quando existir
- * um link oficial, ele entra nesta constante e no bloco de localização.
- *
- * BLOQUEADOR MULTI-BASE (antes de abrir reservas em qualquer base além do Lago
- * Norte): este endereço é fixo no Lago Norte. O local de encontro do e-mail,
- * da confirmação e das demais comunicações precisa vir da base da sessão da
- * reserva (`bases.address`). Ver docs/multi-base.md.
+ * O local de encontro de cada e-mail vem da base da reserva (reserva → sessão →
+ * experiência → base), devolvida pela RPC `reservation_confirmation_email` e
+ * lida por `lib/bases/location.ts`. Esta constante é só o valor usado quando o
+ * banco ainda não informa a base — ver `LAGO_NORTE_LOCATION`.
  */
-export const MEETING_LOCATION = "QL 5 Conjunto 5 - Lago Norte";
+export const MEETING_LOCATION = LAGO_NORTE_LOCATION.address ?? "";
 
 /** Tolerância de chegada, contada a partir do horário da sessão reservada. */
 export const MEETING_TOLERANCE_NOTE = "Tolerância de até 20 minutos após o horário marcado.";
@@ -102,6 +107,13 @@ export type ReservationConfirmationData = {
    * aplicada: o e-mail sai como antes, só sem a seção do QR.
    */
   checkinToken: string | null;
+  /** Duração da sessão reservada, em minutos. Ausente no payload antigo. */
+  durationMinutes?: number | null;
+  /**
+   * Base onde a experiência acontece. Ausente só quando o banco ainda não
+   * devolve a base; nesse caso toda reserva é do Lago Norte.
+   */
+  location?: BaseLocation;
 };
 
 /** Seção do QR de check-in. Constantes exportadas para o teste ler o mesmo texto. */
@@ -144,8 +156,53 @@ function formatWhatsappNumber() {
   return WHATSAPP_NUMBER;
 }
 
-export function reservationConfirmationSubject(publicCode: string) {
-  return `Reserva confirmada — ${publicCode}`;
+/** Assunto do e-mail das bases abertas depois do Lago Norte. */
+export const NEW_BASE_SUBJECT = `Sua reserva está confirmada! 🌊 | ${SITE_NAME}`;
+
+/** Abertura do e-mail das bases abertas depois do Lago Norte. */
+export const NEW_BASE_INTRO = [
+  "Sua experiência com a Alma Azul está confirmada! 💙",
+  "Estamos felizes em receber você para mais um momento de conexão com a natureza e com as águas do Lago Paranoá.",
+  "Confira os detalhes da sua reserva:",
+] as const;
+
+export const NEW_BASE_SIGNOFF = "Nos vemos na água! 💙";
+
+function locationOf(data: ReservationConfirmationData) {
+  return data.location ?? LAGO_NORTE_LOCATION;
+}
+
+/**
+ * O Lago Norte mantém o e-mail que os clientes já recebem, palavra por palavra.
+ * Qualquer outra base usa o modelo novo. A decisão é pela base da reserva —
+ * nunca pelo nome da experiência, que se repete entre bases.
+ */
+function usesOriginTemplate(data: ReservationConfirmationData) {
+  return locationOf(data).baseSlug === LAGO_NORTE_SLUG;
+}
+
+export function formatDuration(minutes: number | null | undefined) {
+  return typeof minutes === "number" && minutes > 0 ? `${minutes} minutos` : null;
+}
+
+export function reservationConfirmationSubject(publicCode: string, location: BaseLocation = LAGO_NORTE_LOCATION) {
+  return location.baseSlug === LAGO_NORTE_SLUG ? `Reserva confirmada — ${publicCode}` : NEW_BASE_SUBJECT;
+}
+
+/** Rótulo do bloco de localização: o Lago Norte mantém o dele. */
+function locationLabel(data: ReservationConfirmationData) {
+  return usesOriginTemplate(data) ? "Localização" : "📍 Local de encontro";
+}
+
+/** Local de encontro em texto puro: ponto de encontro, endereço e link do mapa. */
+function locationText(data: ReservationConfirmationData) {
+  const location = locationOf(data);
+  const address = locationAddressLine(location);
+  return [
+    usesOriginTemplate(data) ? locationHeadline(location) : `${locationHeadline(location)}.`,
+    ...(address ? [`Endereço: ${address}`] : []),
+    ...(location.mapsUrl ? [`${MAPS_BUTTON_LABEL}: ${location.mapsUrl}`] : []),
+  ];
 }
 
 /**
@@ -154,6 +211,19 @@ export function reservationConfirmationSubject(publicCode: string) {
  * próprio, logo abaixo, junto da tolerância.
  */
 function detailRows(data: ReservationConfirmationData) {
+  if (!usesOriginTemplate(data)) {
+    const duration = formatDuration(data.durationMinutes);
+    const rows: Array<[string, string]> = [
+      ["Código da reserva", data.publicCode],
+      ["🌊 Experiência", data.experienceTitle],
+      ["📅 Data", formatSessionDate(data.startsAt)],
+      ["🕔 Horário", formatSessionTime(data.startsAt)],
+    ];
+    if (duration) rows.push(["⏱️ Duração", duration]);
+    rows.push(["👥 Participantes", `${data.quantity}`]);
+    return rows;
+  }
+
   const rows: Array<[string, string]> = [
     ["Código da reserva", data.publicCode],
     ["Experiência", data.experienceTitle],
@@ -185,16 +255,19 @@ function checkinText(data: ReservationConfirmationData) {
 function buildText(data: ReservationConfirmationData) {
   const rows = detailRows(data).map(([label, value]) => `${label}: ${value}`);
 
+  const origin = usesOriginTemplate(data);
+
   return [
     `Olá, ${firstName(data.fullName)}!`,
     "",
-    "Sua reserva está confirmada. Será um prazer receber você para essa experiência!",
-    "",
+    ...(origin
+      ? ["Sua reserva está confirmada. Será um prazer receber você para essa experiência!", ""]
+      : NEW_BASE_INTRO.flatMap((line) => [line, ""])),
     ...rows,
     "",
     ...checkinText(data),
-    "Localização",
-    MEETING_LOCATION,
+    locationLabel(data),
+    ...locationText(data),
     "",
     "Horário de encontro",
     formatSessionTime(data.startsAt),
@@ -203,9 +276,9 @@ function buildText(data: ReservationConfirmationData) {
     PREPARATION_TITLE,
     ...PREPARATION_ITEMS.map((item) => `- ${item}`),
     "",
-    DURATION_TITLE,
-    DURATION_NOTE,
-    "",
+    // A frase de duração do Lago Norte fala da parada para banho; nas outras
+    // bases a duração da sessão já está nos dados da reserva, acima.
+    ...(origin ? [DURATION_TITLE, DURATION_NOTE, ""] : []),
     CANCELLATION_TITLE,
     CANCELLATION_NOTE,
     "",
@@ -213,7 +286,7 @@ function buildText(data: ReservationConfirmationData) {
     GROUP_NOTE,
     "",
     ...CLOSING_PARAGRAPHS.flatMap((paragraph) => [paragraph, ""]),
-    "Até breve!",
+    origin ? "Até breve!" : NEW_BASE_SIGNOFF,
     `Equipe ${SITE_NAME}`,
     "",
     "—",
@@ -228,12 +301,12 @@ function buildText(data: ReservationConfirmationData) {
 
 const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 
-/** Cartão destacado: rótulo pequeno, valor grande e, quando houver, uma nota. */
-function highlightCard(label: string, value: string, note?: string) {
-  const noteHtml = note
+/** Cartão destacado: rótulo pequeno, valor grande e, quando houver, uma nota e um botão. */
+function highlightCard(label: string, value: string, note?: string, extraHtml = "") {
+  const noteHtml = (note
     ? `
                 <p style="margin:8px 0 0;font-size:14px;line-height:21px;color:${BRAND.ink};opacity:0.7;">${escapeHtml(note)}</p>`
-    : "";
+    : "") + extraHtml;
 
   return `
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px;">
@@ -244,6 +317,29 @@ function highlightCard(label: string, value: string, note?: string) {
                   </td>
                 </tr>
               </table>`;
+}
+
+/** Botão "Como chegar": só existe quando a base tem um link oficial do mapa. */
+function mapsButton(url: string) {
+  return `
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:14px 0 0;">
+                  <tr><td style="border-radius:999px;background-color:${BRAND.lake};">
+                    <a href="${escapeHtml(url)}" style="display:inline-block;padding:11px 20px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">📍 ${escapeHtml(MAPS_BUTTON_LABEL)}</a>
+                  </td></tr>
+                </table>`;
+}
+
+/** Cartão do local de encontro, montado a partir da base da reserva. */
+function locationCard(data: ReservationConfirmationData) {
+  const location = locationOf(data);
+  const address = locationAddressLine(location);
+  const headline = usesOriginTemplate(data) ? locationHeadline(location) : `${locationHeadline(location)}.`;
+  return highlightCard(
+    locationLabel(data),
+    headline,
+    address ? `Endereço: ${address}` : undefined,
+    location.mapsUrl ? mapsButton(location.mapsUrl) : "",
+  );
 }
 
 /** Seção de leitura: título curto e um parágrafo ou uma lista curta. */
@@ -384,13 +480,21 @@ function buildHtml(data: ReservationConfirmationData) {
               <p style="margin:0 0 14px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(text)}</p>`)
     .join("");
 
+  const origin = usesOriginTemplate(data);
+  const intro = origin
+    ? `
+              <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">Sua reserva está confirmada. Será um prazer receber você para essa experiência!</p>`
+    : NEW_BASE_INTRO
+        .map((text, index) => `
+              <p style="margin:0 0 ${index === NEW_BASE_INTRO.length - 1 ? "24px" : "12px"};font-size:15px;line-height:24px;color:${BRAND.ink};opacity:${index === 0 ? "1" : "0.75"};${index === 0 ? "font-weight:600;" : ""}">${escapeHtml(text)}</p>`)
+        .join("");
+
   return emailLayout({
-    title: reservationConfirmationSubject(data.publicCode),
+    title: reservationConfirmationSubject(data.publicCode, locationOf(data)),
     preheader: `Sua reserva ${data.publicCode} está confirmada.`,
     heading: "Reserva confirmada",
     body: `
-              <p style="margin:0 0 16px;font-size:17px;line-height:26px;font-weight:600;color:${BRAND.ink};">Olá, ${escapeHtml(firstName(data.fullName))}!</p>
-              <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">Sua reserva está confirmada. Será um prazer receber você para essa experiência!</p>
+              <p style="margin:0 0 16px;font-size:17px;line-height:26px;font-weight:600;color:${BRAND.ink};">Olá, ${escapeHtml(firstName(data.fullName))}!</p>${intro}
 
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;margin:0 0 20px;">
                 <tr><td style="padding:4px 0;">
@@ -399,16 +503,16 @@ function buildHtml(data: ReservationConfirmationData) {
                 </td></tr>
               </table>
 ${checkinHtml(data)}
-${highlightCard("Localização", MEETING_LOCATION)}
+${locationCard(data)}
 ${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
               <div style="height:12px;line-height:12px;">&nbsp;</div>
-${infoSection(PREPARATION_TITLE, bulletList(PREPARATION_ITEMS))}
-${infoSection(DURATION_TITLE, paragraph(DURATION_NOTE))}
+${infoSection(PREPARATION_TITLE, bulletList(PREPARATION_ITEMS))}${origin ? `
+${infoSection(DURATION_TITLE, paragraph(DURATION_NOTE))}` : ""}
 ${infoSection(CANCELLATION_TITLE, paragraph(CANCELLATION_NOTE))}
 ${infoSection(GROUP_TITLE, paragraph(GROUP_NOTE))}
               <div style="height:24px;line-height:24px;">&nbsp;</div>
 ${closing}
-              <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">Até breve!</p>
+              <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">${origin ? "Até breve!" : escapeHtml(NEW_BASE_SIGNOFF)}</p>
               <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">Equipe ${escapeHtml(SITE_NAME)}</p>
 `,
   });
@@ -417,7 +521,7 @@ ${closing}
 export function buildReservationConfirmationEmail(data: ReservationConfirmationData): ConfirmationEmail {
   return {
     to: data.email,
-    subject: reservationConfirmationSubject(data.publicCode),
+    subject: reservationConfirmationSubject(data.publicCode, locationOf(data)),
     html: buildHtml(data),
     text: buildText(data),
   };
@@ -455,7 +559,7 @@ export function buildCheckinReminderEmail(data: ReservationConfirmationData): Co
     instruction,
     `${CHECKIN_LINK_LABEL}: ${checkinUrl(data.checkinToken)}`,
     "",
-    `Local: ${MEETING_LOCATION}`,
+    `Local: ${locationText(data).join("\n")}`,
     MEETING_TOLERANCE_NOTE,
     "",
     "Nos vemos na água!",
@@ -489,7 +593,7 @@ export function buildCheckinReminderEmail(data: ReservationConfirmationData): Co
                 </td></tr>
               </table>
 ${checkinHtml(data)}
-${highlightCard("Localização", MEETING_LOCATION)}
+${locationCard(data)}
 ${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
               <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">Nos vemos na água!</p>
               <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">${escapeHtml(SITE_NAME)}</p>
@@ -531,6 +635,10 @@ export function parseReservationConfirmationData(value: unknown): ReservationCon
     experienceTitle: asString(row.experienceTitle),
     startsAt: asString(row.startsAt),
     checkinToken: isCheckinToken(row.checkinToken) ? row.checkinToken.toLowerCase() : null,
+    durationMinutes: asNumber(row.durationMinutes) > 0 ? asNumber(row.durationMinutes) : null,
+    // A base vem do banco. Payload sem base só existe antes da migration de
+    // lançamento da segunda base, quando toda reserva é do Lago Norte.
+    location: parseBaseLocation(row) ?? LAGO_NORTE_LOCATION,
   };
 
   if (!data.reservationId || !data.publicCode || !data.fullName || !data.startsAt) return null;

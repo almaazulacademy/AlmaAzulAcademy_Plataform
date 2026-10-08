@@ -7,7 +7,9 @@ import { Navbar } from "@/components/layout/navbar";
 import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { ReservationForm } from "@/components/reservation/reservation-form";
 import { SessionTurma } from "@/components/reservation/session-turma";
-import { getSessionAvailabilityContext } from "@/lib/bases/data";
+import { BaseLocationCard } from "@/components/bases/base-location";
+import { getExperiencePlacement, getSessionAvailabilityContext } from "@/lib/bases/data";
+import { baseLocation } from "@/lib/bases/location";
 import { getBookingSession } from "@/lib/reservations/data";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -27,6 +29,8 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
   const upcoming = !session && supabase && /^[0-9a-f-]{36}$/i.test(sessionId)
     ? await getSessionAvailabilityContext(sessionId).catch(() => null)
     : null;
+  // Local de encontro: sai da base da experiência desta sessão, nunca do nome dela.
+  const placement = session ? await getExperiencePlacement(session.experienceSlug).catch(() => null) : null;
   const comingSoon = upcoming && (upcoming.experienceStatus === "COMING_SOON" || upcoming.baseStatus !== "ACTIVE") ? upcoming : null;
 
   return (
@@ -45,6 +49,7 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
               note="Cada turma tem horário e vagas próprios. Confira o horário acima antes de seguir para o pagamento."
               className="mb-8"
             />
+            {placement ? <BaseLocationCard location={baseLocation(placement.base)} className="mb-8" /> : null}
             <ReservationForm session={session} />
           </>
         ) : comingSoon ? (

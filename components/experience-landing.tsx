@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import { BaseBadge, ExclusiveBadge } from "@/components/bases/badges";
+import { BaseMapLink } from "@/components/bases/base-location";
 import { EditorialImage } from "@/components/editorial-image";
 import { FAQ } from "@/components/faq";
 import { FeatureCard } from "@/components/feature-card";
@@ -14,6 +15,7 @@ import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { Section } from "@/components/section";
 import { SessionTimes, SessionTimesLoading } from "@/components/session-times";
 import { SessionsLoading, SessionsSection } from "@/components/sessions-section";
+import { baseLocation } from "@/lib/bases/location";
 import type { PublicBase } from "@/lib/bases/types";
 import type { PublicExperience } from "@/lib/editorial/experience";
 import { resolveExperienceFaq } from "@/lib/editorial/faq";
@@ -59,7 +61,10 @@ export function ExperienceLanding({
                 <BaseBadge name={placement.base.name} />
               </Link>
               {placement.isExclusive ? <ExclusiveBadge baseName={placement.base.name} /> : null}
-              <span className="text-sm text-ink/55">{placement.base.address ?? placement.base.locationLabel}</span>
+              <span className="text-sm text-ink/55">
+                {[placement.base.meetingPoint, placement.base.address].filter(Boolean).join(" · ") || placement.base.locationLabel}
+              </span>
+              {placement.base.mapsUrl ? <BaseMapLink location={baseLocation(placement.base)} /> : null}
             </div>
           ) : null}
           {/* As turmas vêm antes dos quick facts de propósito: é a primeira coisa

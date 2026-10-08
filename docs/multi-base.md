@@ -17,7 +17,10 @@ Hoje existem duas bases:
 | Base | Slug | Status | Observação |
 | --- | --- | --- | --- |
 | Lago Norte | `lago-norte` | `ACTIVE` | Operação atual. Todo o histórico pertence a ela. |
-| Concha Acústica | `concha-acustica` | `COMING_SOON` | Parceria com o Cápsula Bar. Sem sessões, preço ou capacidade. |
+| Cápsula Bar — Concha Acústica | `concha-acustica` | `ACTIVE` após `202610080001` | Parceria com o Cápsula Bar. Inauguração em 11/10/2026 com a Remada Sunset. |
+
+> As seções abaixo descrevem a migration multi-base original, em que a segunda base nasceu
+> "em breve". A abertura está em [Base Cápsula Bar — Concha Acústica](#base-cápsula-bar--concha-acústica).
 
 ## Decisões
 
@@ -144,30 +147,82 @@ Dashboard
   repetidas.
 - Experiências mostram a base e a exclusividade, e aceitam o status **Em breve**.
 
-## Bloqueadores antes de ativar a Concha Acústica
+## Base Cápsula Bar — Concha Acústica
 
-Nenhum destes impede esta entrega (a Concha não recebe reservas). **Todos** precisam estar
-resolvidos antes de a base passar para `ACTIVE`.
+Aberta pela migration `202610080001_capsula_bar_launch.sql` (aditiva e idempotente; não toca
+nenhuma RPC de reserva ou pagamento, nem nenhuma linha do Lago Norte).
 
-1. **Local de encontro por base (e-mail e comunicações).** `MEETING_LOCATION` em
-   `lib/reservations/confirmation-email.ts` é fixo no Lago Norte. Endereço/ponto de encontro
-   do e-mail de confirmação, da tela de retorno do pagamento, do acompanhamento de reserva e
-   de qualquer mensagem precisa vir da base da sessão da reserva (`bases.address`).
-2. **Base no Google Sheets.** A integração (`lib/integrations/google-sheets/`) não exporta a
-   base. Reservas, sessões, vagas e lista da sessão precisam ganhar a coluna de base.
-3. **Mídia real.** Trocar as fotos temporárias do Lago Norte (lista em
-   `TEMPORARY_BASE_MEDIA`, `lib/bases/media.ts`) pelo acervo da Concha/Cápsula Bar.
-4. **Dados operacionais das experiências.** Preço, capacidade padrão, duração e conteúdo
-   editorial completo de cada experiência da Concha (hoje `0` = não definido).
-5. **Endereço da base.** Preencher `bases.address` da Concha (hoje vazio).
+| Dado | Valor | Onde vive |
+| --- | --- | --- |
+| Nome | Cápsula Bar — Concha Acústica | `bases.name` |
+| Endereço | SHTN Trecho 1, Lote 8 — Brasília/DF | `bases.address` |
+| Ponto de encontro | Em frente ao Cápsula Bar — Concha Acústica | `bases.meeting_point` |
+| Google Maps | `https://maps.app.goo.gl/ueSCiLvHAggrzuAX7` | `bases.maps_url` |
 
-## Como abrir a Concha Acústica (depois dos bloqueadores)
+Experiências cadastradas (todas R$ 70, 90 minutos, 24 vagas por padrão):
 
-1. Base para `ACTIVE`: `update public.bases set status = 'ACTIVE' where slug = 'concha-acustica';`
-   Antes disso o banco recusa publicar experiência e criar sessão nessa base.
-2. Publicar as experiências pelo painel (status Ativa).
-3. Criar as sessões.
-4. Conferir e-mail, planilha e a página da base com uma reserva de teste.
+| Experiência | Slug | Status inicial |
+| --- | --- | --- |
+| Remada Sunset | `remada-sunset-concha-acustica` | `PUBLISHED` — sessão de 11/10/2026 às 17h, 24 vagas |
+| Remada do Nascer do Sol | `remada-nascer-do-sol-concha-acustica` | `COMING_SOON` |
+| Remada da Lua Cheia | `remada-lua-cheia-concha-acustica` | `COMING_SOON` |
+| Caminhos do Paranoá — Rota Ermida x Ponte JK | `caminhos-do-paranoa-rota-ermida-ponte-jk` | `COMING_SOON` |
+| Caminhos do Paranoá — Rota Prainha do Congresso | `caminhos-do-paranoa-rota-prainha-do-congresso` | `COMING_SOON` |
+
+Os dois roteiros são experiências próprias (o antigo cadastro único `caminhos-do-paranoa` virou
+o primeiro). Assim cada roteiro tem as suas sessões, vagas e preço pelo painel atual, sem
+schema novo.
+
+### Localização: uma fonte só
+
+`bases.address`, `bases.meeting_point` e `bases.maps_url` são a única fonte do "onde é".
+`lib/bases/location.ts` transforma esses campos no que o cliente lê, e todo ponto do sistema
+resolve a base pela reserva — `reserva → sessão → experiência → base` — nunca pelo nome da
+experiência, que se repete entre bases.
+
+| Onde aparece | Como chega |
+| --- | --- |
+| Página da base e da experiência | `list_public_bases()` (ganhou `meeting_point` e `maps_url`) |
+| Fluxo de reserva (`/reservar/[sessionId]`) | base da experiência da sessão |
+| Confirmação do pagamento e "Acompanhar reserva" | `experiences.base_id` da reserva |
+| E-mail de confirmação, "Reenviar QR Code" e envio em lote | RPC `reservation_confirmation_email` |
+| Ingresso do QR (`/checkin/[token]`) | RPC `public_checkin_ticket` |
+| Painel (sessões, reservas, lista de presença) | `baseName`, já existente |
+| Planilha | título da turma leva a base fora do Lago Norte (`sheetExperienceTitle`) |
+
+O botão **Como chegar — Google Maps** aparece onde a base tem `maps_url`. O Lago Norte não tem
+link oficial cadastrado: a página dele mantém "Abrir no mapa" (busca pelo endereço) e o e-mail
+dele continua idêntico ao anterior. Para mudar endereço, ponto de encontro ou mapa de uma base,
+basta um `update public.bases` — site, e-mails e QR acompanham.
+
+A landing editorial da base (`components/bases/concha-landing.tsx`) é a mesma nos dois estados.
+Com a base ativa, os cards das experiências publicadas ganham "Ver datas e reservar"; as demais
+seguem com o selo "Em breve".
+
+### Operação pelo painel
+
+- **Novo horário:** Sessões → Nova sessão → escolha a experiência ("Título · Base"), data,
+  horário, duração, preço e capacidade. Use o filtro **Base** para ver só o Cápsula Bar.
+- **Abrir uma experiência "em breve":** Experiências → editar → preencher a landing (conteúdo
+  editorial) → status **Ativa**. Sessão criada antes disso existe, mas não aparece no site.
+- **Nova experiência ou roteiro:** Experiências → Nova experiência → escolher a base.
+- **Preço, duração e capacidade:** por sessão (vale para aquela turma) ou na experiência
+  (padrão das próximas).
+- **Horários recorrentes:** o painel cria uma sessão por vez, nas duas bases. Recorrência é a
+  segunda etapa proposta (ver Pendências).
+
+### Ordem de deploy
+
+Qualquer ordem é segura:
+
+- **Migration antes do código:** a sessão já fica reservável pelo site atual, mas o e-mail
+  sairia com o endereço do Lago Norte. Só faça isso com o deploy em seguida.
+- **Código antes da migration (recomendado):** nada muda para o cliente — a base segue "em
+  breve" e todos os e-mails são do Lago Norte, byte a byte iguais aos de hoje. A migration
+  então abre a base de uma vez, já com endereço, e-mail e QR corretos.
+
+Depois de aplicar, rode `supabase/diagnostics/capsula_bar_launch_postcheck.sql`; a última linha,
+`CAPSULA_BAR_LAUNCH_OK`, precisa ficar `OK`.
 
 ## Mídia: base × experiência
 
@@ -182,6 +237,13 @@ resolvidos antes de a base passar para `ACTIVE`.
   `TEMPORARY_BASE_MEDIA` e o selo some.
 
 ## Pendências menores
+
+- **Sessões recorrentes (segunda etapa):** criar várias sessões de uma vez ("toda sexta e
+  domingo às 17h até dezembro"). Hoje isso é feito por migration (ex.:
+  `202608090001_september_2026_schedule.sql`) ou sessão por sessão no painel.
+- **Localização no painel:** endereço, ponto de encontro e mapa de uma base são editados por SQL.
+- **Estrutura do Cápsula Bar no site:** estacionamento, banheiro e ducha não estão descritos;
+  as respostas do FAQ da Remada Sunset remetem ao grupo da experiência até a equipe confirmar.
 
 - **Edição de bases no painel:** bases são cadastradas e editadas por SQL.
 - **Base de uma experiência** é escolhida no painel e fica travada depois da primeira sessão
