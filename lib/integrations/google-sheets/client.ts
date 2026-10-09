@@ -18,7 +18,7 @@ import { getAccessToken } from "./auth.ts";
 import type { GoogleSheetsConfig } from "./config.ts";
 import { GoogleSheetsError, httpError } from "./errors.ts";
 import type { SheetValue } from "./mapping.ts";
-import type { SheetsGateway } from "./sync.ts";
+import { planGridGrowth, type GridSheet, type RowRequirement, type SheetsGateway } from "./sync.ts";
 
 const API_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 
@@ -96,6 +96,21 @@ export function createSheetsClient(config: GoogleSheetsConfig): SheetsClient {
     async updateSpreadsheet(requests: unknown[]) {
       if (!requests.length) return;
       await call(":batchUpdate", { method: "POST", body: { requests } });
+    },
+
+    async ensureRows(requirements: RowRequirement[]) {
+      if (!requirements.length) return;
+      const meta = await call<{ sheets?: GridSheet[] }>(
+        `?fields=${encodeURIComponent("sheets.properties(sheetId,title,gridProperties.rowCount)")}`,
+      );
+      const growth = planGridGrowth(meta.sheets ?? [], requirements);
+      if (!growth.length) return;
+      // appendDimension só acrescenta linhas vazias depois da última: nenhuma
+      // linha existente muda de posição, e o cabeçalho continua na linha 1.
+      await call(":batchUpdate", {
+        method: "POST",
+        body: { requests: growth.map(({ sheetId, length }) => ({ appendDimension: { sheetId, dimension: "ROWS", length } })) },
+      });
     },
 
     async batchGet(ranges: string[]) {

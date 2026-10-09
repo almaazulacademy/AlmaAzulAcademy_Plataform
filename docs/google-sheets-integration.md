@@ -52,6 +52,14 @@ Toda escrita vai para um intervalo calculado por `sync.ts` a partir da leitura d
 
 O preço é que dois syncs simultâneos da mesma aba podem calcular a mesma linha livre. O volume aqui é de poucas reservas por sessão e a drenagem da fila é serial, então a corrida é remota; quando acontecer, **Sincronizar lista** reconstrói a turma a partir do Supabase.
 
+### Grade cheia
+
+Escrever em intervalo explícito não aumenta a grade da aba. As abas nascem com 2000 linhas e a `Vagas Confirmadas` cresce uma linha por participante, então ela enche primeiro — aconteceu em 07/10/2026, na linha 2009, e o Google passou a devolver `HTTP_400` para qualquer sincronização que precisasse de linha nova.
+
+Por isso `syncSnapshot` calcula a última linha que vai ocupar em cada aba e chama `ensureRows` antes de gravar. O cliente lê `gridProperties.rowCount` e, se faltar, acrescenta linhas vazias **no fim** com `appendDimension` (o que falta + 500 de folga). Nada se move, o cabeçalho continua na linha 1, e sincronizações que só reescrevem linhas existentes não fazem a chamada extra.
+
+Para recuperar o que ficou pendente depois do deploy: **Sincronizar lista** em cada sessão afetada reconstrói a turma inteira a partir do Supabase e zera as tentativas do job; cada sincronização bem-sucedida ainda drena até 3 jobs pendentes de carona.
+
 ### Idempotência
 
 A convergência é sempre por chave técnica, nunca por nome ou telefone:

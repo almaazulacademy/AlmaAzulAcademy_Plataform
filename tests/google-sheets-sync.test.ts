@@ -35,8 +35,8 @@ import {
   sessionRevenueFormula,
 } from "../lib/integrations/google-sheets/formulas.ts";
 import { findForbiddenPublicKeys, readGoogleSheetsConfig } from "../lib/integrations/google-sheets/config.ts";
-import { sanitizeErrorCode } from "../lib/integrations/google-sheets/errors.ts";
-import { syncSnapshot, type SheetsGateway } from "../lib/integrations/google-sheets/sync.ts";
+import { GoogleSheetsError, httpError, sanitizeErrorCode } from "../lib/integrations/google-sheets/errors.ts";
+import { GRID_GROWTH_MARGIN, planGridGrowth, syncSnapshot, type SheetsGateway } from "../lib/integrations/google-sheets/sync.ts";
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -68,7 +68,14 @@ type FakeSheets = SheetsGateway & {
   headerRow(tab: string): SheetValue[];
   dataRows(tab: string): SheetValue[][];
   failNextCalls(count: number): void;
+  /** Tamanho da grade da aba, em linhas — o `gridProperties.rowCount` do Google. */
+  rowCount(tab: string): number;
+  setRowCount(tab: string, rows: number): void;
+  ensureRowsCalls(): number;
 };
+
+/** O setup cria as abas de dados com 2000 linhas. */
+const DEFAULT_ROW_COUNT = 2000;
 
 const SEEDED_TABS: Array<readonly [string, readonly string[]]> = [
   [RESERVATIONS_TAB, RESERVATION_HEADERS],
@@ -78,7 +85,10 @@ const SEEDED_TABS: Array<readonly [string, readonly string[]]> = [
 
 function createFakeSheets(): FakeSheets {
   const tabs = new Map<string, SheetValue[][]>();
+  const rowCounts = new Map<string, number>();
   let failures = 0;
+  let ensureCalls = 0;
+  const rowCount = (tab: string) => rowCounts.get(tab) ?? DEFAULT_ROW_COUNT;
 
   // A planilha falsa nasce como o setup deixa a real: cabeçalho na linha 1 e
   // nenhuma linha de dado. Sem isso os testes não conseguiriam ver o cabeçalho
@@ -113,6 +123,17 @@ function createFakeSheets(): FakeSheets {
     headerRow: (tab: string) => grid(tab)[0] ?? [],
     dataRows: (tab: string) => grid(tab).slice(1).filter((row) => (row ?? []).some((cell) => cell !== "")),
     failNextCalls: (count: number) => { failures = count; },
+    rowCount,
+    setRowCount: (tab: string, rows: number) => { rowCounts.set(tab, rows); },
+    ensureRowsCalls: () => ensureCalls,
+
+    async ensureRows(requirements) {
+      guard();
+      ensureCalls += 1;
+      for (const { tab, minRows } of requirements) {
+        if (rowCount(tab) < minRows) rowCounts.set(tab, minRows);
+      }
+    },
 
     async batchGet(ranges: string[]) {
       guard();
@@ -131,6 +152,12 @@ function createFakeSheets(): FakeSheets {
 
     async batchUpdate(updates) {
       guard();
+      // Como o Google: escrever fora da grade recusa o lote inteiro com 400
+      // ("exceeds grid limits") e nada é gravado.
+      for (const update of updates) {
+        const { tab, startRow } = parseRange(update.range);
+        if (startRow + update.values.length > rowCount(tab)) throw httpError(400);
+      }
       for (const update of updates) {
         const { tab, startColumn, startRow } = parseRange(update.range);
         const rows = grid(tab);
@@ -437,6 +464,14 @@ test("uma falha vira job pendente com código sanitizado", () => {
 
   assert.equal(sanitizeErrorCode(new Error("chave privada -----BEGIN PRIVATE KEY----- vazou")), "UNEXPECTED_ERROR");
   assert.equal(sanitizeErrorCode({ message: "qualquer coisa" }), "UNEXPECTED_ERROR");
+});
+
+test("falhas internas conhecidas mantêm o próprio código em vez de UNEXPECTED_ERROR", () => {
+  assert.equal(sanitizeErrorCode(new Error("SNAPSHOT_UNAVAILABLE")), "SNAPSHOT_UNAVAILABLE");
+  assert.equal(sanitizeErrorCode(new Error("HEADER_ROW_WRITE_BLOCKED:Sessões:1")), "HEADER_ROW_WRITE_BLOCKED");
+  // Só o símbolo exato passa: texto livre que apenas o mencione continua opaco.
+  assert.equal(sanitizeErrorCode(new Error("falhou: SNAPSHOT_UNAVAILABLE em https://x")), "UNEXPECTED_ERROR");
+  assert.equal(sanitizeErrorCode(httpError(400)), "HTTP_400");
 });
 
 // --- 13: sincronização administrativa ---------------------------------------
@@ -991,4 +1026,112 @@ test("16. uma falha do Google durante a troca não altera nada no Supabase", asy
   // cliente de banco, não executa RPC.
   const engine = source("lib/integrations/google-sheets/sync.ts");
   assert.doesNotMatch(engine, /getSupabaseAdminClient|supabase\/server|\.rpc\(/);
+});
+
+// --- Grade cheia: a regressão de outubro/2026 -------------------------------
+//
+// Em produção a `Vagas Confirmadas` chegou à última linha da grade (2009). A
+// escrita em intervalo explícito não aumenta a grade, então o Google recusava
+// o lote inteiro com 400 e nenhuma reserva nova chegava à planilha.
+
+function fillSpotsTab(sheets: FakeSheets, rows: number) {
+  const grid = sheets.grid(SPOTS_TAB);
+  for (let index = 1; index <= rows; index += 1) {
+    const row: SheetValue[] = SPOT_HEADERS.map(() => "");
+    row[0] = `antiga-${index}:1`;
+    row[2] = "sessao-antiga";
+    grid.push(row);
+  }
+}
+
+test("aba de vagas cheia: a grade cresce e a reserva nova é gravada depois da última linha", async () => {
+  const sheets = createFakeSheets();
+  sheets.setRowCount(SPOTS_TAB, 2009);
+  fillSpotsTab(sheets, 2008);
+
+  const report = await sync(sheets, snapshot([reservation({ quantity: 3 })]));
+
+  assert.equal(report.rowsAppended, 1 + 1 + 3);
+  assert.equal(sheets.rowCount(SPOTS_TAB), 2012);
+  assert.equal(sheets.dataRows(SPOTS_TAB).length, 2008 + 3);
+  // Nada do que já estava na aba mudou de lugar.
+  assert.equal(sheets.grid(SPOTS_TAB)[1][0], "antiga-1:1");
+  assert.equal(sheets.grid(SPOTS_TAB)[2008][0], "antiga-2008:1");
+  assert.deepEqual(sheets.headerRow(SPOTS_TAB), [...SPOT_HEADERS]);
+  // As outras abas tinham folga e não cresceram.
+  assert.equal(sheets.rowCount(RESERVATIONS_TAB), DEFAULT_ROW_COUNT);
+});
+
+test("grade cheia não duplica: repetir a sincronização reescreve as mesmas linhas", async () => {
+  const sheets = createFakeSheets();
+  sheets.setRowCount(SPOTS_TAB, 2009);
+  fillSpotsTab(sheets, 2008);
+  const data = snapshot([reservation({ quantity: 2 })]);
+
+  await sync(sheets, data);
+  const calls = sheets.ensureRowsCalls();
+  const again = await sync(sheets, data, true);
+
+  assert.equal(again.rowsAppended, 0);
+  assert.equal(sheets.dataRows(SPOTS_TAB).length, 2008 + 2);
+  assert.equal(sheets.rowCount(SPOTS_TAB), 2011);
+  // Quem só reescreve linhas existentes não consulta a grade.
+  assert.equal(sheets.ensureRowsCalls(), calls);
+});
+
+test("sem crescer a grade o Google recusa o lote inteiro — e a tentativa seguinte recupera", async () => {
+  const sheets = createFakeSheets();
+  sheets.setRowCount(SPOTS_TAB, 2009);
+  fillSpotsTab(sheets, 2008);
+  const data = snapshot([reservation({ quantity: 2 })]);
+
+  // A falha de produção, reproduzida: gateway antigo, que não aumenta a grade.
+  const legacy: FakeSheets = { ...sheets, ensureRows: async () => {} };
+  await assert.rejects(() => sync(legacy, data), (error) => sanitizeErrorCode(error) === "HTTP_400");
+  assert.equal(sheets.dataRows(RESERVATIONS_TAB).length, 0, "lote atômico: nem a reserva foi gravada");
+  assert.equal(sheets.dataRows(SPOTS_TAB).length, 2008);
+
+  // O job ficou pendente; com a correção, a mesma sincronização conclui.
+  const report = await sync(sheets, data);
+  assert.equal(report.rowsAppended, 1 + 1 + 2);
+  assert.equal(sheets.dataRows(RESERVATIONS_TAB).length, 1);
+});
+
+test("falha temporária ao aumentar a grade não grava nada pela metade", async () => {
+  const sheets = createFakeSheets();
+  sheets.setRowCount(SPOTS_TAB, 2009);
+  fillSpotsTab(sheets, 2008);
+  const data = snapshot([reservation()]);
+
+  // batchGet passa, ensureRows falha.
+  const flaky: FakeSheets = { ...sheets, ensureRows: async () => { throw new GoogleSheetsError("HTTP_503", true); } };
+  await assert.rejects(() => sync(flaky, data), (error) => sanitizeErrorCode(error) === "HTTP_503");
+  assert.equal(sheets.dataRows(SESSIONS_TAB).length, 0);
+
+  await sync(sheets, data);
+  assert.equal(sheets.dataRows(SESSIONS_TAB).length, 1);
+  assert.equal(sheets.dataRows(SPOTS_TAB).length, 2008 + 1);
+});
+
+test("planGridGrowth acrescenta só o que falta, com folga, e acusa aba ausente", () => {
+  const sheets = [
+    { properties: { sheetId: 7, title: SPOTS_TAB, gridProperties: { rowCount: 2009 } } },
+    { properties: { sheetId: 8, title: SESSIONS_TAB, gridProperties: { rowCount: 2001 } } },
+  ];
+
+  assert.deepEqual(
+    planGridGrowth(sheets, [{ tab: SPOTS_TAB, minRows: 2012 }, { tab: SESSIONS_TAB, minRows: 96 }]),
+    [{ sheetId: 7, length: 3 + GRID_GROWTH_MARGIN }],
+  );
+  assert.deepEqual(planGridGrowth(sheets, [{ tab: SPOTS_TAB, minRows: 2009 }]), []);
+  assert.throws(
+    () => planGridGrowth(sheets, [{ tab: RESERVATIONS_TAB, minRows: 10 }]),
+    (error) => sanitizeErrorCode(error) === "SHEET_TAB_MISSING",
+  );
+});
+
+test("o cliente aumenta a grade com appendDimension, que não move linha existente", () => {
+  const client = source("lib/integrations/google-sheets/client.ts");
+  assert.match(client, /appendDimension: \{ sheetId, dimension: "ROWS", length \}/);
+  assert.doesNotMatch(client, /insertDimension|deleteDimension/);
 });

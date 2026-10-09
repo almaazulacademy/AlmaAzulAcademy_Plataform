@@ -45,3 +45,12 @@ export function formatAdminPhone(value: string) {
 export function reservationMessage(name: string, publicCode: string) {
   return `Olá, ${name}! Seu código de reserva na Alma Azul Academy é ${publicCode}.`;
 }
+
+/**
+ * Acrescenta o código técnico sanitizado a um aviso de falha de integração
+ * (ex.: `HTTP_400`). É só um símbolo curto — nunca mensagem do provedor — e
+ * poupa uma ida aos logs para saber por que a sincronização ficou pendente.
+ */
+export function withErrorCode(message: string, errorCode?: string | null) {
+  return errorCode && /^[A-Z0-9_]{1,64}$/.test(errorCode) ? `${message} (código: ${errorCode})` : message;
+}

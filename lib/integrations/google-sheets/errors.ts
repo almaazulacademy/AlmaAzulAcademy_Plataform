@@ -13,6 +13,7 @@ export type GoogleSheetsErrorCode =
   | "TIMEOUT"
   | "NETWORK_ERROR"
   | "INVALID_RESPONSE"
+  | "SHEET_TAB_MISSING"
   | `HTTP_${number}`;
 
 export class GoogleSheetsError extends Error {
@@ -35,6 +36,13 @@ export function httpError(status: number) {
 }
 
 /**
+ * Falhas que o próprio código lança com um símbolo fixo. São seguras de gravar
+ * porque o texto é nosso — e sem elas uma RPC do Supabase fora do ar e uma
+ * escrita barrada no cabeçalho apareciam ambas como `UNEXPECTED_ERROR`.
+ */
+const INTERNAL_ERROR_CODES = ["SNAPSHOT_UNAVAILABLE", "HEADER_ROW_WRITE_BLOCKED"] as const;
+
+/**
  * Reduz qualquer falha a um símbolo seguro de gravar. Um erro inesperado vira
  * `UNEXPECTED_ERROR`, nunca a mensagem original — que poderia trazer URL
  * assinada, token ou conteúdo de célula.
@@ -42,6 +50,10 @@ export function httpError(status: number) {
 export function sanitizeErrorCode(error: unknown): string {
   if (error instanceof GoogleSheetsError) return error.code;
   if (error instanceof Error && error.name === "AbortError") return "TIMEOUT";
+  if (error instanceof Error) {
+    const internal = INTERNAL_ERROR_CODES.find((code) => error.message === code || error.message.startsWith(`${code}:`));
+    if (internal) return internal;
+  }
   return "UNEXPECTED_ERROR";
 }
 
