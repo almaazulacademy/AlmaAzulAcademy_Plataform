@@ -60,6 +60,8 @@ Por isso `syncSnapshot` calcula a última linha que vai ocupar em cada aba e cha
 
 Para recuperar o que ficou pendente depois do deploy: **Sincronizar lista** em cada sessão afetada reconstrói a turma inteira a partir do Supabase e zera as tentativas do job; cada sincronização bem-sucedida ainda drena até 3 jobs pendentes de carona.
 
+O histórico completo do incidente está em [incident-2026-10-google-sheets-grid-limit.md](incident-2026-10-google-sheets-grid-limit.md).
+
 ### Idempotência
 
 A convergência é sempre por chave técnica, nunca por nome ou telefone:
