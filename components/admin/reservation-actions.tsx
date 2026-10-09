@@ -8,7 +8,7 @@ import { ChangeSessionDialog } from "@/components/admin/change-session-dialog";
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
-import { reservationMessage } from "@/lib/admin/format";
+import { reservationMessage, withErrorCode } from "@/lib/admin/format";
 import type { ReservationStatus } from "@/lib/reservations/types";
 
 type Action = "confirm" | "cancel" | "resendQr" | null;
@@ -70,7 +70,7 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
       const payload = await response.json().catch(() => ({})) as SyncPayload;
       notify({
         title: payload.success ? "Planilha sincronizada" : "Sincronização pendente",
-        description: payload.message ?? "Não foi possível falar com o Google Sheets agora.",
+        description: withErrorCode(payload.message ?? "Não foi possível falar com o Google Sheets agora.", payload.errorCode),
         variant: payload.success ? undefined : "error",
       });
       router.refresh();

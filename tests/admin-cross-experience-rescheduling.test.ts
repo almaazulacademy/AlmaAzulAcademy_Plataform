@@ -780,6 +780,10 @@ function createFakeSheets() {
       });
     },
 
+    // Esta planilha falsa não tem limite de grade; o limite é exercitado em
+    // google-sheets-sync.test.ts.
+    async ensureRows() {},
+
     async batchUpdate(updates) {
       for (const update of updates) {
         const { tab, startColumn, startRow } = parseRange(update.range);

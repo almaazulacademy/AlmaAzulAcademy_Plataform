@@ -15,7 +15,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import type { AdminExperience, AdminSession, AdminSessionFilters, SessionStatus } from "@/lib/admin/types";
 import { adminExperienceLabel } from "@/lib/admin/base-filter";
 import { hasSessionFilters, sessionSearchParams } from "@/lib/admin/session-filters";
-import { formatCurrency } from "@/lib/admin/format";
+import { formatCurrency, withErrorCode } from "@/lib/admin/format";
 import { formatSessionDateTime, sessionLocalToIso, toSessionDateTimeLocal } from "@/lib/sessions/date-time";
 
 type FormState = {
@@ -29,7 +29,7 @@ type FormState = {
 };
 
 type ApiPayload = { message?: string; errors?: Record<string, string> };
-type SyncPayload = { success?: boolean; message?: string };
+type SyncPayload = { success?: boolean; errorCode?: string; message?: string };
 
 const emptyForm = (experienceId = ""): FormState => ({
   experienceId,
@@ -187,7 +187,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filters,
       const payload = await response.json().catch(() => ({})) as SyncPayload;
       notify({
         title: payload.success ? "Lista sincronizada" : "Sincronização pendente",
-        description: payload.message ?? "Não foi possível falar com o Google Sheets agora.",
+        description: withErrorCode(payload.message ?? "Não foi possível falar com o Google Sheets agora.", payload.errorCode),
         variant: payload.success ? undefined : "error",
       });
     } catch {

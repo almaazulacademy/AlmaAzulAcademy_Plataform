@@ -1,5 +1,12 @@
 # Changelog
 
+## Correção: sincronização com a planilha parada pela grade cheia
+
+- **Causa:** a aba oculta `Vagas Confirmadas` chegou à última linha da grade (2009) em 07/10/2026. A sincronização escreve em intervalos explícitos, que — ao contrário do `append` — não aumentam a grade; o Google passou a recusar o lote inteiro com 400 ("exceeds grid limits"), e toda reserva que precisava de linha nova ficava pendente. Não tem relação com o lançamento do Cápsula Bar: só coincidiu na data.
+- **Correção:** antes de gravar, o motor calcula a última linha que vai ocupar em cada aba e o cliente acrescenta linhas vazias no fim (`appendDimension`, com folga de 500) quando falta. Nenhuma linha existente muda de posição; quem só reescreve linhas existentes não faz chamada extra.
+- **Observabilidade:** `SNAPSHOT_UNAVAILABLE` e `HEADER_ROW_WRITE_BLOCKED` deixam de virar `UNEXPECTED_ERROR`, e o aviso "Sincronização pendente" do painel passa a mostrar o código sanitizado (ex.: `HTTP_400`).
+- Sem migration, sem mudança em reserva, pagamento, QR ou check-in. Recuperação em [docs/google-sheets-integration.md](docs/google-sheets-integration.md#grade-cheia).
+
 ## Lançamento da Base Cápsula Bar — Concha Acústica (11/10/2026)
 
 - A segunda base abre para reservas como **Cápsula Bar — Concha Acústica**: SHTN Trecho 1, Lote 8 — Brasília/DF, ponto de encontro em frente ao Cápsula Bar e link oficial do Google Maps. Detalhes em [docs/multi-base.md](docs/multi-base.md).

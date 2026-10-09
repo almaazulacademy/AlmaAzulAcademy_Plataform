@@ -45,6 +45,7 @@ import {
   SPOT_HEADERS,
   SPOTS_TAB,
 } from "./schema.ts";
+import { GoogleSheetsError } from "./errors.ts";
 import {
   reservationRow,
   sessionRow,
@@ -56,14 +57,53 @@ import {
 /**
  * Superfície mínima da API do Google Sheets usada pela sincronização.
  *
- * Duas operações, que mapeiam um-para-um em `values.batchGet` e
+ * Leitura e escrita mapeiam um-para-um em `values.batchGet` e
  * `values.batchUpdate`. Nenhuma delas move linhas: toda escrita vai para um
  * intervalo que este módulo calculou.
+ *
+ * `ensureRows` existe porque escrever em intervalo explícito, ao contrário do
+ * `append`, **não aumenta a grade**: a aba nasce com 2000 linhas e, quando a
+ * `Vagas Confirmadas` encheu, o Google passou a recusar o lote inteiro com 400
+ * ("exceeds grid limits") — e nenhuma reserva nova chegava à planilha.
  */
 export type SheetsGateway = {
   batchGet(ranges: string[]): Promise<string[][][]>;
+  /**
+   * Garante que cada aba tem pelo menos `minRows` linhas na grade, acrescentando
+   * linhas vazias **no fim** quando falta. Nunca move nem apaga linha existente.
+   */
+  ensureRows(requirements: RowRequirement[]): Promise<void>;
   batchUpdate(updates: Array<{ range: string; values: SheetValue[][] }>): Promise<void>;
 };
+
+export type RowRequirement = { tab: string; minRows: number };
+
+/**
+ * Folga acrescentada quando uma aba precisa crescer. Evita pagar uma chamada de
+ * estrutura a cada reserva nova logo depois de a grade encher.
+ */
+export const GRID_GROWTH_MARGIN = 500;
+
+export type GridSheet = { properties?: { sheetId?: number; title?: string; gridProperties?: { rowCount?: number } } };
+
+/**
+ * Quantas linhas acrescentar ao fim de cada aba para caber `minRows`. Puro, para
+ * ser testado sem rede. Aba ausente é erro: escrever nela falharia de qualquer
+ * jeito, e aqui o código já diz o porquê.
+ */
+export function planGridGrowth(sheets: GridSheet[], requirements: RowRequirement[], margin = GRID_GROWTH_MARGIN) {
+  const growth: Array<{ sheetId: number; length: number }> = [];
+  for (const { tab, minRows } of requirements) {
+    const properties = sheets.find((sheet) => sheet.properties?.title === tab)?.properties;
+    const sheetId = properties?.sheetId;
+    const rowCount = properties?.gridProperties?.rowCount;
+    if (typeof sheetId !== "number" || typeof rowCount !== "number") {
+      throw new GoogleSheetsError("SHEET_TAB_MISSING", false);
+    }
+    if (rowCount < minRows) growth.push({ sheetId, length: minRows - rowCount + margin });
+  }
+  return growth;
+}
 
 export type SyncReport = {
   sessionId: string;
@@ -194,13 +234,21 @@ export async function syncSnapshot(
   ]);
 
   const plan: SheetPlan = { updates: [], appended: 0 };
+  const sessionCursor = readCursor(sessionKeys);
+  const reservationCursor = readCursor(reservationKeys);
+  const spotCursor = readCursor(spotRowsRead);
+  const cursors: Array<readonly [string, TabCursor, number]> = [
+    [SESSIONS_TAB, sessionCursor, sessionCursor.nextRow],
+    [RESERVATIONS_TAB, reservationCursor, reservationCursor.nextRow],
+    [SPOTS_TAB, spotCursor, spotCursor.nextRow],
+  ];
 
   planUpsert(
     plan,
     SESSIONS_TAB,
     SESSION_HEADERS.length,
     [{ key: session.id, values: sessionRow(session, syncedAt) }],
-    readCursor(sessionKeys),
+    sessionCursor,
   );
 
   planUpsert(
@@ -211,7 +259,7 @@ export async function syncSnapshot(
       key: reservation.id,
       values: reservationRow(reservation, session, syncedAt),
     })),
-    readCursor(reservationKeys),
+    reservationCursor,
   );
 
   const spots = reservations.flatMap((reservation) => spotRows(reservation, session, syncedAt));
@@ -220,13 +268,20 @@ export async function syncSnapshot(
     SPOTS_TAB,
     SPOT_HEADERS.length,
     spots,
-    readCursor(spotRowsRead),
+    spotCursor,
     SPOT_COLUMN.active,
   );
 
   if (options.reconcileSession) {
     spotsDeactivated += planDeactivateOrphans(plan, spotRowsRead, session.id, new Set(spots.map((spot) => spot.key)));
   }
+
+  // Só as abas que ganharam linha nova precisam de grade: quem apenas reescreve
+  // linhas existentes não paga a chamada extra ao Google.
+  const requirements: RowRequirement[] = cursors
+    .filter(([, cursor, firstFreeRow]) => cursor.nextRow > firstFreeRow)
+    .map(([tab, cursor]) => ({ tab, minRows: cursor.nextRow - 1 }));
+  if (requirements.length) await gateway.ensureRows(requirements);
 
   if (plan.updates.length) await gateway.batchUpdate(plan.updates);
 
