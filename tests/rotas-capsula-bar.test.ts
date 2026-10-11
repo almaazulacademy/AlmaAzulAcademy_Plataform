@@ -6,7 +6,7 @@ import test from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 
 import { isExperienceBookable } from "../lib/bases/availability.ts";
-import { FALLBACK_COMING_SOON_EXPERIENCES, RENAMED_EXPERIENCE_SLUGS } from "../lib/bases/catalog.ts";
+import { FALLBACK_COMING_SOON_EXPERIENCES, renamedExperienceRedirect, RENAMED_EXPERIENCE_SLUGS } from "../lib/bases/catalog.ts";
 import { CONCHA_LANDING } from "../lib/bases/concha-landing.ts";
 import { validateExperienceEditorial } from "../lib/editorial/experience.ts";
 import { sheetExperienceTitle } from "../lib/integrations/google-sheets/mapping.ts";
@@ -98,6 +98,8 @@ test("as duas rotas ganham nome e slug próprios no mesmo registro, ainda em bre
       [route.price_cents, route.duration_minutes, route.default_capacity],
       [ids[index].price_cents, ids[index].duration_minutes, ids[index].default_capacity],
     );
+    // O cadastro e a landing dizem a mesma duração: 90 minutos.
+    assert.equal(route.duration_minutes, 90);
   }
   assert.notEqual(routes[0].image_url, routes[1].image_url);
   // O nome antigo saiu do cadastro; nenhuma sessão nasceu e o resto ficou idêntico.
@@ -108,7 +110,7 @@ test("as duas rotas ganham nome e slug próprios no mesmo registro, ainda em bre
   assert.equal(comingSoon.length, 2);
 });
 
-test("landing das rotas: completa, sem o nome antigo e sem horário, duração ou preço inventados", async () => {
+test("landing das rotas: completa, com 1h30 e iniciantes, sem o nome antigo, horário fixo ou preço", async () => {
   const db = await fullDatabase();
   for (const slug of SLUGS) {
     const row = await one(db, "select editorial_content from public.experiences where slug = $1", [slug]);
@@ -123,7 +125,14 @@ test("landing das rotas: completa, sem o nome antigo e sem horário, duração o
     assert.doesNotMatch(text, /caminhos/i);
     assert.match(text, /Confira as próximas datas e horários disponíveis/);
     assert.match(text, /Cápsula Bar/);
-    for (const forbidden of [/\b\d{1,2}h(\d{2})?\b/, /\b\d{1,2}:\d{2}\b/, /\bminutos?\b/i, /\bkm\b/i, /R\$/, /Lago Norte|QL 5/, /https?:\/\//, /\bn[íi]vel\b/i, /iniciante/i]) {
+    // Confirmado pela operação: 1h30 de duração e adequada para iniciantes.
+    const facts = Object.fromEntries((row.editorial_content as { quickFacts: Array<{ label: string; value: string }> }).quickFacts.map((fact) => [fact.label, fact.value]));
+    assert.equal(facts["Duração"], "1h30");
+    assert.equal(facts["Nível"], "Iniciantes são bem-vindos");
+    assert.match(text, /Não é preciso ter experiência anterior/);
+    assert.match(text, /Colete salva-vidas/);
+    // Sem horário fixo, distância ou preço: isso é da sessão, definida no painel.
+    for (const forbidden of [/\b\d{1,2}h(?!30\b)/, /\b\d{1,2}:\d{2}\b/, /\bkm\b/i, /R\$/, /Lago Norte|QL 5/, /https?:\/\//, /manh[ãa]|tarde|noite/i]) {
       assert.equal(forbidden.test(text), false, `${slug}: ${forbidden}`);
     }
     for (const path of copy.match(/\/images\/[^"]+/g) ?? []) {
@@ -132,13 +141,15 @@ test("landing das rotas: completa, sem o nome antigo e sem horário, duração o
   }
 });
 
-test("reaplicar não sobrescreve o painel nem recria o slug antigo", async () => {
+test("reaplicar não sobrescreve o painel, e os slugs antigos não voltam a existir", async () => {
   const db = await fullDatabase();
   await db.exec(`
     update public.experiences set title = 'Rota JK (editada)', editorial_content = jsonb_build_object('version', 1, 'nota', 'painel'), image_url = '/images/outra.webp'
       where slug = 'rota-ermida-ponte-jk';`);
   await applyMigration(db, ROUTES);
-  await applyMigration(db, BEFORE_ROUTES);
+  // A migration de lançamento tentaria recriar a Rota Prainha pelo slug antigo: é recusada por inteiro.
+  await assert.rejects(applyMigration(db, BEFORE_ROUTES), /experiences_retired_slugs/);
+  await assert.rejects(db.exec("update public.experiences set slug = 'caminhos-do-paranoa-rota-ermida-ponte-jk' where slug = 'rota-ermida-ponte-jk'"), /experiences_retired_slugs/);
   await applyMigration(db, ROUTES);
 
   const route = await one(db, "select title, image_url, editorial_content->>'nota' as nota from public.experiences where slug = 'rota-ermida-ponte-jk'");
@@ -146,16 +157,31 @@ test("reaplicar não sobrescreve o painel nem recria o slug antigo", async () =>
   const capsula = await rows(db, "select e.slug from public.experiences e join public.bases b on b.id = e.base_id where b.slug = 'concha-acustica'");
   assert.equal(capsula.length, 5);
   assert.equal(capsula.some((row) => String(row.slug).startsWith("caminhos")), false);
+  assert.equal((await rows(db, "select 1 from pg_constraint where conname = 'experiences_retired_slugs'")).length, 1);
 });
 
 test("rota com sessões e reservas mantém tudo ligado depois da troca de slug", async () => {
   const db = await withAdmin(await fullDatabase({ until: BEFORE_ROUTES }));
   const old = await one(db, "select id from public.experiences where slug = 'caminhos-do-paranoa-rota-ermida-ponte-jk'");
   const session = await one(db, "select public.admin_create_session($1,$2, now() + interval '9 days', 120, 8500, 10, 'OPEN', '') as id", [ADMIN, old.id]);
+  // Reserva confirmada antes da troca (a rota é publicada só para o teste conseguir reservar).
+  await db.exec("update public.experiences set editorial_content = (select editorial_content from public.experiences where slug = 'remada-sunset-concha-acustica'), status = 'PUBLISHED' where slug = 'caminhos-do-paranoa-rota-ermida-ponte-jk'");
+  const reservation = (await one(db, "select public.create_pre_reservation($1,'Cliente de Teste','12345678901','61999990000','a@exemplo.com',3,'',$2) as data", [session.id, randomUUID()])).data as { reservationId: string; publicCode: string };
+  await one(db, "select public.confirm_reservation_payment($1,'INFINITEPAY',$2,25500,'', '{}'::jsonb) as ok", [reservation.reservationId, randomUUID()]);
+  const before = await one(db, "select id, public_code, session_id, experience_id, status, quantity, checkin_token, confirmed_at from public.reservations where id = $1", [reservation.reservationId]);
+
   await applyMigration(db, ROUTES);
 
-  const kept = await one(db, "select e.slug, s.price_cents, s.capacity, s.duration_minutes from public.sessions s join public.experiences e on e.id = s.experience_id where s.id = $1", [session.id]);
-  assert.deepEqual([kept.slug, kept.price_cents, kept.capacity, kept.duration_minutes], ["rota-ermida-ponte-jk", 8500, 10, 120]);
+  const kept = await one(db, "select e.id, e.slug, e.status, s.price_cents, s.capacity, s.duration_minutes from public.sessions s join public.experiences e on e.id = s.experience_id where s.id = $1", [session.id]);
+  assert.deepEqual([kept.id, kept.slug, kept.status, kept.price_cents, kept.capacity, kept.duration_minutes], [old.id, "rota-ermida-ponte-jk", "PUBLISHED", 8500, 10, 120]);
+  // A reserva é a mesma linha, ligada à mesma sessão e à mesma experiência, e continua consultável.
+  assert.deepEqual(await one(db, "select id, public_code, session_id, experience_id, status, quantity, checkin_token, confirmed_at from public.reservations where id = $1", [reservation.reservationId]), before);
+  assert.equal(before.experience_id, old.id);
+  assert.equal((await one(db, "select public.available_spots($1) as spots", [session.id])).spots, 7);
+  const email = (await one(db, "select public.reservation_confirmation_email($1) as data", [reservation.reservationId])).data as Row;
+  assert.equal(email.experienceTitle, "Rota Ermida Ponte JK");
+  assert.equal(email.publicCode, reservation.publicCode);
+  assert.equal((await rows(db, "select 1 from public.payment_events where reservation_id = $1", [reservation.reservationId])).length >= 1, true);
 });
 
 test("painel: ativar a rota abre o fluxo de reserva existente, com horário, preço e vagas da sessão", async () => {
@@ -238,7 +264,19 @@ test("URLs antigas redirecionam para as novas só quando o slug antigo já não 
   });
   const page = source("app/experiencias/[slug]/page.tsx");
   const comingSoon = page.indexOf("return <ComingSoonExperience");
-  const redirect = page.indexOf("permanentRedirect(`/experiencias/${renamed}`)");
+  for (const [old, current] of Object.entries(RENAMED_EXPERIENCE_SLUGS)) {
+    // Antes da migration o slug antigo ainda existe: a página dele é servida, sem redirecionar.
+    assert.equal(renamedExperienceRedirect(old, true), null);
+    // Depois da migration ele some do catálogo: 308 para a URL nova.
+    assert.equal(renamedExperienceRedirect(old, false), `/experiencias/${current}`);
+    // A URL nova nunca redireciona, exista ou não.
+    assert.equal(renamedExperienceRedirect(current, true), null);
+    assert.equal(renamedExperienceRedirect(current, false), null);
+  }
+  assert.equal(renamedExperienceRedirect("caminhos-do-paranoa", false), null);
+  assert.equal(renamedExperienceRedirect("remada-sunset-concha-acustica", false), null);
+  const redirect = page.indexOf("permanentRedirect(renamed)");
+  assert.match(page, /renamedExperienceRedirect\(slug, Boolean\(upcoming\)\)/);
   assert.ok(comingSoon > 0 && redirect > comingSoon, "a experiência existente é servida antes do redirecionamento");
   assert.ok(page.indexOf("if (!experience) notFound()") > redirect);
 });

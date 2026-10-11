@@ -29,6 +29,14 @@ checks as (
          (select string_agg(slug || ':' || public.experience_editorial_is_publishable(editorial_content)::text, ', ' order by slug) from routes),
          (select bool_and(public.experience_editorial_is_publishable(editorial_content)) from routes)
   union all
+  select 'DURACAO_PADRAO_DE_90_MINUTOS',
+         (select string_agg(slug || ':' || duration_minutes || ' min', ', ' order by slug) from routes),
+         (select bool_and(duration_minutes = 90) from routes)
+  union all
+  select 'SLUGS_ANTIGOS_APOSENTADOS',
+         coalesce((select pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.experiences'::regclass and conname = 'experiences_retired_slugs'), 'constraint ausente'),
+         exists (select 1 from pg_constraint where conrelid = 'public.experiences'::regclass and conname = 'experiences_retired_slugs')
+  union all
   select 'ROTA_' || upper(replace(replace(slug, 'rota-', ''), '-', '_')),
          format('id=%s | título=%s | status=%s | %s centavos | %s min | %s vagas padrão | sessões=%s | reservas=%s',
                 id, title, status, price_cents, duration_minutes, default_capacity, sessions, reservations),

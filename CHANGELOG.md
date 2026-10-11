@@ -6,8 +6,9 @@
 - Página da base: um card por rota, com link individual e selo vindo do status de cada experiência ("Em breve" some sozinho quando a rota é ativada). A seção "Caminhos do Paranoá", com selos fixos, foi removida.
 - Migration `202610120001_rotas_capsula_bar.sql` (aditiva e idempotente): troca slug, modality e título nos **mesmos registros** e preenche a landing das duas rotas onde ela ainda está vazia. Não muda status, preço, duração nem capacidade, não cria sessão e não toca nenhuma RPC, reserva ou outra experiência. Preflight e postcheck em `supabase/diagnostics/rotas_capsula_bar_*.sql`.
 - URLs: `/experiencias/rota-ermida-ponte-jk` e `/experiencias/rota-prainha-do-congresso`. As antigas redirecionam (308) quando o slug antigo já não existe, então deploy e migration podem acontecer em qualquer ordem.
+- Landing das duas rotas: 1h30 de duração, adequadas para iniciantes, com os itens incluídos e as orientações de segurança padrão. A Rota Ermida Ponte JK informa a parada na prainha da Ermida Dom Bosco.
 - As rotas continuam "em breve": a publicação e as sessões (data, horário, preço, vagas) são feitas pelo painel. Não há horário fixo em código nem em conteúdo.
-- `202610080001_capsula_bar_launch.sql` ganhou uma guarda para que reaplicá-la depois da troca não recrie o cadastro com o slug antigo. Nada a reaplicar em produção.
+- A constraint `experiences_retired_slugs` aposenta os dois slugs antigos. Sem ela, reaplicar `202610080001_capsula_bar_launch.sql` depois da troca recriaria a Rota Prainha do Congresso pelo slug antigo; agora a reaplicação é recusada por inteiro. A migration de lançamento não foi editada.
 - Fluxo de reserva, InfinitePay, e-mail, QR, check-in e planilha **não foram alterados**. Detalhes em [docs/multi-base.md](docs/multi-base.md#rotas-da-base).
 
 ## Correção: sincronização com a planilha parada pela grade cheia

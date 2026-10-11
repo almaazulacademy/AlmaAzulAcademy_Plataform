@@ -134,6 +134,13 @@ export const RENAMED_EXPERIENCE_SLUGS: Readonly<Record<string, string>> = {
   "caminhos-do-paranoa-rota-prainha-do-congresso": "rota-prainha-do-congresso",
 };
 
+/** Destino de um link antigo; `null` enquanto o slug pedido ainda existe no catálogo. */
+export function renamedExperienceRedirect(slug: string, existsInCatalog: boolean) {
+  if (existsInCatalog) return null;
+  const renamed = RENAMED_EXPERIENCE_SLUGS[slug];
+  return renamed ? `/experiencias/${renamed}` : null;
+}
+
 /** Slugs que já eram exclusivos antes de a exclusividade existir no banco. */
 const FALLBACK_EXCLUSIVE_SLUGS = new Set(["imersao-paranoa"]);
 

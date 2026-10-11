@@ -516,7 +516,9 @@ test("Teste 5: quem não é administrador não cria sessão nem experiência", a
 // =============================================================================
 
 test("reaplicar a migration não duplica nada nem sobrescreve edições do painel", async () => {
-  const db = await fullDatabase();
+  // Reaplicação no estado do lançamento. Depois de 202610120001 a constraint
+  // dos slugs aposentados recusa esta migration (ver rotas-capsula-bar.test.ts).
+  const db = await fullDatabase({ until: LAUNCH });
   await db.exec(`
     update public.bases set name = 'Cápsula Bar (editado)', address = 'Outro endereço' where slug = 'concha-acustica';
     update public.experiences set price_cents = 9900, title = 'Remada Sunset Especial' where slug = 'remada-sunset-concha-acustica';

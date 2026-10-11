@@ -182,7 +182,13 @@ landing onde ela ainda está vazia. Não muda status, preço, duração nem capa
   isso deploy e migration podem acontecer em qualquer ordem.
 - **Página da base:** um card por rota. O selo e o link vêm do status da experiência do card.
 - **Sem horário fixo:** as rotas acontecem durante o dia e cada sessão define data, horário,
-  duração, preço e vagas. A landing só diz "Confira as próximas datas e horários disponíveis".
+  preço e vagas. A landing diz "Confira as próximas datas e horários disponíveis".
+- **Duração e nível:** 90 minutos (1h30), como as demais experiências, e adequadas para
+  iniciantes. O cadastro, a landing e o padrão do formulário de sessão dizem o mesmo.
+- **Slugs aposentados:** a constraint `experiences_retired_slugs` impede os dois slugs antigos de
+  voltarem. Por isso `202610080001_capsula_bar_launch.sql` **não deve ser reaplicada** depois
+  desta migration: ela tentaria recriar a Rota Prainha do Congresso pelo slug antigo e é recusada
+  por inteiro, sem alterar nada.
 - **Ativar:** Sessões → Nova sessão (pode ser criada com a rota ainda "em breve": fica invisível
   no site) e depois Experiências → Ativar. Uma rota de cada vez, se preferir.
 - **Nomes de arquivo:** as fotos em `public/images/bases/concha-acustica/` mantêm o nome antigo
