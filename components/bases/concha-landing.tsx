@@ -179,10 +179,10 @@ export function ConchaLanding({
             <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/65">{bookable ? C.experiences.open.description : C.experiences.description}</p>
           </div>
 
-          <div className="grid gap-4 sm:gap-5 lg:grid-cols-3">
-            {C.experiences.items.map((item, index) => {
-              const featured = index === 0;
-              const routes = "routes" in item ? item.routes : null;
+          {/* Seis colunas: as duas rotas dividem a primeira linha, as demais a segunda. */}
+          <div className="grid gap-4 sm:gap-5 lg:grid-cols-6">
+            {C.experiences.items.map((item) => {
+              const featured = "featured" in item && item.featured;
               const open = openExperience(item.slugs);
               return (
                 <article
@@ -190,14 +190,14 @@ export function ConchaLanding({
                   className={
                     featured
                       ? "group relative isolate min-h-[520px] overflow-hidden rounded-4xl bg-ink text-white lg:col-span-3 lg:min-h-[560px]"
-                      : "group relative isolate aspect-[4/5] max-w-full overflow-hidden rounded-4xl bg-ink text-white"
+                      : "group relative isolate aspect-[4/5] max-w-full overflow-hidden rounded-4xl bg-ink text-white lg:col-span-2"
                   }
                 >
                   <Image
                     src={item.image.src}
                     alt={item.image.alt}
                     fill
-                    sizes={featured ? "(min-width: 1024px) 90vw, 100vw" : "(min-width: 1024px) 30vw, 100vw"}
+                    sizes={featured ? "(min-width: 1024px) 45vw, 100vw" : "(min-width: 1024px) 30vw, 100vw"}
                     className="object-cover"
                     style={{ objectPosition: item.image.position }}
                   />
@@ -206,13 +206,8 @@ export function ConchaLanding({
                     {open ? <ActiveBaseBadge tone="dark" /> : <ComingSoonBadge tone="dark" />}
                   </div>
                   <div className={featured ? "absolute inset-x-0 bottom-0 p-6 sm:p-10" : "absolute inset-x-0 bottom-0 p-6 sm:p-7"}>
-                    <h3 className={featured ? "text-4xl font-medium tracking-[-0.05em] sm:text-6xl" : "text-3xl font-medium tracking-[-0.045em]"}>{item.title}</h3>
+                    <h3 className={featured ? "text-balance text-4xl font-medium tracking-[-0.05em] sm:text-5xl" : "text-3xl font-medium tracking-[-0.045em]"}>{item.title}</h3>
                     <p className="mt-3 max-w-md leading-7 text-white/75">{item.summary}</p>
-                    {routes ? (
-                      <p className="mt-5 text-sm text-white/60">
-                        Primeiros roteiros planejados: <span className="text-white/85">{routes.join(" · ")}</span>
-                      </p>
-                    ) : null}
                     {open ? (
                       // O link cobre o card inteiro (after:inset-0): toque em qualquer ponto leva à experiência.
                       <Link
@@ -232,42 +227,7 @@ export function ConchaLanding({
         </div>
       </section>
 
-      {/* 5. Caminhos do Paranoá */}
-      <section id="caminhos-do-paranoa" className="scroll-mt-20 bg-white py-20 sm:py-28 lg:py-36">
-        <div className="container grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-20">
-          <div className="order-2 grid grid-cols-2 gap-3 sm:gap-4 lg:order-1">
-            {C.paths.images.map((image, index) => (
-              <div key={image.src} className={`relative aspect-[3/4] max-w-full overflow-hidden rounded-4xl bg-mist ${index === 1 ? "mt-10 sm:mt-16" : ""}`}>
-                <Image src={image.src} alt={image.alt} fill sizes="(min-width: 1024px) 22vw, 50vw" className="object-cover" />
-              </div>
-            ))}
-            <MediaCredit className="col-span-2 text-xs text-ink/45" />
-          </div>
-
-          <div className="order-1 lg:order-2">
-            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-lake">{C.paths.eyebrow}</p>
-            <h2 className="text-balance text-4xl font-medium leading-[1.03] tracking-[-0.045em] text-forest sm:text-5xl lg:text-6xl">{C.paths.title}</h2>
-            <p className="mt-6 max-w-xl text-lg leading-8 text-ink/65">{C.paths.description}</p>
-
-            <ol className="mt-10 divide-y divide-ink/10 border-y border-ink/10">
-              {C.paths.routes.map((route, index) => (
-                <li key={route.title} className="grid grid-cols-[auto_1fr] gap-x-5 py-6">
-                  <span className="pt-1 text-sm font-semibold tabular-nums text-lake">{String(index + 1).padStart(2, "0")}</span>
-                  <div>
-                    <h3 className="flex flex-wrap items-center gap-3 text-2xl font-medium tracking-[-0.03em] text-ink">
-                      {route.title} <ComingSoonBadge />
-                    </h3>
-                    <p className="mt-2 leading-7 text-ink/65">{route.description}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-            <p className="mt-5 text-sm text-ink/50">{C.paths.note}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* 7. Encerramento — convite à reserva quando aberta, aviso de "em breve" quando fechada */}
+      {/* 5. Encerramento — convite à reserva quando aberta, aviso de "em breve" quando fechada */}
       <section className="bg-white p-3 sm:p-5">
         <div className="relative isolate overflow-hidden rounded-4xl bg-ink text-white">
           <Image src={C.capsula.image.desktop} alt="" fill sizes="100vw" className="object-cover" />

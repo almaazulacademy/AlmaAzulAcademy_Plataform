@@ -131,7 +131,8 @@ test("migration cria uma única sessão e nenhuma recorrência", () => {
 // =============================================================================
 
 test("Teste 1: base, experiências e a sessão de 11/10/2026 às 17h ficam como pedido", async () => {
-  const db = await fullDatabase();
+  // Estado logo depois do lançamento; os nomes das rotas mudam em 202610120001.
+  const db = await fullDatabase({ until: LAUNCH });
 
   const base = await one(db, "select * from public.bases where slug = 'concha-acustica'");
   assert.equal(base.name, "Cápsula Bar — Concha Acústica");
@@ -515,7 +516,9 @@ test("Teste 5: quem não é administrador não cria sessão nem experiência", a
 // =============================================================================
 
 test("reaplicar a migration não duplica nada nem sobrescreve edições do painel", async () => {
-  const db = await fullDatabase();
+  // Reaplicação no estado do lançamento. Depois de 202610120001 a constraint
+  // dos slugs aposentados recusa esta migration (ver rotas-capsula-bar.test.ts).
+  const db = await fullDatabase({ until: LAUNCH });
   await db.exec(`
     update public.bases set name = 'Cápsula Bar (editado)', address = 'Outro endereço' where slug = 'concha-acustica';
     update public.experiences set price_cents = 9900, title = 'Remada Sunset Especial' where slug = 'remada-sunset-concha-acustica';
@@ -634,9 +637,10 @@ test("landing do Cápsula Bar só abre caminho de reserva quando a base está at
   for (const forbidden of [/R\$/, /\b\d{1,2}\/\d{1,2}\b/, /\bvagas?\b/i, /https?:\/\//, /checkout/i]) {
     assert.equal(forbidden.test(copy), false, String(forbidden));
   }
-  // Cada card aponta para experiências que a migration realmente cadastra.
+  // Cada card aponta para experiências que as migrations realmente cadastram.
+  const routes = source("supabase/migrations/202610120001_rotas_capsula_bar.sql");
   for (const item of CONCHA_LANDING.experiences.items) {
-    for (const slug of item.slugs) assert.match(migration, new RegExp(`'${slug}'`), slug);
+    for (const slug of item.slugs) assert.match(migration + routes, new RegExp(`'${slug}'`), slug);
   }
   assert.equal(CONCHA_LANDING.mediaCredit, "Registros de experiências Alma Azul no Lago Paranoá");
 });

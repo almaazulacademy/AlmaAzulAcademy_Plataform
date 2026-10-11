@@ -21,6 +21,7 @@ function source(path: string) {
 
 const migration = source("supabase/migrations/202609150001_multi_base.sql");
 const executable = migration.replace(/^\s*--.*$/gm, "");
+const routesMigration = source("supabase/migrations/202610120001_rotas_capsula_bar.sql");
 
 // ---------------------------------------------------------------------------
 // Migration
@@ -132,9 +133,13 @@ test("fallback local espelha exatamente o seed da migration", () => {
   for (const experience of FALLBACK_COMING_SOON_EXPERIENCES) {
     assert.equal(experience.status, "COMING_SOON");
     assert.equal(experience.baseSlug, "concha-acustica");
-    assert.match(executable, new RegExp(`'${experience.slug}', '${experience.title}', '${experience.modality}'`));
+    // As duas rotas ganharam nome e slug próprios em 202610120001; as demais seguem o seed original.
+    const seed = experience.slug.startsWith("rota-")
+      ? new RegExp(`'${experience.slug}',\\s*'[^']+',\\s*'${experience.title}'`)
+      : new RegExp(`'${experience.slug}', '${experience.title}', '${experience.modality}'`);
+    assert.match(experience.slug.startsWith("rota-") ? routesMigration : executable, seed);
   }
-  assert.deepEqual(FALLBACK_COMING_SOON_EXPERIENCES.map((item) => item.title), ["Caminhos do Paranoá", "Remada Nascer do Sol", "Remada Sunset", "Remada Lua Cheia"]);
+  assert.deepEqual(FALLBACK_COMING_SOON_EXPERIENCES.map((item) => item.title), ["Rota Ermida Ponte JK", "Rota Prainha do Congresso", "Remada Nascer do Sol", "Remada Sunset", "Remada Lua Cheia"]);
 });
 
 test("imagens das bases e das experiências em breve existem no acervo", () => {
@@ -175,7 +180,7 @@ test("experiência em breve nunca é reservável nem aponta para uma agenda", ()
 
 test("vitrine agrupa a mesma modalidade das duas bases em um card", () => {
   const groups = groupCatalogByModality(catalog, bases);
-  assert.deepEqual(groups.map((group) => group.modality), ["imersao-paranoa", "remada-sunset", "caminhos-do-paranoa", "remada-nascer-do-sol", "remada-lua-cheia"]);
+  assert.deepEqual(groups.map((group) => group.modality), ["imersao-paranoa", "remada-sunset", "rota-ermida-ponte-jk", "rota-prainha-do-congresso", "remada-nascer-do-sol", "remada-lua-cheia"]);
 
   const sunset = groups.find((group) => group.modality === "remada-sunset");
   assert.ok(sunset);
@@ -188,14 +193,18 @@ test("vitrine agrupa a mesma modalidade das duas bases em um card", () => {
   assert.equal(imersao?.exclusiveBase?.slug, "lago-norte");
   assert.equal(exclusiveLabel(imersao!.exclusiveBase!), "Exclusiva da Base Lago Norte");
 
-  const caminhos = groups.find((group) => group.modality === "caminhos-do-paranoa");
-  assert.equal(caminhos?.comingSoon, true);
-  assert.equal(caminhos?.exclusiveBase, null);
+  // Cada rota é uma experiência independente: um card por rota, sem agrupamento.
+  for (const modality of ["rota-ermida-ponte-jk", "rota-prainha-do-congresso"]) {
+    const route = groups.find((group) => group.modality === modality);
+    assert.equal(route?.entries.length, 1);
+    assert.equal(route?.comingSoon, true);
+    assert.equal(route?.exclusiveBase, null);
+  }
 });
 
 test("filtro por base mostra só a base escolhida e nunca a Imersão na Concha", () => {
   const concha = groupCatalogByModality(experiencesForBase(catalog, "concha-acustica"), bases);
-  assert.deepEqual(concha.map((group) => group.lead.title), ["Caminhos do Paranoá", "Remada Nascer do Sol", "Remada Sunset", "Remada Lua Cheia"]);
+  assert.deepEqual(concha.map((group) => group.lead.title), ["Rota Ermida Ponte JK", "Rota Prainha do Congresso", "Remada Nascer do Sol", "Remada Sunset", "Remada Lua Cheia"]);
   assert.ok(concha.every((group) => group.comingSoon));
   assert.equal(concha.some((group) => group.modality === "imersao-paranoa"), false);
 
@@ -346,8 +355,11 @@ test("landing da Concha: mídia local e leve, sem preço nem data, e reserva só
     const limit = path.endsWith(".mp4") ? (path.includes("capsula") ? 400_000 : 4_000_000) : 400_000;
     assert.ok(statSync(url).size <= limit, `${path} acima do orçamento`);
   }
-  // Nenhuma foto associada a um roteiro específico.
-  assert.equal(CONCHA_LANDING.paths.routes.some((route) => "image" in route), false);
+  // O agrupamento "Caminhos do Paranoá" saiu da página: cada rota tem o seu card.
+  assert.equal("paths" in CONCHA_LANDING, false);
+  // O nome antigo só sobrevive em identificadores técnicos (slug anterior e nome de arquivo).
+  for (const item of CONCHA_LANDING.experiences.items) assert.doesNotMatch(`${item.title} ${item.summary} ${item.image.alt}`, /caminhos/i);
+  assert.doesNotMatch(landing, /caminhos/i);
   // Cápsula: fotos reais do espaço (sem selo de registro temporário) e Lia só com nome e papel.
   const { isTemporaryMedia } = await import("../lib/bases/media.ts");
   for (const src of [CONCHA_LANDING.capsula.image.desktop, ...CONCHA_LANDING.capsula.details.map((detail) => detail.src)]) {

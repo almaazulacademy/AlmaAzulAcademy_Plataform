@@ -36,7 +36,9 @@ checks as (
          (select string_agg(title || ':' || status, ', ' order by title) from capsula_experiences),
          (select count(*) = 5 from capsula_experiences
            where slug in ('remada-sunset-concha-acustica', 'remada-nascer-do-sol-concha-acustica', 'remada-lua-cheia-concha-acustica',
-                          'caminhos-do-paranoa-rota-ermida-ponte-jk', 'caminhos-do-paranoa-rota-prainha-do-congresso'))
+                          'caminhos-do-paranoa-rota-ermida-ponte-jk', 'caminhos-do-paranoa-rota-prainha-do-congresso',
+                          -- nomes dados às duas rotas por 202610120001_rotas_capsula_bar.sql
+                          'rota-ermida-ponte-jk', 'rota-prainha-do-congresso'))
   union all
   select 'VALOR_DURACAO_E_CAPACIDADE_PADRAO',
          (select string_agg(distinct price_cents || ' centavos / ' || duration_minutes || ' min / ' || default_capacity || ' vagas', ', ') from capsula_experiences),

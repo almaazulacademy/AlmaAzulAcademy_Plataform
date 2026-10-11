@@ -166,12 +166,36 @@ Experiências cadastradas (todas R$ 70, 90 minutos, 24 vagas por padrão):
 | Remada Sunset | `remada-sunset-concha-acustica` | `PUBLISHED` — sessão de 11/10/2026 às 17h, 24 vagas |
 | Remada do Nascer do Sol | `remada-nascer-do-sol-concha-acustica` | `COMING_SOON` |
 | Remada da Lua Cheia | `remada-lua-cheia-concha-acustica` | `COMING_SOON` |
-| Caminhos do Paranoá — Rota Ermida x Ponte JK | `caminhos-do-paranoa-rota-ermida-ponte-jk` | `COMING_SOON` |
-| Caminhos do Paranoá — Rota Prainha do Congresso | `caminhos-do-paranoa-rota-prainha-do-congresso` | `COMING_SOON` |
+| Rota Ermida Ponte JK | `rota-ermida-ponte-jk` | `COMING_SOON` |
+| Rota Prainha do Congresso | `rota-prainha-do-congresso` | `COMING_SOON` |
 
-Os dois roteiros são experiências próprias (o antigo cadastro único `caminhos-do-paranoa` virou
-o primeiro). Assim cada roteiro tem as suas sessões, vagas e preço pelo painel atual, sem
-schema novo.
+### Rotas da base
+
+As duas rotas são experiências independentes: cada uma tem a sua página, as suas sessões, vagas
+e preço pelo painel atual, sem schema novo. Elas nasceram em `202610080001` sob o nome comercial
+"Caminhos do Paranoá", que foi abandonado. A migration `202610120001_rotas_capsula_bar.sql` troca
+slug, modality e título **nos mesmos registros** (ids, sessões e reservas preservados) e preenche a
+landing onde ela ainda está vazia. Não muda status, preço, duração nem capacidade e não cria sessão.
+
+- **URLs antigas:** `/experiencias/caminhos-do-paranoa-rota-…` redireciona (308) para a URL nova
+  quando o slug antigo já não existe (`RENAMED_EXPERIENCE_SLUGS` em `lib/bases/catalog.ts`). Por
+  isso deploy e migration podem acontecer em qualquer ordem.
+- **Página da base:** um card por rota. O selo e o link vêm do status da experiência do card.
+- **Sem horário fixo:** as rotas acontecem durante o dia e cada sessão define data, horário,
+  preço e vagas. A landing diz "Confira as próximas datas e horários disponíveis".
+- **Duração e nível:** 90 minutos (1h30), como as demais experiências, e adequadas para
+  iniciantes. O cadastro, a landing e o padrão do formulário de sessão dizem o mesmo.
+- **Slugs aposentados:** a constraint `experiences_retired_slugs` impede os dois slugs antigos de
+  voltarem. Por isso `202610080001_capsula_bar_launch.sql` **não deve ser reaplicada** depois
+  desta migration: ela tentaria recriar a Rota Prainha do Congresso pelo slug antigo e é recusada
+  por inteiro, sem alterar nada.
+- **Ativar:** Sessões → Nova sessão (pode ser criada com a rota ainda "em breve": fica invisível
+  no site) e depois Experiências → Ativar. Uma rota de cada vez, se preferir.
+- **Nomes de arquivo:** as fotos em `public/images/bases/concha-acustica/` mantêm o nome antigo
+  (`…caminhos-do-paranoa…`). É identificador técnico; renomear exigiria trocar `image_url` e a
+  landing no banco junto com o deploy.
+- Antes de aplicar, rode `supabase/diagnostics/rotas_capsula_bar_preflight.sql`; depois,
+  `rotas_capsula_bar_postcheck.sql` (última linha `ROTAS_CAPSULA_BAR_OK`).
 
 ### Localização: uma fonte só
 
@@ -255,7 +279,7 @@ Depois de aplicar, rode `supabase/diagnostics/capsula_bar_launch_postcheck.sql`;
 - Uma sessão só troca de experiência pelo painel (`admin_update_session`, que recusa com
   reservas). Um `UPDATE` direto por SQL não é bloqueado — comportamento anterior a esta mudança.
 
-## Roteiros — Caminhos do Paranoá (desenho para depois)
+## Roteiros como detalhe da sessão (desenho para depois)
 
 Não foi implementado nesta etapa, para não criar schema sem uso. A forma recomendada:
 
@@ -280,5 +304,5 @@ alter table public.sessions
 - `list_open_sessions`, `get_booking_session`, `admin_list_sessions` e o e-mail passam a
   devolver `route_name`; reservas continuam sem coluna própria (o roteiro vem da sessão),
   seguindo a mesma regra que evita redundância com a base.
-- Na interface, o roteiro aparece como um detalhe da turma ("Caminhos do Paranoá · Rota
+- Na interface, o roteiro aparece como um detalhe da turma ("Experiência · Rota
   Atalaia"), não como uma experiência separada.

@@ -66,11 +66,20 @@ export const FALLBACK_BASES: PublicBase[] = [
 /** Espelho local das experiências planejadas da Concha Acústica (todas "em breve"). */
 export const FALLBACK_COMING_SOON_EXPERIENCES: CatalogExperience[] = [
   {
-    slug: "caminhos-do-paranoa",
-    title: "Caminhos do Paranoá",
-    modality: "caminhos-do-paranoa",
+    slug: "rota-ermida-ponte-jk",
+    title: "Rota Ermida Ponte JK",
+    modality: "rota-ermida-ponte-jk",
     eyebrow: "Remada de dia",
-    summary: "Uma remada pelo Lago Paranoá para descobrir Brasília a partir da água.",
+    summary: "Uma remada contemplativa pela Ponte JK, com parada na prainha da Ermida Dom Bosco.",
+    image: "/images/backgrounds/hero-alma-azul-lago.webp",
+    displayOrder: 100,
+  },
+  {
+    slug: "rota-prainha-do-congresso",
+    title: "Rota Prainha do Congresso",
+    modality: "rota-prainha-do-congresso",
+    eyebrow: "Remada de dia",
+    summary: "Uma remada pelo Lago Paranoá em direção à prainha do Clube do Congresso.",
     image: "/images/backgrounds/hero-alma-azul-lago.webp",
     displayOrder: 100,
   },
@@ -114,6 +123,23 @@ export const FALLBACK_COMING_SOON_EXPERIENCES: CatalogExperience[] = [
   displayOrder: item.displayOrder,
   image: { src: item.image, alt: `${item.title} no Lago Paranoá` },
 }));
+
+/**
+ * Slugs públicos que mudaram de nome. A página da experiência redireciona o
+ * antigo para o novo (308) só quando o antigo já não existe no banco — então o
+ * deploy pode acontecer antes ou depois da migration `202610120001`.
+ */
+export const RENAMED_EXPERIENCE_SLUGS: Readonly<Record<string, string>> = {
+  "caminhos-do-paranoa-rota-ermida-ponte-jk": "rota-ermida-ponte-jk",
+  "caminhos-do-paranoa-rota-prainha-do-congresso": "rota-prainha-do-congresso",
+};
+
+/** Destino de um link antigo; `null` enquanto o slug pedido ainda existe no catálogo. */
+export function renamedExperienceRedirect(slug: string, existsInCatalog: boolean) {
+  if (existsInCatalog) return null;
+  const renamed = RENAMED_EXPERIENCE_SLUGS[slug];
+  return renamed ? `/experiencias/${renamed}` : null;
+}
 
 /** Slugs que já eram exclusivos antes de a exclusividade existir no banco. */
 const FALLBACK_EXCLUSIVE_SLUGS = new Set(["imersao-paranoa"]);
