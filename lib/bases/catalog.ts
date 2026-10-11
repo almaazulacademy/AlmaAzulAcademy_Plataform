@@ -70,7 +70,7 @@ export const FALLBACK_COMING_SOON_EXPERIENCES: CatalogExperience[] = [
     title: "Rota Ermida Ponte JK",
     modality: "rota-ermida-ponte-jk",
     eyebrow: "Remada de dia",
-    summary: "Uma remada contemplativa pela Ponte JK, com parada na prainha da Ermida Dom Bosco.",
+    summary: "Uma remada contemplativa até a prainha da Ermida Dom Bosco, com parada para banho e a Ponte JK à vista.",
     image: "/images/backgrounds/hero-alma-azul-lago.webp",
     displayOrder: 100,
   },

@@ -101,7 +101,7 @@ export const CONCHA_LANDING = {
       {
         slugs: ["rota-ermida-ponte-jk", "caminhos-do-paranoa-rota-ermida-ponte-jk"],
         title: "Rota Ermida Ponte JK",
-        summary: "Uma remada contemplativa pela Ponte JK, com parada na prainha da Ermida Dom Bosco.",
+        summary: "Uma remada contemplativa até a prainha da Ermida Dom Bosco, com parada para banho e a Ponte JK à vista.",
         featured: true,
         image: { src: `${IMG}/experiencia-caminhos-do-paranoa.webp`, alt: "Canoa havaiana da Alma Azul no Lago Paranoá com a Ponte JK ao fundo", position: "50% 62%" },
       },

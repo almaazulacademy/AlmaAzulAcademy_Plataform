@@ -1,5 +1,10 @@
 # Changelog
 
+## Correção: texto do percurso da Rota Ermida Ponte JK
+
+- A remada não chega à Ponte JK: o grupo rema até a prainha da Ermida Dom Bosco, para para um banho, e vê a ponte durante quase todo o trajeto e na parada. Card, resumo e landing diziam "pela Ponte JK".
+- Migration `202610120002_rota_ermida_texto.sql`: só texto, só nesta rota, e só onde o texto ainda é o anterior (edições do painel são mantidas).
+
 ## Rotas da Base Cápsula Bar: Rota Ermida Ponte JK e Rota Prainha do Congresso
 
 - O agrupamento "Caminhos do Paranoá" deixa de existir no site. As duas rotas passam a ser experiências independentes, com nome, card, página e sessões próprios: **Rota Ermida Ponte JK** e **Rota Prainha do Congresso**.

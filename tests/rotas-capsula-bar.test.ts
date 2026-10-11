@@ -13,6 +13,7 @@ import { sheetExperienceTitle } from "../lib/integrations/google-sheets/mapping.
 import { applyMigration, fullDatabase } from "./support/full-database.ts";
 
 const ROUTES = "202610120001_rotas_capsula_bar.sql";
+const TEXT_FIX = "202610120002_rota_ermida_texto.sql";
 const BEFORE_ROUTES = "202610080001_capsula_bar_launch.sql";
 const ADMIN = "00000000-0000-4000-8000-00000000000a";
 const NAMES = { "rota-ermida-ponte-jk": "Rota Ermida Ponte JK", "rota-prainha-do-congresso": "Rota Prainha do Congresso" } as const;
@@ -279,4 +280,34 @@ test("URLs antigas redirecionam para as novas só quando o slug antigo já não 
   assert.match(page, /renamedExperienceRedirect\(slug, Boolean\(upcoming\)\)/);
   assert.ok(comingSoon > 0 && redirect > comingSoon, "a experiência existente é servida antes do redirecionamento");
   assert.ok(page.indexOf("if (!experience) notFound()") > redirect);
+});
+
+test("Rota Ermida Ponte JK: a remada vai até a Ermida, com banho, e a ponte é vista — não percorrida", async () => {
+  const before = await fullDatabase({ until: ROUTES });
+  const others = await rows(before, "select id, slug, title, summary, description, status, editorial_content::text as editorial from public.experiences where slug <> 'rota-ermida-ponte-jk' order by slug");
+  const fixed = await rows(before, "select id, slug, title, status, price_cents, duration_minutes, default_capacity, image_url, modality from public.experiences where slug = 'rota-ermida-ponte-jk'");
+  await applyMigration(before, TEXT_FIX);
+  await applyMigration(before, TEXT_FIX);
+  const db = before;
+
+  const route = await one(db, "select summary, description, editorial_content, public.experience_editorial_is_publishable(editorial_content) as publishable from public.experiences where slug = 'rota-ermida-ponte-jk'");
+  const text = `${route.summary} ${route.description} ${JSON.stringify(route.editorial_content).replace(/\/images\/[^"]+/g, "")}`;
+  assert.equal(route.publishable, true);
+  assert.equal(validateExperienceEditorial(route.editorial_content, true).success, true);
+  assert.doesNotMatch(text, /pela Ponte JK/);
+  assert.match(text, /até a prainha da Ermida Dom Bosco/);
+  assert.match(text, /banho/);
+  assert.match(text, /Ponte JK/);
+  assert.equal(route.summary, CONCHA_LANDING.experiences.items[0].summary);
+  assert.equal(route.summary, FALLBACK_COMING_SOON_EXPERIENCES.find((item) => item.slug === "rota-ermida-ponte-jk")?.summary);
+  // Só texto, só nesta rota.
+  assert.deepEqual(await rows(db, "select id, slug, title, status, price_cents, duration_minutes, default_capacity, image_url, modality from public.experiences where slug = 'rota-ermida-ponte-jk'"), fixed);
+  assert.deepEqual(await rows(db, "select id, slug, title, summary, description, status, editorial_content::text as editorial from public.experiences where slug <> 'rota-ermida-ponte-jk' order by slug"), others);
+
+  // Texto já editado pelo painel não é sobrescrito.
+  const edited = await fullDatabase({ until: ROUTES });
+  await edited.exec("update public.experiences set summary = 'Resumo do painel', editorial_content = jsonb_set(editorial_content, '{hero,title}', '\"Título do painel\"') where slug = 'rota-ermida-ponte-jk'");
+  await applyMigration(edited, TEXT_FIX);
+  const kept = await one(edited, "select summary, editorial_content #>> '{hero,title}' as title, editorial_content #>> '{quickFacts,5,value}' as percurso from public.experiences where slug = 'rota-ermida-ponte-jk'");
+  assert.deepEqual([kept.summary, kept.title, kept.percurso], ["Resumo do painel", "Título do painel", "Até a prainha da Ermida Dom Bosco, com parada para banho"]);
 });
