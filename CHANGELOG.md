@@ -1,5 +1,15 @@
 # Changelog
 
+## Rotas da Base Cápsula Bar: Rota Ermida Ponte JK e Rota Prainha do Congresso
+
+- O agrupamento "Caminhos do Paranoá" deixa de existir no site. As duas rotas passam a ser experiências independentes, com nome, card, página e sessões próprios: **Rota Ermida Ponte JK** e **Rota Prainha do Congresso**.
+- Página da base: um card por rota, com link individual e selo vindo do status de cada experiência ("Em breve" some sozinho quando a rota é ativada). A seção "Caminhos do Paranoá", com selos fixos, foi removida.
+- Migration `202610120001_rotas_capsula_bar.sql` (aditiva e idempotente): troca slug, modality e título nos **mesmos registros** e preenche a landing das duas rotas onde ela ainda está vazia. Não muda status, preço, duração nem capacidade, não cria sessão e não toca nenhuma RPC, reserva ou outra experiência. Preflight e postcheck em `supabase/diagnostics/rotas_capsula_bar_*.sql`.
+- URLs: `/experiencias/rota-ermida-ponte-jk` e `/experiencias/rota-prainha-do-congresso`. As antigas redirecionam (308) quando o slug antigo já não existe, então deploy e migration podem acontecer em qualquer ordem.
+- As rotas continuam "em breve": a publicação e as sessões (data, horário, preço, vagas) são feitas pelo painel. Não há horário fixo em código nem em conteúdo.
+- `202610080001_capsula_bar_launch.sql` ganhou uma guarda para que reaplicá-la depois da troca não recrie o cadastro com o slug antigo. Nada a reaplicar em produção.
+- Fluxo de reserva, InfinitePay, e-mail, QR, check-in e planilha **não foram alterados**. Detalhes em [docs/multi-base.md](docs/multi-base.md#rotas-da-base).
+
 ## Correção: sincronização com a planilha parada pela grade cheia
 
 - **Causa:** a aba oculta `Vagas Confirmadas` chegou à última linha da grade (2009) em 07/10/2026. A sincronização escreve em intervalos explícitos, que — ao contrário do `append` — não aumentam a grade; o Google passou a recusar o lote inteiro com 400 ("exceeds grid limits"), e toda reserva que precisava de linha nova ficava pendente. Não tem relação com o lançamento do Cápsula Bar: só coincidiu na data.

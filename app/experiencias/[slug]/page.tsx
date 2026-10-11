@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 
 import { ComingSoonExperience } from "@/components/bases/coming-soon-experience";
 import { ExperienceLanding } from "@/components/experience-landing";
+import { RENAMED_EXPERIENCE_SLUGS } from "@/lib/bases/catalog";
 import { getExperiencePlacement } from "@/lib/bases/data";
 import { getPublishedExperience } from "@/lib/editorial/data";
 import { DATE_FILTER_PARAM, parseDateFilter } from "@/lib/sessions/date-filter";
@@ -49,6 +50,9 @@ export default async function DynamicExperiencePage({ params, searchParams }: Pr
   if (!experience) {
     const upcoming = await getExperiencePlacement(slug);
     if (upcoming?.experience.status === "COMING_SOON") return <ComingSoonExperience experience={upcoming.experience} base={upcoming.base} />;
+    // Link antigo de uma experiência renomeada: leva para a URL atual.
+    const renamed = RENAMED_EXPERIENCE_SLUGS[slug];
+    if (renamed) permanentRedirect(`/experiencias/${renamed}`);
   }
   if (!experience) notFound();
   const placement = await getExperiencePlacement(experience.slug);

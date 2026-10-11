@@ -8,7 +8,7 @@
  *
  * As fotos e o vídeo com canoas são registros reais da Alma Azul no Lago
  * Paranoá — ainda não foram produzidos na nova base. Por isso aparecem sempre
- * com `mediaCredit`, e nenhuma foto é associada a um roteiro específico.
+ * com `mediaCredit`.
  *
  * As fotos em `capsula` são do próprio lugar (Cápsula, às margens do Lago
  * Paranoá): levam legenda, não o selo de registro temporário.
@@ -95,13 +95,22 @@ export const CONCHA_LANDING = {
     },
     // `slugs` liga cada card às experiências do catálogo: é o status delas no
     // banco que decide se o card leva para a reserva ou mostra "Em breve".
+    // As duas rotas são experiências independentes, cada uma com o seu card;
+    // o slug anterior fica na lista até a migration `202610120001` renomear.
     items: [
       {
-        slugs: ["caminhos-do-paranoa-rota-ermida-ponte-jk", "caminhos-do-paranoa-rota-prainha-do-congresso"],
-        title: "Caminhos do Paranoá",
-        summary: "Uma remada para descobrir Brasília por outro ponto de vista.",
-        routes: ["Rota Ermida x Ponte JK", "Rota Prainha do Congresso"],
+        slugs: ["rota-ermida-ponte-jk", "caminhos-do-paranoa-rota-ermida-ponte-jk"],
+        title: "Rota Ermida Ponte JK",
+        summary: "Uma remada contemplativa pela Ponte JK, com parada na prainha da Ermida Dom Bosco.",
+        featured: true,
         image: { src: `${IMG}/experiencia-caminhos-do-paranoa.webp`, alt: "Canoa havaiana da Alma Azul no Lago Paranoá com a Ponte JK ao fundo", position: "50% 62%" },
+      },
+      {
+        slugs: ["rota-prainha-do-congresso", "caminhos-do-paranoa-rota-prainha-do-congresso"],
+        title: "Rota Prainha do Congresso",
+        summary: "Uma remada pelo Lago Paranoá em direção à prainha do Clube do Congresso.",
+        featured: true,
+        image: { src: `${IMG}/caminhos-do-paranoa-ambiente-02.webp`, alt: "Grupo remando em canoa havaiana sob céu azul no Lago Paranoá", position: "50% 70%" },
       },
       {
         slugs: ["remada-nascer-do-sol-concha-acustica"],
@@ -122,22 +131,6 @@ export const CONCHA_LANDING = {
         image: { src: `${IMG}/experiencia-remada-da-lua-cheia.webp`, alt: "Canoas havaianas no Lago Paranoá com a lua cheia nascendo no horizonte", position: "50% 50%" },
       },
     ],
-  },
-  paths: {
-    eyebrow: "Caminhos do Paranoá",
-    title: "Brasília também se descobre pelo lago.",
-    description:
-      "Uma experiência diurna pensada para a nova base, com diferentes percursos saindo da Concha Acústica. Cada roteiro revela um trecho do Lago Paranoá e uma forma diferente de ver a cidade.",
-    // Ambientação geral da experiência: nenhuma destas fotos é de um roteiro específico.
-    images: [
-      { src: `${IMG}/caminhos-do-paranoa-ambiente-01.webp`, alt: "Canoa havaiana da Alma Azul navegando em um dia de céu azul no Lago Paranoá" },
-      { src: `${IMG}/caminhos-do-paranoa-ambiente-02.webp`, alt: "Grupo remando em canoa havaiana sob céu azul no Lago Paranoá" },
-    ],
-    routes: [
-      { title: "Rota Ermida x Ponte JK", description: "Uma remada contemplativa da Ponte JK, com parada na prainha da Ermida Dom Bosco." },
-      { title: "Rota Prainha do Congresso", description: "Remada em direção à região da prainha do Clube do Congresso." },
-    ],
-    note: "Duração, distância e nível de cada roteiro serão divulgados junto com a programação.",
   },
   closing: {
     title: "Uma nova base está chegando.",

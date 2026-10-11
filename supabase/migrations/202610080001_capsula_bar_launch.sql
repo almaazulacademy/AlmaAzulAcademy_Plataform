@@ -96,6 +96,10 @@ declare
   legacy_column_count integer;
   route_ermida constant text := 'caminhos-do-paranoa-rota-ermida-ponte-jk';
   route_prainha constant text := 'caminhos-do-paranoa-rota-prainha-do-congresso';
+  -- Slug dado ao mesmo roteiro por 202610120001_rotas_capsula_bar.sql. Com ele
+  -- presente, reaplicar esta migration não recria o cadastro com o slug antigo.
+  route_prainha_renamed constant text := 'rota-prainha-do-congresso';
+  route_prainha_missing boolean;
   route_prainha_summary constant text := 'Uma remada pelo Lago Paranoá em direção à prainha do Clube do Congresso.';
   route_image constant text := '/images/bases/concha-acustica/experiencia-caminhos-do-paranoa.webp';
 begin
@@ -127,7 +131,10 @@ begin
     and not exists (select 1 from public.sessions s where s.experience_id = e.id)
     and not exists (select 1 from public.experiences other where other.slug = route_ermida);
 
+  select not exists (select 1 from public.experiences where slug = route_prainha_renamed) into route_prainha_missing;
+
   if legacy_column_count = 7 then
+    if route_prainha_missing then
     execute $legacy_insert$
       insert into public.experiences (
         slug, title, eyebrow, short_description, description, location, cover_image,
@@ -143,6 +150,7 @@ begin
       on conflict (slug) do nothing
     $legacy_insert$
     using route_prainha, route_prainha_summary, route_image, capsula_id;
+    end if;
 
     -- Texto legado de local: só troca o valor semeado pela migration multi-base.
     execute $legacy_location$
@@ -151,7 +159,7 @@ begin
       where base_id = $1 and location = 'Concha Acústica, Brasília'
     $legacy_location$
     using capsula_id;
-  else
+  elsif route_prainha_missing then
     insert into public.experiences (
       slug, title, summary, description, duration_minutes, price_cents, default_capacity, status,
       image_url, display_order, editorial_content, base_id, is_exclusive, modality
