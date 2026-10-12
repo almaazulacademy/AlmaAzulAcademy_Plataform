@@ -59,6 +59,7 @@ const RESERVATION_STATUS_LABEL: Record<string, string> = {
   CONFIRMED: "Confirmada",
   EXPIRED: "Expirada",
   CANCELLED: "Cancelada",
+  AWAITING_RESCHEDULE: "Aguardando reagendamento",
 };
 
 const PAYMENT_STATUS_LABEL: Record<string, string> = {

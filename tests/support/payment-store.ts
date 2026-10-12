@@ -17,7 +17,7 @@
  * banco. Os dois se complementam: aqui a orquestração, lá o plpgsql.
  */
 
-export type ReservationStatus = "PRE_RESERVED" | "CONFIRMED" | "EXPIRED" | "CANCELLED";
+export type ReservationStatus = "PRE_RESERVED" | "CONFIRMED" | "EXPIRED" | "CANCELLED" | "AWAITING_RESCHEDULE";
 
 export type StoredReservation = {
   id: string;
@@ -259,6 +259,8 @@ export class PaymentStore {
     const reservation = this.reservations.get(String(args.p_reservation_id));
     if (!reservation) return false;
     if (reservation.status === "CONFIRMED") return true;
+    // Mesma trava de `202610130002_reservation_standby.sql`.
+    if (reservation.status === "AWAITING_RESCHEDULE") return false;
 
     const provider = String(args.p_provider);
     const eventId = String(args.p_provider_event_id);
@@ -297,6 +299,7 @@ export class PaymentStore {
     const reservation = this.reservations.get(String(args.p_reservation_id));
     if (!reservation) return "NOT_FOUND";
     if (reservation.status === "CONFIRMED") return "ALREADY_CONFIRMED";
+    if (reservation.status === "AWAITING_RESCHEDULE") return "AWAITING_RESCHEDULE";
     if (reservation.status === "CANCELLED") {
       reservation.last_reconciliation_code = "CANCELLED";
       return "CANCELLED";

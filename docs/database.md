@@ -35,6 +35,7 @@ Para o banco legado específico, a cópia operacional está em `supabase/bootstr
 - `CONFIRMED`
 - `EXPIRED`
 - `CANCELLED`
+- `AWAITING_RESCHEDULE` (adicionado por `202610130001_reservation_status_awaiting_reschedule.sql`; reserva paga, fora da turma original e sem nova data — não ocupa vaga. Ver [reservation-standby.md](reservation-standby.md))
 
 `session_status`:
 
@@ -238,6 +239,8 @@ Não há policy pública de leitura para `reservations` ou `payment_events`; pri
 | `202608240001_admin_change_reservation_session.sql` | Histórico tipado e RPC transacional da troca administrativa de turma |
 | `202608310001_admin_cross_experience_rescheduling.sql` | Reagendamento entre experiências: histórico com as duas experiências, invariante reserva ↔ sessão ↔ experiência e evolução das três RPCs |
 | `202609150001_multi_base.sql` | Tabela `bases`, `experiences.base_id`/`is_exclusive`/`modality`, status `COMING_SOON`, invariante "publicada só em base ativa", Concha Acústica em breve, RPCs públicas do catálogo e `admin_base_dashboard_metrics`. Detalhes em [multi-base.md](multi-base.md) |
+| `202610130001_reservation_status_awaiting_reschedule.sql` | Somente o valor `AWAITING_RESCHEDULE` no enum `reservation_status` |
+| `202610130002_reservation_standby.sql` | Tabela `reservation_standby`, colunas de ator e origem em `reservation_session_changes`, trigger `reservations_standby_guard`, travas nas funções de pagamento, receita com Stand-by e RPCs de Stand-by. Detalhes em [reservation-standby.md](reservation-standby.md) |
 
 ## RPCs administrativas
 

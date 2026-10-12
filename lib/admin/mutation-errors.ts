@@ -34,6 +34,12 @@ export function adminMutationError(error: unknown) {
   if (message.includes("SESSION_MUST_BE_FUTURE")) {
     return { status: 400, message: "A nova sessão precisa estar no futuro." };
   }
+  if (message.includes("RESERVATION_AWAITING_RESCHEDULE")) {
+    return {
+      status: 409,
+      message: "Esta reserva já está paga e aguarda reagendamento. Não há pagamento a confirmar.",
+    };
+  }
   if (message.includes("RESERVATION_NOT_CONFIRMED")) {
     return { status: 409, message: "Só uma reserva confirmada pode trocar de turma." };
   }

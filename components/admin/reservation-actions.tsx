@@ -9,7 +9,7 @@ import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
 import { reservationMessage, withErrorCode } from "@/lib/admin/format";
-import type { ReservationStatus } from "@/lib/reservations/types";
+import { isPaymentSettledStatus, type ReservationStatus } from "@/lib/reservations/types";
 
 type Action = "confirm" | "cancel" | "resendQr" | null;
 type ApiPayload = { message?: string };
@@ -159,12 +159,14 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
             <CalendarClock className="size-4" /> Alterar turma
           </Button>
         ) : null}
-        {status !== "CONFIRMED" && status !== "CANCELLED" ? (
+        {/* Verificar e confirmar pagamento só existem enquanto o pagamento está em
+            aberto. Confirmada e aguardando reagendamento já estão pagas. */}
+        {!isPaymentSettledStatus(status) && status !== "CANCELLED" ? (
           <Button type="button" size="sm" variant="ghost" disabled={verifying} onClick={verifyPayment}>
             <SearchCheck className="size-4" /> {verifying ? "Verificando…" : "Verificar pagamento"}
           </Button>
         ) : null}
-        {status !== "CONFIRMED" && status !== "CANCELLED" ? (
+        {!isPaymentSettledStatus(status) && status !== "CANCELLED" ? (
           <Button type="button" size="sm" variant="ghost" onClick={() => setAction("confirm")}><CheckCircle2 className="size-4" /> Confirmar pagamento</Button>
         ) : null}
         {status !== "CANCELLED" ? (

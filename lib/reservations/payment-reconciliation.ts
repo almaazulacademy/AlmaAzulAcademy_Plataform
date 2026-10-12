@@ -98,6 +98,10 @@ const EMPTY: ReconciliationReport = {
  */
 export function decide(outcome: ConfirmationOutcome): "CONFIRMED" | "RELEASE" | "HOLD" | "INCIDENT" {
   if (outcome === "CONFIRMED" || outcome === "ALREADY_CONFIRMED" || outcome === "RECONCILED") return "CONFIRMED";
+  // Reserva em Stand-by: paga e resolvida do ponto de vista do pagamento. Não há
+  // retenção para estender nem vaga para devolver; os efeitos pós-confirmação
+  // não rodam porque `confirmed` é false.
+  if (outcome === "AWAITING_RESCHEDULE") return "CONFIRMED";
   if (outcome === "NOT_PAID") return "RELEASE";
   if (outcome === "NO_CAPACITY" || outcome === "AMOUNT_MISMATCH") return "INCIDENT";
   if (outcome === "CANCELLED" || outcome === "RESERVATION_NOT_FOUND") return "RELEASE";
