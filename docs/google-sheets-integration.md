@@ -144,7 +144,7 @@ E a regra de sempre continua valendo: uma falha do Google **não** desfaz a troc
 
 Catorze sessões anteriores a 19/08/2026 ficaram fora da sincronização por decisão administrativa ([incidente da grade cheia](incident-2026-10-google-sheets-grid-limit.md#as-14-sessões-históricas-fora-da-planilha)). Doze não aparecem em nenhuma aba; duas, de 15/08/2026, aparecem com parte das reservas.
 
-`lib/integrations/google-sheets/frozen-sessions.ts` registra o `session_id` completo dessas sessões. Para uma sessão registrada, **nenhuma sincronização lê ou escreve nada**: a linha da turma não é criada nem reescrita, a lista não é reconstruída, nenhuma reserva é acrescentada e as linhas que já existem ficam como estão — inclusive nas duas parcialmente presentes.
+`lib/integrations/google-sheets/frozen-sessions.ts` registra o `session_id` completo das 14. A proteção é **permanente e baseada em ids completos**. Para uma sessão registrada, **nenhuma sincronização lê ou escreve nada**: a linha da turma não é criada nem reescrita, a lista não é reconstruída, nenhuma reserva é acrescentada e as linhas que já existem ficam como estão — inclusive nas duas parcialmente presentes.
 
 A checagem fica em dois lugares, um dentro do outro:
 
@@ -155,11 +155,13 @@ Por ser do serviço, e não das rotas, vale para toda origem: confirmação de p
 
 Três coisas que seguem disso:
 
-- **Só id inteiro.** Não há regra por prefixo nem por data: um id errado deixaria uma sessão sem proteção ou bloquearia uma turma normal. Um teste confere o registro contra os 14 prefixos do documento do incidente.
-- **A reserva que sai da sessão histórica.** Quando uma reserva é reagendada para outra turma — pelo Stand-by ou por "Alterar turma" —, ela deixa de pertencer à sessão histórica. A sincronização dela passa a ser a da turma nova: se a linha dela já existia na planilha, é essa mesma linha que passa a mostrar a turma nova. A linha da sessão histórica e as das outras reservas dela não mudam.
+- **Só id inteiro.** Não há regra por prefixo, por data nem por faixa, e nada disso é configurável por variável de ambiente: um id errado deixaria uma sessão sem proteção ou bloquearia uma turma normal. Um teste trava exatamente os 14 ids e confere que cada um corresponde a um dos 14 prefixos do documento do incidente.
+- **A reserva que sai da sessão histórica.** Quando uma reserva é reagendada para uma turma futura — pelo Stand-by ou por "Alterar turma" —, ela deixa de pertencer à sessão histórica. A sincronização dela passa a ser a da turma nova: se a linha dela já existia na planilha, é essa mesma linha que passa a mostrar a turma nova, sem participante duplicado. A sessão histórica não é reconstruída por isso: a linha dela e as das outras reservas não mudam.
 - **O que fica parado.** Nas duas sessões parcialmente presentes, um cancelamento ou uma entrada em Stand-by feitos depois não aparecem na planilha: a linha continua como estava em agosto. É o efeito pedido — "histórico mantido como está".
 
-**Estado do registro:** as duas sessões de 15/08/2026 estão registradas. As outras doze dependem do id completo, que o documento do incidente não guarda — ver `supabase/diagnostics/google_sheets_historical_sessions.sql`.
+**O registro está completo:** os 14 ids vieram do Supabase de produção em 12/10/2026 e estão listados no [documento do incidente](incident-2026-10-google-sheets-grid-limit.md#proteção-permanente-no-código-desde-12102026). A lista só muda por decisão administrativa registrada lá, com a alteração correspondente no código e no teste. `supabase/diagnostics/google_sheets_historical_sessions.sql` (somente leitura) permite reconferir os ids quando for preciso.
+
+As demais sessões não são afetadas: a turma nova continua sendo criada pela primeira reserva confirmada, e a reconstrução manual continua recuperando o que faltar.
 
 ### Stand-by: modo "somente atualizar"
 

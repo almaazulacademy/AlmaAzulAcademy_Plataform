@@ -87,19 +87,37 @@ Catorze sessões têm, juntas, 97 reservas confirmadas (200 vagas) no Supabase q
 
 Prefixos dos `session_id`: `0a98cf4c`, `0ca42ebe`, `49a818bf`, `4d77bf1d`, `5589d4c6`, `6547901a`, `86480dee`, `87077465`, `8796cfff`, `8d78dd76`, `9b40060d`, `c3969f2c`, `c42e5181`, `d47907c1`.
 
-#### Proteção no código (desde 12/10/2026)
+#### Proteção permanente no código (desde 12/10/2026)
 
-A decisão passou a ser garantida pelo serviço de sincronização, não só pelo cuidado de quem opera. `lib/integrations/google-sheets/frozen-sessions.ts` guarda o `session_id` **completo** de cada sessão congelada, e uma sessão registrada ali não é lida nem escrita por nenhuma sincronização — confirmação de pagamento, reconciliação, cancelamento, Stand-by, reagendamento, botões manuais ou job pendente retomado. Detalhes em [google-sheets-integration.md](google-sheets-integration.md#sessões-históricas-congeladas).
+A decisão passou a ser garantida pelo serviço de sincronização, não só pelo cuidado de quem opera. `lib/integrations/google-sheets/frozen-sessions.ts` guarda o `session_id` **completo** das 14 sessões, e uma sessão registrada ali não é lida nem escrita por nenhuma sincronização — confirmação de pagamento, webhook repetido, reconciliação, cancelamento, Stand-by, reagendamento a partir do Stand-by, reagendamento tradicional, botões manuais ou job pendente retomado. Nenhuma das 14 pode ser reconstruída nem receber linha nova, e nas duas parcialmente presentes as linhas que já existem também não são reescritas. Detalhes em [google-sheets-integration.md](google-sheets-integration.md#sessões-históricas-congeladas).
 
-A comparação é pelo id inteiro. Este documento só registrava os oito primeiros caracteres, então a lista no código está sendo completada em duas partes:
+A proteção é **permanente** e **baseada em ids completos**. Não há regra por data, por prefixo nem por faixa, e ela não depende de variável de ambiente nem do banco: é código versionado, com um teste que trava exatamente estes 14 ids. A lista só muda por decisão administrativa registrada aqui, com a alteração correspondente no código e no teste.
 
-| Sessão | `session_id` completo | Situação na planilha | No código |
-| --- | --- | --- | --- |
-| Remada do Nascer do Sol · 15/08/2026 06:00 | `0a98cf4c-4d40-411d-987e-a383479fc2e1` | presente, com parte das reservas | congelada |
-| Imersão Paranoá · 15/08/2026 12:00 | `87077465-49ee-4b94-b89d-aa56296aabd0` | presente, com parte das reservas | congelada |
-| As outras doze | só o prefixo, acima | ausentes de todas as abas | **pendente** |
+Os ids foram obtidos do Supabase de produção em 12/10/2026, pela consulta somente leitura `supabase/diagnostics/google_sheets_historical_sessions.sql`, que devolveu exatamente 14 sessões — uma para cada prefixo acima.
 
-Os dois ids completos foram lidos da própria aba `Sessões` em 12/10/2026. Os outros doze não estão na planilha nem no repositório: a consulta somente leitura `supabase/diagnostics/google_sheets_historical_sessions.sql` os devolve a partir dos prefixos. Até entrarem no registro, essas doze continuam protegidas só nas sincronizações de Stand-by (modo "somente atualizar"), e não nas demais.
+| # | `session_id` completo | Situação na planilha |
+| --- | --- | --- |
+| 1 | `49a818bf-297a-4361-8d41-02e0491006b3` | ausente de todas as abas |
+| 2 | `4d77bf1d-fe49-4c7b-b582-29a95e3f8b7b` | ausente de todas as abas |
+| 3 | `8796cfff-0172-400e-b271-94b6ee935657` | ausente de todas as abas |
+| 4 | `9b40060d-8022-476e-aa68-c10e54e2f7a7` | ausente de todas as abas |
+| 5 | `8d78dd76-739b-4821-870b-135be377aaaf` | ausente de todas as abas |
+| 6 | `5589d4c6-df72-4f86-a6e8-42ac9aa38000` | ausente de todas as abas |
+| 7 | `c3969f2c-c0fc-4342-936a-67c9e1e5043a` | ausente de todas as abas |
+| 8 | `0a98cf4c-4d40-411d-987e-a383479fc2e1` | presente, com parte das reservas — Remada do Nascer do Sol · 15/08/2026 06:00 |
+| 9 | `87077465-49ee-4b94-b89d-aa56296aabd0` | presente, com parte das reservas — Imersão Paranoá · 15/08/2026 12:00 |
+| 10 | `c42e5181-83d6-4323-854d-4acd11a2e204` | ausente de todas as abas |
+| 11 | `6547901a-ebd6-4306-8f24-7b50355812dd` | ausente de todas as abas |
+| 12 | `86480dee-c466-4779-be07-938f67349dde` | ausente de todas as abas |
+| 13 | `d47907c1-9f09-49b1-bc11-45ec4b7eb359` | ausente de todas as abas |
+| 14 | `0ca42ebe-3732-4fa4-bbcf-26af6c953835` | ausente de todas as abas |
+
+A situação na planilha foi conferida na aba `Sessões` em 12/10/2026: só as linhas 8 e 9 têm registro lá.
+
+Duas consequências, as duas intencionais:
+
+- **O que fica parado.** Nas duas sessões parcialmente presentes, um cancelamento ou uma entrada em Stand-by feitos depois de 12/10/2026 não aparecem na planilha: a linha continua como estava.
+- **A reserva que sai da sessão histórica.** Se uma reserva de uma dessas sessões for reagendada para uma turma futura, ela deixa de pertencer à sessão histórica. O registro dela na planilha passa a ser o da turma nova — a mesma linha, quando já existia — sem reconstruir a sessão histórica e sem duplicar participante.
 
 ## Se acontecer algo parecido
 

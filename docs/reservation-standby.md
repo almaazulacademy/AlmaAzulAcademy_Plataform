@@ -30,7 +30,7 @@ A reserva continua sendo a mesma — mesmo id, mesmo código, mesma quantidade, 
 5. **Dois acessos para o cliente:** CPF + código, ou link individual gerado pelo admin.
 6. **Desfazer** devolve a reserva à turma original se ela estiver aberta, no futuro e com vagas. Senão a operação é recusada e o Stand-by continua.
 7. **A turma original é um destino válido** para o cliente, nas mesmas condições das demais.
-8. **Planilha:** as sessões históricas fora da planilha não são reinseridas, nem reescritas. Elas ficam congeladas por `session_id`, para toda sincronização; e a sincronização que parte da turma de origem de um Stand-by só atualiza o que já existe — ver [Planilha](#planilha).
+8. **Planilha:** as 14 sessões históricas fora da planilha não são reinseridas, nem reescritas. Elas ficam congeladas, de forma permanente, pelo `session_id` completo, para toda sincronização; e a sincronização que parte da turma de origem de um Stand-by só atualiza o que já existe — ver [Planilha](#planilha).
 9. **Reagendamento pelo painel:** mesma régua do cliente — turma futura, aberta, publicada, com vagas e mesmo valor por participante, em qualquer base.
 
 `admin_reschedule_reservation_from_standby`, da etapa 2, não tem regra de preço. Ela continua no banco, com o mesmo corpo, mas a migration do painel retira da service role a permissão de executá-la: o servidor só alcança `admin_reschedule_standby_same_price`. O reagendamento tradicional (`admin_change_reservation_session`, só para reserva confirmada) continua sem regra de preço, por decisão de negócio.
@@ -157,7 +157,9 @@ As rotas ficam em `/api/admin/reservations/[reservationId]/standby` (`GET` e `PO
 
 Duas proteções, as duas no serviço central de sincronização (`runSheetSyncJob`), por onde passa todo job — o enviado na hora e o retomado da fila.
 
-**Sessões históricas congeladas.** As sessões anteriores a 19/08/2026 mantidas fora da planilha são identificadas pelo `session_id` completo em `lib/integrations/google-sheets/frozen-sessions.ts`. Para elas nenhuma sincronização lê ou escreve nada, venha de onde vier: pagamento, reconciliação, cancelamento, Stand-by, reagendamento do Stand-by ou tradicional, botões manuais, jobs pendentes. Nas duas parcialmente presentes, as linhas existentes também não são reescritas. Estão registradas as duas sessões de 15/08/2026; as outras doze dependem do id completo — ver [Pendências](#pendências). Detalhes em [google-sheets-integration.md](google-sheets-integration.md#sessões-históricas-congeladas).
+**Sessões históricas congeladas.** As 14 sessões anteriores a 19/08/2026 mantidas fora da planilha são identificadas pelo `session_id` completo em `lib/integrations/google-sheets/frozen-sessions.ts`. A proteção é permanente e baseada só nesses ids — sem regra por data ou prefixo. Para elas nenhuma sincronização lê ou escreve nada, venha de onde vier: pagamento, webhook repetido, reconciliação, cancelamento, Stand-by, reagendamento do Stand-by ou tradicional, botões manuais, jobs pendentes. Nas duas parcialmente presentes, as linhas existentes também não são reescritas.
+
+Colocar em Stand-by uma reserva de uma dessas sessões funciona normalmente no banco; só a planilha não é tocada. Se a reserva for reagendada para uma turma futura, o registro dela na planilha passa a ser o da turma nova, sem reconstruir a sessão histórica e sem duplicar participante. Lista dos ids e detalhes em [google-sheets-integration.md](google-sheets-integration.md#sessões-históricas-congeladas).
 
 **Modo "somente atualizar".** Uma reserva em Stand-by ainda aponta para a turma original. Para ela não criar a turma na planilha, a sincronização que parte dessa turma atualiza se a turma já estiver em `Sessões` e não escreve nada se não estiver. Vale para turmas comuns; cobre a entrada em Stand-by, o reagendamento, o cancelamento de reserva em Stand-by, os dois botões manuais e jobs pendentes. A confirmação de pagamento não consulta `reservation_standby`: o banco só é lido para reserva cancelada e para reconstrução de sessão. Detalhes em [google-sheets-integration.md](google-sheets-integration.md#stand-by-modo-somente-atualizar).
 
@@ -167,7 +169,7 @@ Duas proteções, as duas no serviço central de sincronização (`runSheetSyncJ
 
 Cada passo depende de autorização própria. Nenhum deles liga o painel sozinho, exceto o último.
 
-1. **Merge e deploy do código.** Sem a variável, o painel não existe. O que passa a valer na hora é a proteção da planilha: as sessões históricas registradas ficam congeladas para toda sincronização, e o modo "somente atualizar" age sobre turmas de origem de Stand-by — hoje, nenhuma.
+1. **Merge e deploy do código.** Sem a variável, o painel não existe. O que passa a valer na hora é a proteção da planilha: as 14 sessões históricas ficam congeladas para toda sincronização, e o modo "somente atualizar" age sobre turmas de origem de Stand-by — hoje, nenhuma.
 2. `supabase/diagnostics/reservation_standby_admin_panel_preflight.sql` → `STANDBY_PAINEL_PREFLIGHT_OK | OK`.
 3. Migration `202610140001_reservation_standby_admin_panel.sql`. Cria quatro funções e retira da service role a execução de `admin_reschedule_reservation_from_standby`; não trava tabela nem toca linha.
 4. `supabase/diagnostics/reservation_standby_admin_panel_postcheck.sql` → `STANDBY_PAINEL_POSTCHECK_OK | OK`.
@@ -211,7 +213,6 @@ Limite conhecido: o banco de teste tem uma única conexão. A ordem de chegada d
 
 ## Pendências
 
-- **Doze `session_id` completos.** O documento do incidente registra as 14 sessões históricas só pelo prefixo. As duas presentes na planilha estão congeladas; as outras doze precisam do id completo, que vem do Supabase com `supabase/diagnostics/google_sheets_historical_sessions.sql`. Até lá, essas doze estão protegidas apenas nas sincronizações de Stand-by — e não em pagamento repetido, cancelamento comum, "Alterar turma" ou botão manual. **Completar antes de ativar o painel.**
 - **Teste de concorrência com duas conexões** antes de ativar: o banco de teste tem uma só.
 - **Etapa 4 — e-mail** de reagendamento confirmado.
 - **Etapa 5 — autoatendimento**, com limite de tentativas e checagem de origem. É quando a página pública passa a ler o link individual.
