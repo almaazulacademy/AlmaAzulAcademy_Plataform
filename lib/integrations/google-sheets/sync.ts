@@ -46,6 +46,7 @@ import {
   SPOTS_TAB,
 } from "./schema.ts";
 import { GoogleSheetsError } from "./errors.ts";
+import { isFrozenSheetSession } from "./frozen-sessions.ts";
 import {
   reservationRow,
   sessionRow,
@@ -112,11 +113,19 @@ export type SyncReport = {
   rowsAppended: number;
   spotsDeactivated: number;
   /**
-   * true quando o modo "somente atualizar" encontrou a turma fora da planilha:
-   * nada foi escrito, nem a sessão, nem a reserva, nem as vagas.
+   * true quando nada foi escrito — nem a sessão, nem a reserva, nem as vagas.
+   * `skipReason` diz por quê.
    */
   skipped: boolean;
+  skipReason?: SyncSkipReason;
 };
+
+/**
+ * `SESSION_FROZEN`: sessão histórica congelada — a planilha nem chega a ser
+ * lida. `SESSION_NOT_IN_SHEET`: modo "somente atualizar" e a turma não tem
+ * linha na aba `Sessões`.
+ */
+export type SyncSkipReason = "SESSION_FROZEN" | "SESSION_NOT_IN_SHEET";
 
 type KeyedRow = { key: string; values: SheetValue[] };
 
@@ -228,6 +237,10 @@ function planUpsert(
  * tem linha na aba `Sessões`, a sincronização termina sem escrever nada. Turma
  * que já está na planilha segue o caminho normal. É o que impede uma reserva em
  * Stand-by de recriar a turma original — ver `standby-guard.ts`.
+ *
+ * Sessão histórica congelada (`frozen-sessions.ts`) não é sincronizada em modo
+ * nenhum: a função volta antes da primeira chamada ao Google. A checagem mora
+ * aqui, no motor, para valer para qualquer chamador — presente ou futuro.
  */
 export async function syncSnapshot(
   gateway: SheetsGateway,
@@ -236,6 +249,10 @@ export async function syncSnapshot(
 ): Promise<SyncReport> {
   const { session, reservations } = snapshot;
   const syncedAt = options.syncedAt;
+
+  if (isFrozenSheetSession(session.id)) {
+    return { sessionId: session.id, reservations: reservations.length, rowsUpdated: 0, rowsAppended: 0, spotsDeactivated: 0, skipped: true, skipReason: "SESSION_FROZEN" };
+  }
 
   const [sessionKeys, reservationKeys, spotRowsRead] = await gateway.batchGet([
     a1(SESSIONS_TAB, `A${FIRST_DATA_ROW}:A`),
@@ -251,7 +268,7 @@ export async function syncSnapshot(
   // Decidido com a leitura que acabou de ser feita, antes de planejar qualquer
   // escrita: a turma não está na planilha, então não entra por este caminho.
   if (options.updateOnly && !sessionCursor.index.has(session.id)) {
-    return { sessionId: session.id, reservations: reservations.length, rowsUpdated: 0, rowsAppended: 0, spotsDeactivated: 0, skipped: true };
+    return { sessionId: session.id, reservations: reservations.length, rowsUpdated: 0, rowsAppended: 0, spotsDeactivated: 0, skipped: true, skipReason: "SESSION_NOT_IN_SHEET" };
   }
 
   const cursors: Array<readonly [string, TabCursor, number]> = [

@@ -42,10 +42,17 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  // Modo "somente atualizar": turma de origem de um Stand-by que não está na
-  // planilha não é criada por este botão.
+  // Nada foi escrito: sessão histórica congelada, ou turma de origem de um
+  // Stand-by que não está na planilha. Este botão não cria nenhuma das duas.
   if (result.outcome === "SKIPPED") {
-    return NextResponse.json({ success: true, outcome: result.outcome, message: "Esta turma não está na planilha operacional e foi origem de um Stand-by. Nada foi criado nem alterado." });
+    return NextResponse.json({
+      success: true,
+      outcome: result.outcome,
+      skipReason: result.skipReason,
+      message: result.skipReason === "SESSION_FROZEN"
+        ? "Esta é uma sessão histórica mantida fora da sincronização. Nada foi criado nem alterado."
+        : "Esta turma não está na planilha operacional e foi origem de um Stand-by. Nada foi criado nem alterado.",
+    });
   }
 
   return NextResponse.json({ success: true, outcome: result.outcome, message: "Lista da sessão reconstruída na planilha." });

@@ -48,6 +48,40 @@ export function isStandbyOriginUpdateOnly(
   return rows.some((row) => row.open || row.resolution === "CANCELLED" || row.resolvedSessionId !== sessionId);
 }
 
+/**
+ * O que dá para decidir **sem consultar o banco**, só com o snapshot já lido.
+ *
+ * A confirmação de pagamento sincroniza uma reserva CONFIRMED, e para ela a
+ * resposta é sempre "normal": o banco não deixa uma reserva confirmada ter
+ * Stand-by aberto, e uma reserva cancelada não volta a ser confirmada. Por isso
+ * o caminho do pagamento não lê `reservation_standby` — nem ganha, por causa
+ * dessa leitura, um jeito novo de a planilha ficar pendente.
+ *
+ *   NORMAL       — reserva confirmada, em pré-reserva ou expirada.
+ *   UPDATE_ONLY  — reserva em Stand-by: ela só existe nesse status com a
+ *                  autorização aberta, e a turma do snapshot é a de origem.
+ *   LOOKUP       — reserva cancelada (foi cancelada em Stand-by?) e toda
+ *                  reconstrução de sessão (a turma já foi origem de Stand-by?).
+ *                  Só o banco responde.
+ *
+ * Reserva que não aparece no próprio snapshot é tratada como LOOKUP: na dúvida,
+ * pergunta-se ao banco em vez de assumir o caminho normal.
+ */
+export type StandbyLookupNeed = "NORMAL" | "UPDATE_ONLY" | "LOOKUP";
+
+export function standbyLookupNeed(
+  entity: "RESERVATION" | "SESSION",
+  entityId: string,
+  reservations: ReadonlyArray<{ id: string; status: string }>,
+): StandbyLookupNeed {
+  if (entity === "SESSION") return "LOOKUP";
+  const reservation = reservations.find((item) => item.id === entityId);
+  if (!reservation) return "LOOKUP";
+  if (reservation.status === "AWAITING_RESCHEDULE") return "UPDATE_ONLY";
+  if (reservation.status === "CANCELLED") return "LOOKUP";
+  return "NORMAL";
+}
+
 /** Linha de `reservation_standby` como o PostgREST devolve. */
 export function parseStandbyOriginRows(value: unknown): StandbyOriginRow[] {
   if (!Array.isArray(value)) return [];
