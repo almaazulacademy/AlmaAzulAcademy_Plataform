@@ -43,5 +43,11 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
+  // Modo "somente atualizar": turma de origem de um Stand-by que não está na
+  // planilha não é criada por este botão.
+  if (result.outcome === "SKIPPED") {
+    return NextResponse.json({ success: true, outcome: result.outcome, message: "A turma desta reserva não está na planilha operacional. Nada foi criado nem alterado." });
+  }
+
   return NextResponse.json({ success: true, outcome: result.outcome, message: "Reserva sincronizada com a planilha." });
 }

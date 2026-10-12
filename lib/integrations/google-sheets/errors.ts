@@ -40,7 +40,7 @@ export function httpError(status: number) {
  * porque o texto é nosso — e sem elas uma RPC do Supabase fora do ar e uma
  * escrita barrada no cabeçalho apareciam ambas como `UNEXPECTED_ERROR`.
  */
-const INTERNAL_ERROR_CODES = ["SNAPSHOT_UNAVAILABLE", "HEADER_ROW_WRITE_BLOCKED"] as const;
+const INTERNAL_ERROR_CODES = ["SNAPSHOT_UNAVAILABLE", "HEADER_ROW_WRITE_BLOCKED", "STANDBY_LOOKUP_UNAVAILABLE"] as const;
 
 /**
  * Reduz qualquer falha a um símbolo seguro de gravar. Um erro inesperado vira

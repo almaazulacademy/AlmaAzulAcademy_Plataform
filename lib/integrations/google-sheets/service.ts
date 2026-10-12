@@ -25,13 +25,18 @@ import { createSheetsClient, type SheetsClient } from "./client.ts";
 import { sanitizeErrorCode } from "./errors.ts";
 import { parseSnapshot } from "./mapping.ts";
 import { logSheets } from "./observability.ts";
+import { isStandbyOriginUpdateOnly, isStandbyTableMissing, parseStandbyOriginRows } from "./standby-guard.ts";
 import { syncSnapshot } from "./sync.ts";
 
 export type SheetSyncEntity = "RESERVATION" | "SESSION";
 
-export type SheetSyncOperation = "CONFIRMED" | "CANCELLED" | "ADMIN" | "REBUILD" | "SESSION_CHANGED";
+export type SheetSyncOperation = "CONFIRMED" | "CANCELLED" | "ADMIN" | "REBUILD" | "SESSION_CHANGED" | "STANDBY";
 
-export type SheetSyncOutcome = "SYNCED" | "PENDING" | "DISABLED";
+/**
+ * `SKIPPED`: a sincronização rodou em modo "somente atualizar" e a turma não
+ * está na planilha. Nada foi escrito e não há o que tentar de novo.
+ */
+export type SheetSyncOutcome = "SYNCED" | "PENDING" | "DISABLED" | "SKIPPED";
 
 export type SheetSyncResult = {
   outcome: SheetSyncOutcome;
@@ -77,6 +82,28 @@ async function loadSnapshot(admin: SupabaseClient, entity: SheetSyncEntity, enti
 }
 
 /**
+ * Decide se esta sincronização só pode atualizar a planilha — ver
+ * `standby-guard.ts`. Consultado a cada execução, e não passado por quem chama,
+ * para valer também nos jobs pendentes retomados depois.
+ *
+ * Leitura pura de `reservation_standby`. Se a consulta falhar por um motivo que
+ * não seja "este banco não tem Stand-by", a sincronização é interrompida e o
+ * job fica pendente: sem saber se a turma é origem de um Stand-by, o seguro é
+ * não escrever agora.
+ */
+async function standbyUpdateOnly(admin: SupabaseClient, entity: SheetSyncEntity, entityId: string, sessionId: string) {
+  const result = await admin
+    .from("reservation_standby")
+    .select("reservation_id, resolved_at, resolution, resolved_session_id")
+    .eq("original_session_id", sessionId);
+  if (result.error) {
+    if (isStandbyTableMissing(result.error.code)) return false;
+    throw new Error("STANDBY_LOOKUP_UNAVAILABLE");
+  }
+  return isStandbyOriginUpdateOnly(entity, entityId, sessionId, parseStandbyOriginRows(result.data));
+}
+
+/**
  * Executa uma sincronização e fecha o job correspondente.
  *
  * Devolve true quando sincronizou. Nunca propaga exceção: o erro vira código
@@ -86,7 +113,7 @@ async function runJob(
   admin: SupabaseClient,
   client: SheetsClient,
   job: { id: string | null; entityType: SheetSyncEntity; entityId: string; operation: string; attempt: number },
-): Promise<{ synced: boolean; errorCode?: string }> {
+): Promise<{ synced: boolean; skipped?: boolean; errorCode?: string }> {
   const startedAt = Date.now();
 
   try {
@@ -107,12 +134,28 @@ async function runJob(
       return { synced: true };
     }
 
+    const updateOnly = await standbyUpdateOnly(admin, job.entityType, job.entityId, snapshot.session.id);
     const report = await syncSnapshot(client, snapshot, {
       syncedAt: new Date().toISOString(),
       reconcileSession: job.entityType === "SESSION",
+      updateOnly,
     });
 
     if (job.id) await admin.rpc("complete_integration_sync_job", { p_job_id: job.id });
+
+    // Turma de origem de um Stand-by que não está na planilha: nada foi escrito
+    // e o job é encerrado — repetir não mudaria a decisão.
+    if (report.skipped) {
+      logSheets({
+        stage: "sync",
+        outcome: "skipped",
+        entityType: job.entityType,
+        entityId: job.entityId,
+        operation: job.operation,
+        errorCode: "SESSION_NOT_IN_SHEET",
+      });
+      return { synced: true, skipped: true };
+    }
     logSheets({
       stage: "sync",
       outcome: "synced",
@@ -226,6 +269,7 @@ export async function syncSheetEntity(
     });
 
     if (!result.synced) return { outcome: "PENDING", errorCode: result.errorCode };
+    if (result.skipped) return { outcome: "SKIPPED" };
 
     // Só drena quando a própria sincronização deu certo: se o Google está fora,
     // insistir em mais três jobs só atrasaria a resposta.

@@ -111,6 +111,11 @@ export type SyncReport = {
   rowsUpdated: number;
   rowsAppended: number;
   spotsDeactivated: number;
+  /**
+   * true quando o modo "somente atualizar" encontrou a turma fora da planilha:
+   * nada foi escrito, nem a sessão, nem a reserva, nem as vagas.
+   */
+  skipped: boolean;
 };
 
 type KeyedRow = { key: string; values: SheetValue[] };
@@ -218,11 +223,16 @@ function planUpsert(
  * o que veio no snapshot, desativa qualquer vaga daquela sessão que não exista
  * mais no Supabase. É o modo usado pelo botão "Sincronizar lista da sessão" —
  * e a razão de ele servir como recuperação operacional.
+ *
+ * `updateOnly` é o modo "somente atualizar": se a turma do snapshot ainda não
+ * tem linha na aba `Sessões`, a sincronização termina sem escrever nada. Turma
+ * que já está na planilha segue o caminho normal. É o que impede uma reserva em
+ * Stand-by de recriar a turma original — ver `standby-guard.ts`.
  */
 export async function syncSnapshot(
   gateway: SheetsGateway,
   snapshot: SyncSnapshot,
-  options: { syncedAt: string; reconcileSession?: boolean },
+  options: { syncedAt: string; reconcileSession?: boolean; updateOnly?: boolean },
 ): Promise<SyncReport> {
   const { session, reservations } = snapshot;
   const syncedAt = options.syncedAt;
@@ -237,6 +247,13 @@ export async function syncSnapshot(
   const sessionCursor = readCursor(sessionKeys);
   const reservationCursor = readCursor(reservationKeys);
   const spotCursor = readCursor(spotRowsRead);
+
+  // Decidido com a leitura que acabou de ser feita, antes de planejar qualquer
+  // escrita: a turma não está na planilha, então não entra por este caminho.
+  if (options.updateOnly && !sessionCursor.index.has(session.id)) {
+    return { sessionId: session.id, reservations: reservations.length, rowsUpdated: 0, rowsAppended: 0, spotsDeactivated: 0, skipped: true };
+  }
+
   const cursors: Array<readonly [string, TabCursor, number]> = [
     [SESSIONS_TAB, sessionCursor, sessionCursor.nextRow],
     [RESERVATIONS_TAB, reservationCursor, reservationCursor.nextRow],
@@ -291,6 +308,7 @@ export async function syncSnapshot(
     rowsUpdated: plan.updates.length - plan.appended,
     rowsAppended: plan.appended,
     spotsDeactivated,
+    skipped: false,
   };
 }
 
