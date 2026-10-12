@@ -25,7 +25,7 @@
  */
 
 import type { ExperienceStatus, SessionLifecycleStatus } from "./types.ts";
-import type { ReservationStatus } from "../reservations/types.ts";
+import { isReservationStatus, type ReservationStatus } from "../reservations/types.ts";
 
 /** Uma turma candidata, do jeito que o banco a descreve. */
 export type SessionChangeOption = {
@@ -202,10 +202,7 @@ function asSessionStatus(value: unknown): SessionLifecycleStatus {
 }
 
 function asReservationStatus(value: unknown): ReservationStatus {
-  const status = asString(value);
-  return status === "PRE_RESERVED" || status === "CONFIRMED" || status === "EXPIRED" || status === "CANCELLED"
-    ? status
-    : "EXPIRED";
+  return isReservationStatus(value) ? value : "EXPIRED";
 }
 
 function parseSession(value: unknown): SessionChangeCurrent | null {

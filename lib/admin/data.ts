@@ -19,7 +19,7 @@ import type {
   SessionFilter,
   SessionLifecycleStatus,
 } from "@/lib/admin/types";
-import type { ReservationStatus } from "@/lib/reservations/types";
+import { isReservationStatus, type ReservationStatus } from "@/lib/reservations/types";
 import { experienceBaseMap } from "@/lib/admin/base-filter";
 import { applySessionFilters, sessionListFilterFor } from "@/lib/admin/session-filters";
 import { FALLBACK_BASES } from "@/lib/bases/catalog";
@@ -77,11 +77,7 @@ function mapPaymentStatus(value: unknown): PaymentStatus {
 }
 
 function mapReservationStatus(value: unknown): ReservationStatus {
-  const status = asString(value);
-  if (status === "PRE_RESERVED" || status === "CONFIRMED" || status === "EXPIRED" || status === "CANCELLED") {
-    return status;
-  }
-  return "EXPIRED";
+  return isReservationStatus(value) ? value : "EXPIRED";
 }
 
 function mapReservation(row: Row): AdminReservation {

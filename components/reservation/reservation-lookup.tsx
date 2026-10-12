@@ -3,13 +3,13 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, MessageCircle, Search, XCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, MessageCircle, Search, XCircle } from "lucide-react";
 
 import { BaseLocationCard } from "@/components/bases/base-location";
 import { ReservationHold } from "@/components/reservation/reservation-hold";
 import { ReservationSummary } from "@/components/reservation/reservation-summary";
 import { Button } from "@/components/ui/button";
-import { WHATSAPP_RESERVATION_CODE_LINK } from "@/lib/contact";
+import { WHATSAPP_LINK, WHATSAPP_RESERVATION_CODE_LINK } from "@/lib/contact";
 import type { ReservationDetails } from "@/lib/reservations/types";
 import { formatCpf, validateLookupInput } from "@/lib/reservations/validation";
 
@@ -18,6 +18,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const inputClass = "mt-2 h-12 w-full rounded-2xl border border-ink/15 bg-white px-4 uppercase outline-none transition focus:border-lake focus:ring-2 focus:ring-lake/15";
+
+/**
+ * Reserva em Stand-by: paga, sem turma. Não é confirmada, cancelada nem
+ * expirada, e a turma anterior não aparece — mostrar o horário antigo sugeriria
+ * que a participação continua garantida naquela data. A escolha da nova data
+ * pelo próprio cliente chega em uma etapa posterior; por enquanto o caminho é
+ * a equipe.
+ */
+function AwaitingReschedule({ reservation }: { reservation: ReservationDetails }) {
+  return (
+    <div className="mx-auto max-w-2xl rounded-4xl bg-white p-7 sm:p-10">
+      <CalendarClock className="size-10 text-lake" />
+      <p className="mt-7 text-xs font-semibold uppercase tracking-[0.18em] text-lake">Reserva {reservation.publicCode}</p>
+      <h2 className="mt-4 text-4xl font-medium tracking-[-0.05em]">Aguardando reagendamento.</h2>
+      <p className="mt-5 leading-7 text-ink/60">
+        {reservation.fullName.split(" ")[0]}, sua reserva está paga e você continua com direito à sua experiência, mas ela não está mais vinculada à data anterior. Ainda não há uma nova data confirmada.
+      </p>
+      <p className="mt-4 leading-7 text-ink/60">
+        {reservation.quantity === 1 ? "1 participante" : `${reservation.quantity} participantes`} · nenhum pagamento adicional.
+      </p>
+      <a
+        href={WHATSAPP_LINK}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-7 inline-flex items-center gap-2 font-semibold text-forest"
+      >
+        <MessageCircle className="size-4" /> Falar com a equipe para reagendar
+      </a>
+    </div>
+  );
+}
 
 function FinalReservation({ reservation }: { reservation: ReservationDetails }) {
   const confirmed = reservation.status === "CONFIRMED";
@@ -65,6 +96,7 @@ export function ReservationLookup() {
   }
 
   if (reservation?.status === "PRE_RESERVED") return <ReservationHold publicCode={reservation.publicCode} expiresAt={reservation.expiresAt} checkoutUrl={reservation.checkoutUrl} title="Sua vaga continua reservada." session={reservation.session} location={reservation.location} />;
+  if (reservation?.status === "AWAITING_RESCHEDULE") return <AwaitingReschedule reservation={reservation} />;
   if (reservation) return <FinalReservation reservation={reservation} />;
 
   return (

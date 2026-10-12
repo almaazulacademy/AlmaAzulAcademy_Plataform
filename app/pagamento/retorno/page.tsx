@@ -38,6 +38,10 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
   const transactionId = single(query.transaction_nsu);
   const invoiceSlug = single(query.slug) || single(query.invoice_slug);
   let confirmed = false;
+  // Reserva em Stand-by: o pagamento já está confirmado, mas não há turma para
+  // anunciar. A página não pode dizer "estamos validando" nem mostrar a data
+  // antiga como se a vaga continuasse garantida.
+  let awaitingReschedule = false;
 
   // Camada 2: redundância, nunca dependência. Os parâmetros da URL só apontam
   // qual pedido consultar — quem decide se está pago é o payment_check
@@ -59,6 +63,7 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
         source: "RETURN_PAGE",
       });
       confirmed = confirmation.confirmed;
+      awaitingReschedule = confirmation.outcome === "AWAITING_RESCHEDULE";
     } catch (error) {
       console.error("Falha no retorno do pagamento:", error instanceof Error ? error.message : "erro desconhecido");
     }
@@ -85,7 +90,7 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
       <div className="container py-16 sm:py-24">
         <div className="mx-auto max-w-2xl rounded-4xl bg-white p-8 text-center sm:p-14">
           {confirmed ? <CheckCircle2 className="mx-auto size-11 text-lake" aria-hidden="true" /> : <Clock3 className="mx-auto size-11 text-sand" aria-hidden="true" />}
-          <h1 className="mt-7 text-4xl font-medium tracking-[-0.05em] sm:text-5xl">{confirmed ? "Pagamento confirmado." : "Estamos validando o pagamento."}</h1>
+          <h1 className="mt-7 text-4xl font-medium tracking-[-0.05em] sm:text-5xl">{confirmed ? "Pagamento confirmado." : awaitingReschedule ? "Aguardando reagendamento." : "Estamos validando o pagamento."}</h1>
 
           {confirmed ? (
             <>
@@ -128,6 +133,10 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
                 Caso tenha qualquer dúvida antes disso, estamos à disposição para ajudar.
               </p>
             </>
+          ) : awaitingReschedule ? (
+            <p className="mx-auto mt-5 max-w-lg leading-7 text-ink/60">
+              Seu pagamento está confirmado e sua reserva aguarda uma nova data. Fale com a nossa equipe para reagendar.
+            </p>
           ) : (
             <p className="mx-auto mt-5 max-w-lg leading-7 text-ink/60">
               A confirmação pode levar alguns instantes. Consulte novamente usando seu CPF e o código da reserva.

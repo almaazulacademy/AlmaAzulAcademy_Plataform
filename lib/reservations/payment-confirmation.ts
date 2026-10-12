@@ -70,6 +70,13 @@ export type ConfirmationOutcome =
   | "RESERVATION_NOT_FOUND"
   /** Reserva cancelada: não se confirma automaticamente. */
   | "CANCELLED"
+  /**
+   * Reserva em Stand-by: já está paga e aguarda uma nova turma. Não há nada a
+   * confirmar, e ela **não** pode voltar para a turma antiga por um webhook
+   * repetido, um retorno de pagamento ou uma verificação manual. Resultado
+   * definitivo, sem efeitos colaterais: sem planilha, sem e-mail, sem revisão.
+   */
+  | "AWAITING_RESCHEDULE"
   /** Falha temporária ao falar com a InfinitePay. Vale nova tentativa. */
   | "PROVIDER_UNAVAILABLE";
 
@@ -232,6 +239,16 @@ async function runConfirmation(
       orderId: notification.orderId, errorCode: "ALREADY_CONFIRMED", stage,
     }, admin);
     return result("ALREADY_CONFIRMED");
+  }
+  if (reservation.status === "AWAITING_RESCHEDULE") {
+    // Antes de qualquer registro de tentativa, consulta ao gateway ou RPC: uma
+    // reserva em Stand-by não ganha evento financeiro novo por este caminho.
+    logPayment({ requestId, stage, outcome: "already_confirmed", orderId: notification.orderId, errorCode: "AWAITING_RESCHEDULE" });
+    await recordPaymentStep({
+      requestId, source, step: "CONFIRM_SUCCESS", outcome: "SKIPPED",
+      orderId: notification.orderId, errorCode: "AWAITING_RESCHEDULE", stage,
+    }, admin);
+    return result("AWAITING_RESCHEDULE");
   }
   if (reservation.status === "CANCELLED") {
     logPayment({ requestId, stage, outcome: "invalid", orderId: notification.orderId, errorCode: "RESERVATION_CANCELLED" });
@@ -420,11 +437,23 @@ async function runConfirmation(
   const outcome: ConfirmationOutcome =
     status === "RECONCILED" ? "RECONCILED"
       : status === "ALREADY_CONFIRMED" ? "ALREADY_CONFIRMED"
+        // A reserva entrou em Stand-by entre a leitura acima e a RPC. O banco
+        // recusou sem gravar nada; o resultado é o mesmo da checagem inicial.
+        : status === "AWAITING_RESCHEDULE" ? "AWAITING_RESCHEDULE"
         : status === "NO_CAPACITY" ? "NO_CAPACITY"
           : status === "AMOUNT_MISMATCH" ? "AMOUNT_MISMATCH"
             : status === "CANCELLED" || status === "SESSION_CANCELLED" ? "CANCELLED"
               : status === "NOT_FOUND" ? "RESERVATION_NOT_FOUND"
                 : "PROVIDER_UNAVAILABLE";
+
+  if (outcome === "AWAITING_RESCHEDULE") {
+    logPayment({ requestId, stage: "reconciliation", outcome: "already_confirmed", orderId: notification.orderId, errorCode: "AWAITING_RESCHEDULE" });
+    await recordPaymentStep({
+      requestId, source, step: "RECONCILIATION_SUCCESS", outcome: "SKIPPED",
+      orderId: notification.orderId, providerEventId, errorCode: "AWAITING_RESCHEDULE", stage: "reconciliation",
+    }, admin);
+    return result(outcome);
+  }
 
   logPayment({
     requestId,

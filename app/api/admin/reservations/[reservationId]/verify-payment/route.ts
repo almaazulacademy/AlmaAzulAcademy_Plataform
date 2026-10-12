@@ -23,6 +23,7 @@ const MESSAGES: Record<ConfirmationOutcome, string> = {
   AMOUNT_MISMATCH: "O valor pago na InfinitePay não corresponde ao total da reserva. Verifique antes de confirmar.",
   RESERVATION_NOT_FOUND: "Reserva não encontrada.",
   CANCELLED: "Reserva cancelada. Não é possível confirmar automaticamente.",
+  AWAITING_RESCHEDULE: "Esta reserva já está paga e aguarda reagendamento. Nada foi alterado.",
   PROVIDER_UNAVAILABLE: "Não foi possível falar com a InfinitePay agora. Tente novamente em alguns instantes.",
 };
 
