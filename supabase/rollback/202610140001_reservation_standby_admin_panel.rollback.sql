@@ -4,9 +4,14 @@
 -- de propósito, para nenhuma ferramenta aplicá-lo automaticamente.
 -- =============================================================================
 --
--- O que faz: remove as quatro funções do painel de Stand-by. Nada mais — a
--- migration só criou funções, então não há tabela, coluna, trigger, constraint
--- nem linha a desfazer.
+-- O que faz: remove as quatro funções do painel de Stand-by e devolve à service
+-- role a permissão de executar `admin_reschedule_reservation_from_standby`, que
+-- a migration havia retirado. Nada mais — não há tabela, coluna, trigger,
+-- constraint nem linha a desfazer.
+--
+-- Atenção ao segundo efeito: depois deste rollback, o reagendamento de Stand-by
+-- **sem** régua de preço volta a ser executável pelo servidor, como era na etapa
+-- anterior. Nenhum código o chama, mas a proteção deixa de existir no banco.
 --
 -- ORDEM IMPORTA. Antes de executar:
 --   1. desligar o painel: `STANDBY_ADMIN_ENABLED` ausente ou diferente de `true`
@@ -28,5 +33,8 @@ drop function if exists public.admin_reservation_standby_history(uuid, uuid);
 drop function if exists public.admin_reschedule_standby_same_price(uuid, uuid, uuid, text);
 drop function if exists public.admin_standby_reschedule_options(uuid, uuid);
 drop function if exists public.admin_list_standby_reservations_page(uuid, text, uuid, text, integer, integer);
+
+-- Estado anterior à migration: só a service role executa.
+grant execute on function public.admin_reschedule_reservation_from_standby(uuid, uuid, uuid, text) to service_role;
 
 commit;

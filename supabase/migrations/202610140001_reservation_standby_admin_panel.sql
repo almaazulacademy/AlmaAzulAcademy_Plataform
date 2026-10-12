@@ -1,11 +1,17 @@
 -- Stand-by de reservas: leituras e reagendamento do painel administrativo.
 --
--- Depende de `202610130002_reservation_standby.sql`. Aditiva e idempotente:
--- cria quatro funções e **não altera nenhum objeto existente** — nenhuma tabela,
--- trigger, constraint, linha ou função das etapas anteriores. Em particular,
--- `admin_change_reservation_session` (reagendamento tradicional),
--- `reservation_standby_resolve` e `admin_reschedule_reservation_from_standby`
--- continuam exatamente como estão.
+-- Depende de `202610130002_reservation_standby.sql`. Idempotente. Faz duas
+-- coisas, e só elas:
+--
+--   1. cria quatro funções;
+--   2. retira da service role a permissão de executar
+--      `admin_reschedule_reservation_from_standby` — o reagendamento de
+--      Stand-by **sem** régua de preço, da etapa anterior (seção 6).
+--
+-- Nenhuma tabela, trigger, constraint ou linha é tocada, e o corpo de nenhuma
+-- função existente muda. `admin_change_reservation_session` (reagendamento
+-- tradicional) e `reservation_standby_resolve` continuam exatamente como estão,
+-- com os mesmos privilégios.
 --
 -- Depois de aplicada, nada muda no comportamento do sistema: as funções só são
 -- chamadas pelas rotas do painel de Stand-by, que ficam desligadas enquanto a
@@ -24,6 +30,12 @@
 --     e **preço por participante igual ao valor unitário pago**.
 --   * `admin_reservation_standby_history` — a trilha de cada entrada em
 --     Stand-by, para o detalhe da reserva. Nunca devolve token nem hash.
+--
+-- ## O que sai do alcance do servidor
+--
+--   * `admin_reschedule_reservation_from_standby` continua no banco, com o mesmo
+--     corpo, mas ninguém mais a executa pela API: o único reagendamento de
+--     Stand-by ao alcance do painel passa a ser o que exige o mesmo valor.
 
 -- ---------------------------------------------------------------------------
 -- 1. Lista paginada
@@ -263,7 +275,13 @@ $$;
 -- do reagendamento tradicional: sem restrição de preço. O painel de Stand-by
 -- exige mais — a turma de destino precisa custar, por participante, exatamente
 -- o valor unitário pago — e essa exigência fica aqui, no banco, e não só na
--- tela.
+-- tela. A seção 6 tira a função antiga do alcance da service role, para esta ser
+-- a única porta.
+--
+-- A conferência do preço e a mudança acontecem na mesma transação — a desta
+-- chamada. Se a régua recusa, a exceção desfaz tudo; se aceita, a sessão de
+-- destino continua travada até o núcleo terminar, então o preço conferido é o
+-- preço com que a reserva é movida.
 --
 -- Locks: reserva primeiro, sessão de destino depois — a mesma ordem do núcleo
 -- (`reservation_standby_resolve`), que volta a travar as duas dentro da mesma
@@ -440,3 +458,25 @@ grant execute on function public.admin_list_standby_reservations_page(uuid, text
 grant execute on function public.admin_standby_reschedule_options(uuid, uuid) to service_role;
 grant execute on function public.admin_reschedule_standby_same_price(uuid, uuid, uuid, text) to service_role;
 grant execute on function public.admin_reservation_standby_history(uuid, uuid) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- 6. O reagendamento sem régua de preço sai do alcance do servidor
+-- ---------------------------------------------------------------------------
+--
+-- `admin_reschedule_reservation_from_standby` reagenda uma reserva em Stand-by
+-- para turma de qualquer preço. Nenhum código a chama — o painel usa
+-- `admin_reschedule_standby_same_price` e o cliente usa
+-- `customer_reschedule_reservation`, as duas com a régua do mesmo valor — mas,
+-- enquanto a service role pudesse executá-la, uma rota futura poderia contornar
+-- a regra por engano.
+--
+-- A função é preservada, com o mesmo corpo: só o privilégio de execução é
+-- retirado. Sem ele, a chamada pela API é recusada pelo Postgres antes de
+-- qualquer linha ser lida. O rollback desta migration devolve o privilégio.
+--
+-- `admin_change_reservation_session` não é tocada: o reagendamento tradicional,
+-- de reserva confirmada, continua sem régua de preço, por decisão de negócio.
+--
+-- Reaplicar `202610130002_reservation_standby.sql` depois desta migration
+-- devolveria o privilégio (ela o concede). O postcheck do painel acusa.
+revoke all on function public.admin_reschedule_reservation_from_standby(uuid, uuid, uuid, text) from public, anon, authenticated, service_role;
