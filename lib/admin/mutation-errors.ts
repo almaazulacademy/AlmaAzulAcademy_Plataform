@@ -118,3 +118,61 @@ export function adminMutationError(error: unknown) {
   }
   return { status: 500, message: "Não foi possível concluir a operação." };
 }
+
+/**
+ * Falhas das operações de Stand-by.
+ *
+ * Vem antes de `adminMutationError` porque alguns símbolos são compartilhados
+ * com outras operações e pedem outro texto aqui: `RESERVATION_NOT_CONFIRMED`,
+ * por exemplo, é "não pode trocar de turma" no reagendamento tradicional e "não
+ * pode entrar em Stand-by" nesta tela. O que não for próprio do Stand-by segue
+ * para a tradução comum.
+ */
+export function standbyMutationError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  // PostgREST quando a função ainda não existe no banco: o código foi publicado
+  // antes de a migration do painel ser aplicada.
+  if (message.includes("PGRST202") || /Could not find the function|function public\.[a-z_]+\(.*\) does not exist/i.test(message)) {
+    return { status: 503, message: "O painel de Stand-by ainda não está disponível neste banco. Aplique a migration mais recente do Supabase." };
+  }
+  if (message.includes("RESERVATION_ALREADY_IN_STANDBY")) {
+    return { status: 409, message: "Esta reserva já está em Stand-by." };
+  }
+  if (message.includes("RESERVATION_PAYMENT_NOT_CONFIRMED")) {
+    return { status: 409, message: "Só uma reserva com pagamento confirmado pode entrar em Stand-by." };
+  }
+  if (message.includes("RESERVATION_NOT_CONFIRMED")) {
+    return { status: 409, message: "Só uma reserva confirmada pode entrar em Stand-by." };
+  }
+  if (message.includes("STANDBY_CHECKIN_REGISTERED")) {
+    return { status: 409, message: "Esta reserva já tem presença registrada. Desfaça o check-in na Lista de Presença antes de colocá-la em Stand-by." };
+  }
+  if (message.includes("RESERVATION_NOT_IN_STANDBY")) {
+    return { status: 409, message: "Esta reserva não está em Stand-by." };
+  }
+  if (message.includes("STANDBY_ALREADY_USED")) {
+    return { status: 409, message: "Este Stand-by já foi resolvido por outra ação. Atualize a página para ver a situação atual da reserva." };
+  }
+  if (message.includes("PRICE_NOT_ELIGIBLE")) {
+    return { status: 409, message: "A turma escolhida tem preço diferente do valor pago por participante. Escolha uma turma do mesmo valor." };
+  }
+  if (message.includes("BASE_NOT_AVAILABLE")) {
+    return { status: 409, message: "A base da turma escolhida não está em operação." };
+  }
+  if (message.includes("INSUFFICIENT_SPOTS")) {
+    return { status: 409, message: "A turma não tem vagas para o grupo inteiro. Nada foi alterado." };
+  }
+  if (message.includes("SESSION_MUST_BE_FUTURE")) {
+    return { status: 409, message: "A turma já começou ou já aconteceu e não pode receber a reserva." };
+  }
+  if (message.includes("REASON_REQUIRED")) {
+    return { status: 400, message: "Informe um motivo com pelo menos 3 caracteres." };
+  }
+  if (message.includes("STANDBY_INVALID_FILTER")) {
+    return { status: 400, message: "Filtro inválido." };
+  }
+  if (message.includes("STANDBY_")) {
+    return { status: 409, message: "A reserva mudou de situação e a operação não pôde ser concluída. Atualize a página e tente de novo." };
+  }
+  return adminMutationError(error);
+}

@@ -29,7 +29,7 @@ type FormState = {
 };
 
 type ApiPayload = { message?: string; errors?: Record<string, string> };
-type SyncPayload = { success?: boolean; errorCode?: string; message?: string };
+type SyncPayload = { success?: boolean; outcome?: string; errorCode?: string; message?: string };
 
 const emptyForm = (experienceId = ""): FormState => ({
   experienceId,
@@ -186,7 +186,7 @@ export function SessionsManager({ sessions, experiences, initiallyOpen, filters,
       const response = await fetch(`/api/admin/sessions/${session.id}/sync-sheet`, { method: "POST" });
       const payload = await response.json().catch(() => ({})) as SyncPayload;
       notify({
-        title: payload.success ? "Lista sincronizada" : "Sincronização pendente",
+        title: payload.outcome === "SKIPPED" ? "Planilha não alterada" : payload.success ? "Lista sincronizada" : "Sincronização pendente",
         description: withErrorCode(payload.message ?? "Não foi possível falar com o Google Sheets agora.", payload.errorCode),
         variant: payload.success ? undefined : "error",
       });

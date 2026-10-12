@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 import { getAdminContext, getStaffContext } from "@/lib/admin/auth";
 import { canManageTeam } from "@/lib/admin/roles";
-import { adminMutationError } from "@/lib/admin/mutation-errors";
+import { adminMutationError, standbyMutationError } from "@/lib/admin/mutation-errors";
+import { isStandbyAdminEnabled } from "@/lib/admin/standby";
 
 export function isSameOriginRequest(request: Request) {
   const originHeader = request.headers.get("origin");
@@ -74,4 +75,18 @@ export async function authorizeCheckinApi() {
 }
 
 // Reexportado para os Route Handlers continuarem importando de um lugar só.
-export { adminMutationError };
+export { adminMutationError, standbyMutationError };
+
+/**
+ * Rotas do painel de Stand-by. Enquanto `STANDBY_ADMIN_ENABLED` não for `true`
+ * elas respondem 404 antes de qualquer outra coisa — para o mundo, e para o
+ * próprio painel, o recurso não existe. Com a variável ligada, valem as mesmas
+ * regras das demais rotas administrativas: só ADMIN e OPERATOR; instrutor
+ * recebe 403.
+ */
+export async function authorizeStandbyApi() {
+  if (!isStandbyAdminEnabled()) {
+    return { context: null, response: NextResponse.json({ message: "Recurso não disponível." }, { status: 404 }) };
+  }
+  return authorizeAdminApi();
+}

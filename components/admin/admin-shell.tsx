@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   BookOpenCheck,
+  CalendarClock,
   CalendarDays,
   ClipboardCheck,
   LayoutDashboard,
@@ -33,7 +34,7 @@ const operations = [
 
 type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; badge?: string };
 
-function AdminShellContent({ children, profile, bases }: { children: ReactNode; profile: AdminProfile; bases: AdminBase[] }) {
+function AdminShellContent({ children, profile, bases, standbyEnabled }: { children: ReactNode; profile: AdminProfile; bases: AdminBase[]; standbyEnabled: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const { notify } = useToast();
@@ -116,7 +117,13 @@ function AdminShellContent({ children, profile, bases }: { children: ReactNode; 
         <div>
           <p className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">Operação</p>
           <div className="space-y-1">
-            {(canManageTeam(profile.role) ? [...operations, { href: "/admin/equipe", label: "Equipe", icon: UsersRound }] : operations).map(renderItem)}
+            {[
+              // "Stand-by" entra logo depois de Reservas, e só com o painel ligado.
+              ...operations.flatMap((item) => item.href === "/admin/reservas" && standbyEnabled
+                ? [item, { href: "/admin/stand-by", label: "Stand-by", icon: CalendarClock }]
+                : [item]),
+              ...(canManageTeam(profile.role) ? [{ href: "/admin/equipe", label: "Equipe", icon: UsersRound }] : []),
+            ].map(renderItem)}
           </div>
         </div>
       </nav>
@@ -162,6 +169,6 @@ function AdminShellContent({ children, profile, bases }: { children: ReactNode; 
   );
 }
 
-export function AdminShell({ children, profile, bases = [] }: { children: ReactNode; profile: AdminProfile; bases?: AdminBase[] }) {
-  return <ToastProvider><AdminShellContent profile={profile} bases={bases}>{children}</AdminShellContent></ToastProvider>;
+export function AdminShell({ children, profile, bases = [], standbyEnabled = false }: { children: ReactNode; profile: AdminProfile; bases?: AdminBase[]; standbyEnabled?: boolean }) {
+  return <ToastProvider><AdminShellContent profile={profile} bases={bases} standbyEnabled={standbyEnabled}>{children}</AdminShellContent></ToastProvider>;
 }
