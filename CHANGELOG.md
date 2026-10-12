@@ -1,5 +1,16 @@
 # Changelog
 
+## Stand-by de reservas — fundação (etapa 2 de 6, ainda inativa)
+
+- Novo status `AWAITING_RESCHEDULE` ("Aguardando reagendamento"): reserva paga que saiu da turma original e ainda não tem nova data. Não ocupa vaga e não é cancelamento, expiração nem pagamento pendente. Detalhes em [docs/reservation-standby.md](docs/reservation-standby.md).
+- **Nada muda em produção com este código.** Nenhuma tela coloca reserva em Stand-by, e as migrations não foram aplicadas. Mergear não aplica migration; aplicar a migration não ativa o Stand-by.
+- Migrations `202610130001_reservation_status_awaiting_reschedule.sql` (só o valor do enum) e `202610130002_reservation_standby.sql` (tabela `reservation_standby`, travas e RPCs), aditivas e idempotentes. Preflight, postcheck e rollback em `supabase/diagnostics/reservation_standby_*.sql` e `supabase/rollback/`.
+- **Proteção financeira:** webhook repetido, retorno do pagamento, "Verificar pagamento", reconciliação e confirmação manual não reconfirmam uma reserva em Stand-by nem gravam evento. Segunda camada no banco: a trigger `reservations_standby_guard` só deixa a reserva voltar a confirmada pelas operações de Stand-by.
+- Operações transacionais para colocar em Stand-by, desfazer e reagendar (pelo admin ou pelo cliente), com autorização de uso único, repetição idempotente e link individual guardado só como hash. Regra do cliente: mesma quantidade e mesmo valor por participante.
+- Receita: reservas em Stand-by continuam somadas no faturamento e saem de participantes e ocupação. Novo indicador `awaitingReschedule` nos dois dashboards.
+- Leitura do status no painel, na página pública e na planilha, para ele nunca aparecer como expirada ou cancelada.
+- `admin_change_reservation_session` (reagendamento tradicional), `available_spots`, check-in, QR e e-mail **não foram alterados**.
+
 ## Correção: texto do percurso da Rota Ermida Ponte JK
 
 - A remada não chega à Ponte JK: o grupo rema até a prainha da Ermida Dom Bosco, para para um banho, e vê a ponte durante quase todo o trajeto e na parada. Card, resumo e landing diziam "pela Ponte JK".
