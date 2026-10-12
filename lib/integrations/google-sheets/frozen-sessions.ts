@@ -17,47 +17,36 @@
  *
  * A única linha de uma sessão congelada que pode mudar é a da própria reserva
  * quando ela é reagendada para outra turma: a reserva deixa de pertencer à
- * sessão histórica, e a sincronização passa a ser a da turma nova.
+ * sessão histórica, e a sincronização passa a ser a da turma nova. A sessão
+ * histórica não é reconstruída por isso, e a reserva continua com uma linha só.
  *
- * ## IDs
+ * ## A lista é permanente
  *
- * Só entra aqui `session_id` completo e confirmado. Nada de prefixo, data ou
- * suposição: um id errado deixaria uma sessão sem proteção, ou bloquearia uma
- * turma normal.
- */
-
-/** Os 14 prefixos registrados no documento do incidente. Referência, não regra. */
-export const HISTORICAL_SESSION_PREFIXES = [
-  "0a98cf4c",
-  "0ca42ebe",
-  "49a818bf",
-  "4d77bf1d",
-  "5589d4c6",
-  "6547901a",
-  "86480dee",
-  "87077465",
-  "8796cfff",
-  "8d78dd76",
-  "9b40060d",
-  "c3969f2c",
-  "c42e5181",
-  "d47907c1",
-] as const;
-
-/**
- * `session_id` completos das sessões congeladas.
+ * São exatamente estas 14, pelo `session_id` completo. Não há regra por data,
+ * por prefixo nem por faixa: um id errado deixaria uma sessão sem proteção, ou
+ * bloquearia uma turma normal. A lista só muda por decisão administrativa
+ * registrada no documento do incidente — e um teste trava os 14 ids, então
+ * acrescentar ou retirar um exige mudar o teste junto, de propósito.
  *
- * As duas primeiras são as turmas de 15/08/2026 parcialmente presentes na
- * planilha; os ids foram lidos da própria aba `Sessões` em 12/10/2026.
- *
- * PENDENTE: o documento do incidente registra só os oito primeiros caracteres
- * das outras doze, e elas não estão na planilha nem no repositório. Os ids
- * completos precisam vir do Supabase — `pendingHistoricalPrefixes()` lista
- * quais faltam, e um teste falha se esta lista e o documento divergirem.
+ * Os ids vieram do Supabase de produção em 12/10/2026, pela consulta somente
+ * leitura `supabase/diagnostics/google_sheets_historical_sessions.sql`, e batem
+ * um a um com os 14 prefixos registrados no incidente.
  */
 const FROZEN_SESSION_IDS: readonly string[] = [
-  "0a98cf4c-4d40-411d-987e-a383479fc2e1", // Remada do Nascer do Sol · 15/08/2026 06:00
-  "87077465-49ee-4b94-b89d-aa56296aabd0", // Imersão Paranoá · 15/08/2026 12:00
+  "49a818bf-297a-4361-8d41-02e0491006b3",
+  "4d77bf1d-fe49-4c7b-b582-29a95e3f8b7b",
+  "8796cfff-0172-400e-b271-94b6ee935657",
+  "9b40060d-8022-476e-aa68-c10e54e2f7a7",
+  "8d78dd76-739b-4821-870b-135be377aaaf",
+  "5589d4c6-df72-4f86-a6e8-42ac9aa38000",
+  "c3969f2c-c0fc-4342-936a-67c9e1e5043a",
+  "0a98cf4c-4d40-411d-987e-a383479fc2e1", // Remada do Nascer do Sol · 15/08/2026 06:00 — parcialmente presente na planilha
+  "87077465-49ee-4b94-b89d-aa56296aabd0", // Imersão Paranoá · 15/08/2026 12:00 — parcialmente presente na planilha
+  "c42e5181-83d6-4323-854d-4acd11a2e204",
+  "6547901a-ebd6-4306-8f24-7b50355812dd",
+  "86480dee-c466-4779-be07-938f67349dde",
+  "d47907c1-9f09-49b1-bc11-45ec4b7eb359",
+  "0ca42ebe-3732-4fa4-bbcf-26af6c953835",
 ];
 
 export const FROZEN_SHEET_SESSION_IDS: ReadonlySet<string> = new Set(FROZEN_SESSION_IDS.map((id) => id.toLowerCase()));
@@ -69,10 +58,4 @@ export function isFrozenSheetSession(sessionId: unknown): boolean {
   if (typeof sessionId !== "string") return false;
   const normalized = sessionId.trim().toLowerCase();
   return UUID_PATTERN.test(normalized) && FROZEN_SHEET_SESSION_IDS.has(normalized);
-}
-
-/** Prefixos documentados que ainda não têm o `session_id` completo registrado. */
-export function pendingHistoricalPrefixes(): string[] {
-  const known = new Set([...FROZEN_SHEET_SESSION_IDS].map((id) => id.slice(0, 8)));
-  return HISTORICAL_SESSION_PREFIXES.filter((prefix) => !known.has(prefix));
 }

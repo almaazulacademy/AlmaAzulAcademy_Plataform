@@ -1,13 +1,14 @@
 -- SESSÕES HISTÓRICAS FORA DA PLANILHA — IDS COMPLETOS (SOMENTE LEITURA)
 --
--- O documento do incidente (`docs/incident-2026-10-google-sheets-grid-limit.md`)
--- registra as 14 sessões só pelos oito primeiros caracteres do `session_id`. A
--- proteção da planilha (`lib/integrations/google-sheets/frozen-sessions.ts`)
--- compara o id inteiro, e só aceita id completo e confirmado.
+-- A proteção da planilha (`lib/integrations/google-sheets/frozen-sessions.ts`)
+-- compara o `session_id` inteiro das 14 sessões históricas. Os ids registrados lá
+-- e em `docs/incident-2026-10-google-sheets-grid-limit.md` saíram desta consulta,
+-- rodada em produção em 12/10/2026.
 --
--- Esta consulta devolve o id completo de cada uma, com o suficiente para
--- conferir que é a sessão certa. Um único SELECT, nenhuma escrita e nenhum dado
--- pessoal: só sessão, experiência, horário e contagens.
+-- Ela continua aqui para reconferir a lista quando for preciso: parte dos 14
+-- prefixos do incidente e devolve o id completo de cada sessão, com o suficiente
+-- para conferir que é a sessão certa. Um único SELECT, nenhuma escrita e nenhum
+-- dado pessoal: só sessão, experiência, horário e contagens.
 --
 -- Esperado: exatamente 14 linhas, uma por prefixo, todas anteriores a
 -- 19/08/2026. A soma de `reservas_confirmadas` era 97 (200 vagas) em 09/10/2026.
