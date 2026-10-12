@@ -12,6 +12,11 @@
 -- `202610130002_reservation_standby.sql` substitui. O hash confere que a definição de produção é a do
 -- repositório (com quebra de linha LF ou CRLF) — ou seja, que a migration parte
 -- do mesmo texto que está em produção e não desfaz nenhuma alteração feita à mão.
+--
+-- ENUM_AINDA_SEM_O_STATUS_NOVO exige exatamente os quatro valores originais, em
+-- qualquer ordem: o enum de produção veio do schema legado e está na ordem
+-- PRE_RESERVED, CONFIRMED, CANCELLED, EXPIRED. Nada no sistema compara status
+-- pela ordem do enum, e `ADD VALUE` acrescenta no fim. Um quinto valor reprova.
 
 with expected(fn, lf, crlf) as (values
     ('admin_base_dashboard_metrics', 'd0810aef3b0c5dfdfee7668b14b251d8', '8faedc9585e9d56069afd30399bf6bee'),
@@ -41,8 +46,8 @@ checks as (
   union all
   select 'ENUM_AINDA_SEM_O_STATUS_NOVO',
          (select string_agg(e.enumlabel, ', ' order by e.enumsortorder) from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'reservation_status'),
-         (select array_agg(e.enumlabel::text order by e.enumsortorder) from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'reservation_status')
-           = array['PRE_RESERVED', 'CONFIRMED', 'EXPIRED', 'CANCELLED']
+         (select array_agg(e.enumlabel::text order by e.enumlabel::text) from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'reservation_status')
+           = array['CANCELLED', 'CONFIRMED', 'EXPIRED', 'PRE_RESERVED']
   union all
   select 'TABELA_DE_STANDBY_AINDA_NAO_EXISTE',
          coalesce(to_regclass('public.reservation_standby')::text, 'ausente'),

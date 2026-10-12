@@ -1567,6 +1567,42 @@ test("preflight: aprovado no banco anterior à entrega e reprovado depois dela",
   }
 });
 
+test("preflight: aceita os quatro status em qualquer ordem, como no enum legado de produção, e reprova um quinto", async () => {
+  const legacy = await fullDatabase({ until: "202610120002_rota_ermida_texto.sql" });
+  // Produção: o enum nasceu no schema legado e teve os rótulos renomeados, então
+  // CANCELLED vem antes de EXPIRED.
+  await legacy.exec(`
+    update pg_enum e set enumsortorder = 2.5
+    from pg_type t where t.oid = e.enumtypid and t.typname = 'reservation_status' and e.enumlabel = 'CANCELLED';
+  `);
+
+  const reordered = await diagnostic(legacy, "diagnostics/reservation_standby_preflight.sql");
+  const enumRow = reordered.find((row) => row.check_name === "ENUM_AINDA_SEM_O_STATUS_NOVO");
+  assert.equal(enumRow?.result, "PRE_RESERVED, CONFIRMED, CANCELLED, EXPIRED");
+  assert.deepEqual(reordered.filter((row) => row.status !== "OK"), [], JSON.stringify(reordered, null, 2));
+
+  // A ordem não interfere na migration: o valor novo entra no fim.
+  const migrated = await fullDatabase({ until: "202610120002_rota_ermida_texto.sql" });
+  await migrated.exec(`
+    update pg_enum e set enumsortorder = 2.5
+    from pg_type t where t.oid = e.enumtypid and t.typname = 'reservation_status' and e.enumlabel = 'CANCELLED';
+  `);
+  await applyMigration(migrated, "202610130001_reservation_status_awaiting_reschedule.sql");
+  await applyMigration(migrated, "202610130002_reservation_standby.sql");
+  const labels = (await migrated.query(
+    "select string_agg(e.enumlabel, ', ' order by e.enumsortorder) as labels from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'reservation_status'",
+  )).rows as Array<{ labels: string }>;
+  assert.equal(labels[0].labels, "PRE_RESERVED, CONFIRMED, CANCELLED, EXPIRED, AWAITING_RESCHEDULE");
+  const postcheck = await diagnostic(migrated, "diagnostics/reservation_standby_postcheck.sql");
+  assert.deepEqual(postcheck.filter((row) => row.status !== "OK"), [], JSON.stringify(postcheck, null, 2));
+
+  // Valor a mais continua reprovando, esteja onde estiver.
+  await legacy.exec("alter type public.reservation_status add value 'OUTRO_STATUS' before 'CONFIRMED'");
+  const extra = await diagnostic(legacy, "diagnostics/reservation_standby_preflight.sql");
+  const failed = extra.filter((row) => row.status !== "OK").map((row) => row.check_name);
+  assert.deepEqual(failed, ["ENUM_AINDA_SEM_O_STATUS_NOVO", "STANDBY_PREFLIGHT_OK"]);
+});
+
 test("postcheck: aprovado logo após as migrations e sensível a Stand-by em uso e a definição alterada", async () => {
   const fresh = await fullDatabase();
   const clean = await diagnostic(fresh, "diagnostics/reservation_standby_postcheck.sql");
