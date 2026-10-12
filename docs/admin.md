@@ -19,6 +19,7 @@ Permitir que a equipe opere experiências, sessões e reservas sem acessar diret
 | `/admin/sessoes` | Criar, editar, duplicar, abrir, fechar, excluir sessões sem histórico e arquivar/restaurar sessões com histórico |
 | `/admin/reservas` | Listar e filtrar reservas |
 | `/admin/reservas/[reservationId]` | Ver dados, pagamento, histórico de turma e ações de uma reserva |
+| `/admin/stand-by` | Reservas pagas aguardando reagendamento: reagendar, desfazer, gerar e revogar link. Só existe com `STANDBY_ADMIN_ENABLED=true` — ver [reservation-standby.md](reservation-standby.md#painel-administrativo) |
 | `/admin/experiencias` | Criar, editar, publicar, arquivar e ordenar experiências |
 | `/admin/configuracoes` | Consultar configurações operacionais sem editar dados sensíveis |
 

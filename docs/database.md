@@ -241,6 +241,7 @@ Não há policy pública de leitura para `reservations` ou `payment_events`; pri
 | `202609150001_multi_base.sql` | Tabela `bases`, `experiences.base_id`/`is_exclusive`/`modality`, status `COMING_SOON`, invariante "publicada só em base ativa", Concha Acústica em breve, RPCs públicas do catálogo e `admin_base_dashboard_metrics`. Detalhes em [multi-base.md](multi-base.md) |
 | `202610130001_reservation_status_awaiting_reschedule.sql` | Somente o valor `AWAITING_RESCHEDULE` no enum `reservation_status` |
 | `202610130002_reservation_standby.sql` | Tabela `reservation_standby`, colunas de ator e origem em `reservation_session_changes`, trigger `reservations_standby_guard`, travas nas funções de pagamento, receita com Stand-by e RPCs de Stand-by. Detalhes em [reservation-standby.md](reservation-standby.md) |
+| `202610140001_reservation_standby_admin_panel.sql` | Painel de Stand-by: `admin_list_standby_reservations_page`, `admin_standby_reschedule_options`, `admin_reschedule_standby_same_price` e `admin_reservation_standby_history`. Só cria funções; não altera nenhum objeto existente |
 
 ## RPCs administrativas
 

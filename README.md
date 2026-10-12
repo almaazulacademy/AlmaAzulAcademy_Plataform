@@ -97,6 +97,7 @@ NEXT_PUBLIC_SITE_URL
 SUPABASE_SERVICE_ROLE_KEY
 PAYMENT_PROVIDER
 INFINITEPAY_HANDLE
+STANDBY_ADMIN_ENABLED
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` deve existir somente em ambiente server-side. Consulte [docs/deployment.md](docs/deployment.md) para finalidade, ambientes e recuperação completa.

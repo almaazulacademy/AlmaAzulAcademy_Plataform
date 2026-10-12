@@ -140,6 +140,30 @@ As duas convergem em qualquer ordem. Se um retry rodar a turma antiga primeiro, 
 
 E a regra de sempre continua valendo: uma falha do Google **não** desfaz a troca de turma. A reserva permanece na turma nova no Supabase, o pagamento permanece confirmado, e os dois jobs ficam pendentes para uma próxima tentativa.
 
+### Stand-by: modo "somente atualizar"
+
+Uma reserva em Stand-by continua apontando para a turma original. Sincronizá-la do jeito normal escreveria a linha dessa turma em `Sessões` mesmo que ela nunca tenha estado na planilha — o caso das 14 sessões anteriores a 19/08/2026, mantidas fora de propósito ([incidente da grade cheia](incident-2026-10-google-sheets-grid-limit.md)).
+
+Por isso, quando a turma do snapshot é **origem de um Stand-by**, a sincronização roda em modo "somente atualizar":
+
+- a turma **já está** em `Sessões` → tudo é atualizado normalmente: a linha da reserva passa a "Aguardando reagendamento" (ou "Cancelada"), as vagas dela ficam inativas e os totais da turma são recalculados;
+- a turma **não está** em `Sessões` → nada é escrito, em nenhuma aba, e o job é encerrado. O painel informa "a turma não está na planilha operacional".
+
+A decisão não vem de quem chamou. Ela é tomada a cada execução, em `runJob`, lendo `reservation_standby` pela turma do snapshot (`lib/integrations/google-sheets/standby-guard.ts`):
+
+| Sincronização | "Somente atualizar" quando |
+| --- | --- |
+| Reserva | ela está em Stand-by, ou foi cancelada em Stand-by, com aquela turma como origem |
+| Sessão (reconstrução) | a turma foi origem de algum Stand-by que não terminou nela mesma |
+
+Como a regra é do serviço, ela vale para todos os caminhos: entrada em Stand-by, reagendamento (a reconstrução da turma antiga), cancelamento de reserva em Stand-by, os botões "Sincronizar planilha" e "Sincronizar lista da sessão", e um job pendente retomado horas depois.
+
+Depois de reagendada ou devolvida à turma, a reserva está confirmada em uma turma futura e a sincronização volta ao normal — a turma nova é criada na planilha se ainda não existir, exatamente como em uma confirmação de pagamento.
+
+Se a leitura de `reservation_standby` falhar, a sincronização é interrompida com `STANDBY_LOOKUP_UNAVAILABLE` e o job fica pendente: sem saber se a turma é origem de um Stand-by, nada é escrito. A exceção é o banco que não tem a tabela — sem ela não existe Stand-by, e a sincronização segue normal.
+
+A estrutura das abas não mudou. O que este modo **não** cobre: a troca de turma tradicional e a reconstrução manual de uma sessão histórica que nunca teve Stand-by continuam se comportando como antes.
+
 ## 3. Estrutura das abas
 
 Quatro abas. Duas visíveis para operação, uma visível para conferência e uma técnica oculta.
