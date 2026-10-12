@@ -9,7 +9,12 @@ import type { AdminReservation } from "@/lib/admin/types";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency, formatMaskedCpf } from "@/lib/admin/format";
 import { formatSessionDateTime } from "@/lib/sessions/date-time";
 
-export function ReservationsList({ reservations, hasFilters = false }: { reservations: AdminReservation[]; hasFilters?: boolean }) {
+export function ReservationsList({ reservations, hasFilters = false, standbyEnabled = false }: {
+  reservations: AdminReservation[];
+  hasFilters?: boolean;
+  /** Liga os botões de Stand-by. Desligado, a listagem é a de sempre. */
+  standbyEnabled?: boolean;
+}) {
   if (reservations.length === 0) {
     return <AdminEmptyState title={hasFilters ? "Nenhum resultado encontrado" : "Nenhuma reserva ainda"} description={hasFilters ? "Ajuste ou remova os filtros para ampliar a busca." : "As reservas aparecerão aqui assim que os clientes escolherem uma sessão."} action={<Link href={hasFilters ? "/admin/reservas" : "/admin/sessoes"} className={buttonVariants({ variant: "outline", size: "sm" })}>{hasFilters ? "Limpar filtros" : "Ver sessões"}</Link>} />;
   }
@@ -27,7 +32,7 @@ export function ReservationsList({ reservations, hasFilters = false }: { reserva
             </div>
             <dl className="grid flex-1 grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 xl:grid-cols-5">
               <div><dt className="text-xs text-ink/45">Experiência</dt><dd className="mt-1 text-sm font-semibold">{reservation.experienceTitle}</dd></div>
-              <div><dt className="text-xs text-ink/45">Horário</dt><dd className="mt-1 text-sm font-semibold">{formatSessionDateTime(reservation.startsAt)}</dd></div>
+              <div><dt className="text-xs text-ink/45">{reservation.status === "AWAITING_RESCHEDULE" ? "Turma anterior" : "Horário"}</dt><dd className="mt-1 text-sm font-semibold">{formatSessionDateTime(reservation.startsAt)}</dd></div>
               <div><dt className="text-xs text-ink/45">Pessoas</dt><dd className="mt-1 flex items-center gap-1.5 text-sm font-semibold"><Users className="size-4 text-lake" /> {reservation.quantity}</dd></div>
               <div><dt className="text-xs text-ink/45">Valor</dt><dd className="mt-1 text-sm font-semibold">{formatCurrency(reservation.totalCents)}</dd></div>
               <div><dt className="text-xs text-ink/45">Código</dt><dd className="mt-1 font-mono text-sm font-semibold tracking-wide">{reservation.publicCode}</dd></div>
@@ -43,6 +48,14 @@ export function ReservationsList({ reservations, hasFilters = false }: { reserva
               phone={reservation.phone}
               email={reservation.email}
               publicCode={reservation.publicCode}
+              standby={standbyEnabled ? {
+                // Só reserva confirmada e paga pode entrar. A presença não é
+                // conhecida na listagem: se houver, o banco recusa e o modal
+                // mostra o motivo.
+                entry: reservation.status === "CONFIRMED" && reservation.paymentStatus === "PAID"
+                  ? { experienceTitle: reservation.experienceTitle, startsAt: reservation.startsAt, quantity: reservation.quantity, totalCents: reservation.totalCents }
+                  : undefined,
+              } : undefined}
             />
             <Link href={`/admin/reservas/${reservation.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>Abrir detalhes <ArrowRight className="size-4" /></Link>
           </div>

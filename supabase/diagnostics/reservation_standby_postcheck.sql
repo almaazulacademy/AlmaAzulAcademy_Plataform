@@ -73,7 +73,10 @@ checks as (
   union all
   select 'RPCS_DO_SERVIDOR_EXECUTAVEIS_PELA_SERVICE_ROLE',
          (select count(*)::text from functions where fn in ('admin_set_reservation_standby', 'admin_undo_reservation_standby', 'admin_reschedule_reservation_from_standby', 'admin_list_standby_reservations', 'admin_generate_reservation_standby_link', 'admin_revoke_reservation_standby_link', 'customer_reschedule_options', 'customer_reschedule_reservation') and has_function_privilege('service_role', oid, 'EXECUTE')),
-         (select count(*) = 8 from functions where fn in ('admin_set_reservation_standby', 'admin_undo_reservation_standby', 'admin_reschedule_reservation_from_standby', 'admin_list_standby_reservations', 'admin_generate_reservation_standby_link', 'admin_revoke_reservation_standby_link', 'customer_reschedule_options', 'customer_reschedule_reservation') and has_function_privilege('service_role', oid, 'EXECUTE'))
+         -- Sete são obrigatórias. `admin_reschedule_reservation_from_standby` conta 8
+         -- logo depois desta migration e 7 depois de `202610140001`, que retira o
+         -- privilégio dela de propósito: os dois estados são válidos.
+         (select count(*) = 7 from functions where fn in ('admin_set_reservation_standby', 'admin_undo_reservation_standby', 'admin_list_standby_reservations', 'admin_generate_reservation_standby_link', 'admin_revoke_reservation_standby_link', 'customer_reschedule_options', 'customer_reschedule_reservation') and has_function_privilege('service_role', oid, 'EXECUTE'))
   union all
   select 'TABELA_COM_RLS_E_SEM_POLICY',
          (select 'rls=' || c.relrowsecurity || ', policies=' || (select count(*) from pg_policies where schemaname = 'public' and tablename = 'reservation_standby')

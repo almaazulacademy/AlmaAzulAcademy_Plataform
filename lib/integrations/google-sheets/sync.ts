@@ -46,6 +46,7 @@ import {
   SPOTS_TAB,
 } from "./schema.ts";
 import { GoogleSheetsError } from "./errors.ts";
+import { isFrozenSheetSession } from "./frozen-sessions.ts";
 import {
   reservationRow,
   sessionRow,
@@ -111,7 +112,20 @@ export type SyncReport = {
   rowsUpdated: number;
   rowsAppended: number;
   spotsDeactivated: number;
+  /**
+   * true quando nada foi escrito — nem a sessão, nem a reserva, nem as vagas.
+   * `skipReason` diz por quê.
+   */
+  skipped: boolean;
+  skipReason?: SyncSkipReason;
 };
+
+/**
+ * `SESSION_FROZEN`: sessão histórica congelada — a planilha nem chega a ser
+ * lida. `SESSION_NOT_IN_SHEET`: modo "somente atualizar" e a turma não tem
+ * linha na aba `Sessões`.
+ */
+export type SyncSkipReason = "SESSION_FROZEN" | "SESSION_NOT_IN_SHEET";
 
 type KeyedRow = { key: string; values: SheetValue[] };
 
@@ -218,14 +232,27 @@ function planUpsert(
  * o que veio no snapshot, desativa qualquer vaga daquela sessão que não exista
  * mais no Supabase. É o modo usado pelo botão "Sincronizar lista da sessão" —
  * e a razão de ele servir como recuperação operacional.
+ *
+ * `updateOnly` é o modo "somente atualizar": se a turma do snapshot ainda não
+ * tem linha na aba `Sessões`, a sincronização termina sem escrever nada. Turma
+ * que já está na planilha segue o caminho normal. É o que impede uma reserva em
+ * Stand-by de recriar a turma original — ver `standby-guard.ts`.
+ *
+ * Sessão histórica congelada (`frozen-sessions.ts`) não é sincronizada em modo
+ * nenhum: a função volta antes da primeira chamada ao Google. A checagem mora
+ * aqui, no motor, para valer para qualquer chamador — presente ou futuro.
  */
 export async function syncSnapshot(
   gateway: SheetsGateway,
   snapshot: SyncSnapshot,
-  options: { syncedAt: string; reconcileSession?: boolean },
+  options: { syncedAt: string; reconcileSession?: boolean; updateOnly?: boolean },
 ): Promise<SyncReport> {
   const { session, reservations } = snapshot;
   const syncedAt = options.syncedAt;
+
+  if (isFrozenSheetSession(session.id)) {
+    return { sessionId: session.id, reservations: reservations.length, rowsUpdated: 0, rowsAppended: 0, spotsDeactivated: 0, skipped: true, skipReason: "SESSION_FROZEN" };
+  }
 
   const [sessionKeys, reservationKeys, spotRowsRead] = await gateway.batchGet([
     a1(SESSIONS_TAB, `A${FIRST_DATA_ROW}:A`),
@@ -237,6 +264,13 @@ export async function syncSnapshot(
   const sessionCursor = readCursor(sessionKeys);
   const reservationCursor = readCursor(reservationKeys);
   const spotCursor = readCursor(spotRowsRead);
+
+  // Decidido com a leitura que acabou de ser feita, antes de planejar qualquer
+  // escrita: a turma não está na planilha, então não entra por este caminho.
+  if (options.updateOnly && !sessionCursor.index.has(session.id)) {
+    return { sessionId: session.id, reservations: reservations.length, rowsUpdated: 0, rowsAppended: 0, spotsDeactivated: 0, skipped: true, skipReason: "SESSION_NOT_IN_SHEET" };
+  }
+
   const cursors: Array<readonly [string, TabCursor, number]> = [
     [SESSIONS_TAB, sessionCursor, sessionCursor.nextRow],
     [RESERVATIONS_TAB, reservationCursor, reservationCursor.nextRow],
@@ -291,6 +325,7 @@ export async function syncSnapshot(
     rowsUpdated: plan.updates.length - plan.appended,
     rowsAppended: plan.appended,
     spotsDeactivated,
+    skipped: false,
   };
 }
 

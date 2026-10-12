@@ -233,9 +233,17 @@ test("toda rota /api/admin exige papel administrativo; só o check-in aceita ins
       assert.equal([...text.matchAll(/await authorizeTeamManagerApi\(\)/g)].length, exported, route);
     } else {
       assert.ok(!text.includes("authorizeCheckinApi"), route);
-      assert.ok(/authorizeAdminApi\(\)/.test(text), route);
+      // As rotas de Stand-by passam por `authorizeStandbyApi`, que só acrescenta
+      // a checagem de ativação e delega a `authorizeAdminApi` — conferido abaixo.
+      assert.ok(/authorize(Admin|Standby)Api\(\)/.test(text), route);
+      if (/authorizeStandbyApi\(\)/.test(text)) {
+        assert.equal([...text.matchAll(/await authorizeStandbyApi\(\)/g)].length, exported, route);
+      }
     }
   }
+  const http = source("lib/admin/http.ts");
+  const standby = http.slice(http.indexOf("export async function authorizeStandbyApi"));
+  assert.match(standby, /^export async function authorizeStandbyApi\(\) \{[\s\S]*?return authorizeAdminApi\(\);\n\}/);
 });
 
 test("área do instrutor exige sessão da equipe e não usa nada do painel restrito", () => {

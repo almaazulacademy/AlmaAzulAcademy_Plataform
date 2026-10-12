@@ -1,13 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CalendarClock, CheckCircle2, Copy, ExternalLink, Mail, MailCheck, MessageCircle, QrCode, RotateCcw, SearchCheck, Sheet, XCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, Copy, ExternalLink, Mail, MailCheck, MessageCircle, PauseCircle, QrCode, RotateCcw, SearchCheck, Sheet, XCircle } from "lucide-react";
 
 import { ChangeSessionDialog } from "@/components/admin/change-session-dialog";
 import { ConfirmationDialog } from "@/components/admin/confirmation-dialog";
+import { StandbyActions } from "@/components/admin/standby/standby-actions";
+import { SetStandbyDialog, type StandbyEntrySummary } from "@/components/admin/standby/standby-dialogs";
 import { useToast } from "@/components/admin/toast-provider";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { reservationMessage, withErrorCode } from "@/lib/admin/format";
 import { isPaymentSettledStatus, type ReservationStatus } from "@/lib/reservations/types";
 
@@ -16,7 +19,21 @@ type ApiPayload = { message?: string };
 type VerifyPayload = { success?: boolean; outcome?: string; message?: string };
 type SyncPayload = { success?: boolean; outcome?: string; errorCode?: string; message?: string };
 
-export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false, showSheetSync = false, showEmailResend = false, showQrResend = false }: {
+/**
+ * Stand-by nesta reserva. Ausente quando o painel de Stand-by está desligado —
+ * e então nenhum botão dele aparece.
+ *
+ * `entry` vem preenchido só para reserva confirmada **e paga**: é o resumo que o
+ * modal de confirmação mostra. `hasActiveLink` vem do detalhe da reserva; na
+ * listagem ele é desconhecido e as ações ficam atrás do atalho para a lista de
+ * Stand-by.
+ */
+export type ReservationStandbyControls = {
+  entry?: StandbyEntrySummary;
+  hasActiveLink?: boolean;
+};
+
+export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false, showSheetSync = false, showEmailResend = false, showQrResend = false, standby }: {
   reservationId: string;
   status: ReservationStatus;
   fullName: string;
@@ -29,6 +46,7 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   showEmailResend?: boolean;
   /** "Reenviar QR Code": só em reserva confirmada com e-mail configurado. */
   showQrResend?: boolean;
+  standby?: ReservationStandbyControls;
 }) {
   const router = useRouter();
   const { notify } = useToast();
@@ -37,6 +55,7 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   const [syncing, setSyncing] = useState(false);
   const [resending, setResending] = useState(false);
   const [changingSession, setChangingSession] = useState(false);
+  const [settingStandby, setSettingStandby] = useState(false);
 
   const verifyPayment = async () => {
     setVerifying(true);
@@ -69,7 +88,7 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
       const response = await fetch(`/api/admin/reservations/${reservationId}/sync-sheet`, { method: "POST" });
       const payload = await response.json().catch(() => ({})) as SyncPayload;
       notify({
-        title: payload.success ? "Planilha sincronizada" : "Sincronização pendente",
+        title: payload.outcome === "SKIPPED" ? "Planilha não alterada" : payload.success ? "Planilha sincronizada" : "Sincronização pendente",
         description: withErrorCode(payload.message ?? "Não foi possível falar com o Google Sheets agora.", payload.errorCode),
         variant: payload.success ? undefined : "error",
       });
@@ -151,12 +170,30 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
 
   return (
     <>
+      {/* Reserva em Stand-by: as ações dela vêm primeiro. No detalhe aparecem
+          aqui; na listagem, o atalho leva à lista de Stand-by. */}
+      {status === "AWAITING_RESCHEDULE" && standby ? (
+        <div className="mb-3">
+          {typeof standby.hasActiveLink === "boolean" ? (
+            <StandbyActions reservationId={reservationId} fullName={fullName} phone={phone} publicCode={publicCode} hasActiveLink={standby.hasActiveLink} />
+          ) : (
+            <Link href={`/admin/stand-by?query=${encodeURIComponent(publicCode)}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <CalendarClock className="size-4" /> Gerenciar Stand-by
+            </Link>
+          )}
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {/* Trocar de dia ou horário depois do pagamento. Só faz sentido — e só
             é permitido pelo banco — em uma reserva confirmada. */}
         {status === "CONFIRMED" ? (
           <Button type="button" size="sm" variant="outline" onClick={() => setChangingSession(true)}>
             <CalendarClock className="size-4" /> Alterar turma
+          </Button>
+        ) : null}
+        {status === "CONFIRMED" && standby?.entry ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => setSettingStandby(true)}>
+            <PauseCircle className="size-4" /> Colocar em Stand-by
           </Button>
         ) : null}
         {/* Verificar e confirmar pagamento só existem enquanto o pagamento está em
@@ -200,6 +237,16 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
         reservationId={reservationId}
         onClose={() => setChangingSession(false)}
       />
+      {standby?.entry ? (
+        <SetStandbyDialog
+          open={settingStandby}
+          reservationId={reservationId}
+          fullName={fullName}
+          publicCode={publicCode}
+          summary={standby.entry}
+          onClose={() => setSettingStandby(false)}
+        />
+      ) : null}
       <ConfirmationDialog
         open={action === "resendQr"}
         title={`Reenviar QR Code para ${email}?`}
@@ -221,7 +268,9 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
       <ConfirmationDialog
         open={action === "cancel"}
         title="Cancelar esta reserva?"
-        description="A vaga será liberada. Pagamentos já realizados não são estornados automaticamente e precisam de tratamento operacional."
+        description={status === "AWAITING_RESCHEDULE"
+          ? "A reserva está em Stand-by e já não ocupa vaga. Cancelar encerra o Stand-by e invalida o link. O pagamento não é estornado automaticamente e precisa de tratamento operacional."
+          : "A vaga será liberada. Pagamentos já realizados não são estornados automaticamente e precisam de tratamento operacional."}
         confirmLabel="Cancelar reserva"
         requireReason
         onClose={() => setAction(null)}

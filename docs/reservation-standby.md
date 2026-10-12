@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Pagamentos](payments.md) · [Painel](admin.md)
 
-**Estado: fundação (etapa 2 de 6).** O banco e as travas existem no repositório; **nenhuma tela coloca uma reserva em Stand-by** e nenhuma migration desta entrega foi aplicada em produção. Mergear o PR não aplica migration; aplicar a migration não ativa o Stand-by.
+**Estado: painel administrativo (etapa 3 de 6), desligado por padrão.** As migrations `202610130001` e `202610130002` estão aplicadas em produção. O painel desta etapa só existe com `STANDBY_ADMIN_ENABLED=true`; a migration `202610140001`, de que ele depende, ainda não foi aplicada. Mergear o PR não aplica migration nem liga o painel.
 
 ## O que é
 
@@ -30,9 +30,10 @@ A reserva continua sendo a mesma — mesmo id, mesmo código, mesma quantidade, 
 5. **Dois acessos para o cliente:** CPF + código, ou link individual gerado pelo admin.
 6. **Desfazer** devolve a reserva à turma original se ela estiver aberta, no futuro e com vagas. Senão a operação é recusada e o Stand-by continua.
 7. **A turma original é um destino válido** para o cliente, nas mesmas condições das demais.
-8. **Planilha:** as 14 sessões históricas fora da planilha não são reinseridas (proteção a concluir na etapa 3 — ver [Pendências](#pendências)).
+8. **Planilha:** as 14 sessões históricas fora da planilha não são reinseridas, nem reescritas. Elas ficam congeladas, de forma permanente, pelo `session_id` completo, para toda sincronização; e a sincronização que parte da turma de origem de um Stand-by só atualiza o que já existe — ver [Planilha](#planilha).
+9. **Reagendamento pelo painel:** mesma régua do cliente — turma futura, aberta, publicada, com vagas e mesmo valor por participante, em qualquer base.
 
-O admin, ao reagendar uma reserva em Stand-by, segue as regras do reagendamento tradicional: sem regra de preço.
+`admin_reschedule_reservation_from_standby`, da etapa 2, não tem regra de preço. Ela continua no banco, com o mesmo corpo, mas a migration do painel retira da service role a permissão de executá-la: o servidor só alcança `admin_reschedule_standby_same_price`. O reagendamento tradicional (`admin_change_reservation_session`, só para reserva confirmada) continua sem regra de preço, por decisão de negócio.
 
 ## Modelo de dados
 
@@ -52,7 +53,7 @@ Todas `security definer`, com `search_path` fixo e executáveis apenas pela serv
 | --- | --- |
 | `admin_set_reservation_standby(actor, reserva, motivo)` | Coloca em Stand-by. Motivo obrigatório. |
 | `admin_undo_reservation_standby(actor, reserva, motivo)` | Desfaz: volta à turma original. |
-| `admin_reschedule_reservation_from_standby(actor, reserva, sessão, motivo)` | Reagenda pelo admin. |
+| `admin_reschedule_reservation_from_standby(actor, reserva, sessão, motivo)` | Reagenda pelo admin, sem regra de preço. Fora do alcance da service role desde `202610140001`; o painel usa `admin_reschedule_standby_same_price`. |
 | `admin_list_standby_reservations(actor)` | Lista "Aguardando reagendamento". |
 | `admin_generate_reservation_standby_link(actor, reserva)` | Gera (ou substitui) o link. Devolve o token uma única vez. |
 | `admin_revoke_reservation_standby_link(actor, reserva)` | Revoga o link. |
@@ -109,9 +110,88 @@ Publicado antes das migrations, este código não muda nada: nenhuma reserva tem
 - "Verificar pagamento" e "Confirmar pagamento" somem do painel para reservas pagas;
 - planilha: rótulo próprio e vaga inativa.
 
+## Painel administrativo
+
+Etapa 3. Tudo abaixo só existe com o painel [ativado](#ativação).
+
+### Colocar em Stand-by
+
+Botão nas reservas **confirmadas e pagas**, na listagem e no detalhe. O modal mostra cliente, código, experiência, turma original, participantes e valor pago, avisa que as vagas da turma serão liberadas, exige o motivo (3 a 500 caracteres) e uma confirmação marcada à mão. A rota recusa o pedido sem `confirmed: true`.
+
+Reserva com presença parcial ou completa é recusada pelo banco (`STANDBY_CHECKIN_REGISTERED`); no detalhe o modal já bloqueia antes. Sessão passada sem presença registrada entra normalmente.
+
+### Lista
+
+`/admin/stand-by`, no menu logo depois de Reservas. Mostra nome, código, data, base e experiência originais, participantes, valor pago, motivo e desde quando a reserva está em Stand-by — a mais antiga primeiro. Busca por nome, código ou telefone; filtros por base original e por link ativo.
+
+A paginação é do banco (`admin_list_standby_reservations_page`, 25 por página, total e somas do conjunto filtrado). `admin_list_standby_reservations`, da etapa 2, devolve no máximo 500 linhas sem página seguinte e não é usada pelo painel.
+
+### Ações
+
+| Ação | Regra | RPC |
+| --- | --- | --- |
+| Reagendar | Turma futura, aberta, publicada, base em operação, vagas para o grupo e preço por participante igual ao pago. Entre bases é permitido. Quantidade e pagamento não são parâmetros. | `admin_reschedule_standby_same_price` |
+| Desfazer Stand-by | Turma original aberta, ainda não iniciada e com vagas para o grupo. Senão é recusado e o Stand-by continua. | `admin_undo_reservation_standby` |
+| Gerar link | Substitui o anterior, que para de valer na hora. | `admin_generate_reservation_standby_link` |
+| Revogar link | Apaga o hash. | `admin_revoke_reservation_standby_link` |
+
+`admin_reschedule_standby_same_price` trava a reserva, depois a sessão de destino — a ordem do núcleo —, confere a régua `CUSTOMER` de `reservation_standby_target_rejection` e entrega a `reservation_standby_resolve`. É a mesma régua que monta a lista de turmas do modal (`admin_standby_reschedule_options`), então a tela e a decisão não divergem.
+
+O link é devolvido uma única vez, já como endereço `/acompanhar-reserva#r=<token>`, para o admin copiar ou abrir um rascunho no WhatsApp. Ele não vai para log, auditoria, histórico, URL do painel nem armazenamento do navegador; a resposta sai com `cache-control: no-store`. **A página pública ainda não lê o fragmento:** até a etapa 5 o link abre a página de acompanhamento comum, e o modal avisa isso.
+
+Nenhuma destas ações envia e-mail.
+
+### Auditoria
+
+O detalhe da reserva ganha a seção "Stand-by": um bloco por entrada (quem colocou, motivo, data, turma de origem e de destino, como saiu e por quem) e a lista das ações registradas, inclusive geração e revogação de link. `admin_reservation_standby_history` não devolve token, hash nem os metadados da auditoria.
+
+### Autorização
+
+As rotas ficam em `/api/admin/reservations/[reservationId]/standby` (`GET` e `POST`), `.../standby/undo`, `.../standby/reschedule` e `.../standby/link` (`POST` e `DELETE`). Todas passam por `authorizeStandbyApi`: 404 com o painel desligado; 401 sem sessão; 403 para instrutor. As mutações conferem a origem antes de tudo. O ator vem da sessão validada, e cada RPC confere de novo `is_active_admin`.
+
+### Ativação
+
+`STANDBY_ADMIN_ENABLED=true`, variável de servidor. Só esse valor liga o painel; ausente ou com qualquer outro valor, não há item de menu, botão, página (`/admin/stand-by` responde 404) nem rota. Desligar a variável é o botão de emergência: as reservas já em Stand-by continuam protegidas pelas travas da etapa 2 e podem ser resolvidas depois.
+
+## Planilha
+
+Duas proteções, as duas no serviço central de sincronização (`runSheetSyncJob`), por onde passa todo job — o enviado na hora e o retomado da fila.
+
+**Sessões históricas congeladas.** As 14 sessões anteriores a 19/08/2026 mantidas fora da planilha são identificadas pelo `session_id` completo em `lib/integrations/google-sheets/frozen-sessions.ts`. A proteção é permanente e baseada só nesses ids — sem regra por data ou prefixo. Para elas nenhuma sincronização lê ou escreve nada, venha de onde vier: pagamento, webhook repetido, reconciliação, cancelamento, Stand-by, reagendamento do Stand-by ou tradicional, botões manuais, jobs pendentes. Nas duas parcialmente presentes, as linhas existentes também não são reescritas.
+
+Colocar em Stand-by uma reserva de uma dessas sessões funciona normalmente no banco; só a planilha não é tocada. Se a reserva for reagendada para uma turma futura, o registro dela na planilha passa a ser o da turma nova, sem reconstruir a sessão histórica e sem duplicar participante. Lista dos ids e detalhes em [google-sheets-integration.md](google-sheets-integration.md#sessões-históricas-congeladas).
+
+**Modo "somente atualizar".** Uma reserva em Stand-by ainda aponta para a turma original. Para ela não criar a turma na planilha, a sincronização que parte dessa turma atualiza se a turma já estiver em `Sessões` e não escreve nada se não estiver. Vale para turmas comuns; cobre a entrada em Stand-by, o reagendamento, o cancelamento de reserva em Stand-by, os dois botões manuais e jobs pendentes. A confirmação de pagamento não consulta `reservation_standby`: o banco só é lido para reserva cancelada e para reconstrução de sessão. Detalhes em [google-sheets-integration.md](google-sheets-integration.md#stand-by-modo-somente-atualizar).
+
 ## Publicação
 
-Ordem segura. Cada passo depende de autorização própria.
+### Etapa 3 (painel)
+
+Cada passo depende de autorização própria. Nenhum deles liga o painel sozinho, exceto o último.
+
+1. **Merge e deploy do código.** Sem a variável, o painel não existe. O que passa a valer na hora é a proteção da planilha: as 14 sessões históricas ficam congeladas para toda sincronização, e o modo "somente atualizar" age sobre turmas de origem de Stand-by — hoje, nenhuma.
+2. `supabase/diagnostics/reservation_standby_admin_panel_preflight.sql` → `STANDBY_PAINEL_PREFLIGHT_OK | OK`.
+3. Migration `202610140001_reservation_standby_admin_panel.sql`. Cria quatro funções e retira da service role a execução de `admin_reschedule_reservation_from_standby`; não trava tabela nem toca linha.
+4. `supabase/diagnostics/reservation_standby_admin_panel_postcheck.sql` → `STANDBY_PAINEL_POSTCHECK_OK | OK`.
+5. **Ativação:** `STANDBY_ADMIN_ENABLED=true` na Vercel, só em Production, seguido de um novo deploy.
+
+**Como ler o preflight e o postcheck.** Cada linha vem `OK`, `ATENCAO` ou `FALHOU`. `FALHOU` interrompe. `ATENCAO` não bloqueia a migration, mas precisa ser lida antes de seguir: aparece quando uma função que a migration **não substitui** — o reagendamento tradicional, por exemplo — tem conteúdo diferente do repositório. A linha final fica `OK` sem nenhum `FALHOU` e diz quantos pontos de atenção existem.
+
+As funções são comparadas pelo texto exato e pelo texto com o espaço em branco normalizado. Diferença só de formatação — LF ou CRLF, espaços, recuo — vira `IDENTICA_SO_FORMATACAO` e continua `OK`; palavra, operador ou número diferente é `DIFERENTE`. `DIFERENTE` é `FALHOU` para as quatro funções criadas e para as três que elas chamam, e `ATENCAO` para as que a migration não substitui.
+
+`SERVICE_ROLE_LE_AS_AUTORIZACOES` confere que o servidor consegue ler `reservation_standby` (privilégio de leitura e RLS ignorada pela service role). Se falhar, a proteção da planilha leria a tabela vazia: não ativar.
+
+Não testar operações de escrita no Preview: ele usa o banco de produção.
+
+**Rollback da etapa 3.** Desligar a variável e publicar de novo já tira o painel do ar. Do banco: `supabase/rollback/202610140001_reservation_standby_admin_panel.rollback.sql` remove as quatro funções e devolve à service role a execução de `admin_reschedule_reservation_from_standby` — ou seja, o reagendamento de Stand-by sem regra de preço volta a ser alcançável pelo servidor, como era na etapa 2. Reservas em Stand-by não impedem o rollback e não são afetadas. Para reverter também a `202610130002`, este rollback vem primeiro.
+
+Reaplicar `202610130002` depois de `202610140001` também devolve aquele privilégio (ela o concede); o postcheck do painel acusa em `REAGENDAMENTO_SEM_REGUA_FORA_DO_ALCANCE`, e reaplicar a `202610140001` corrige.
+
+A proteção das sessões históricas é código, não banco: sai com o deploy e volta com ele. Reverter o deploy para uma versão anterior a esta tira a proteção.
+
+### Etapa 2 (fundação) — concluída
+
+Ordem em que foi feita.
 
 1. **Merge e deploy do código** desta etapa. Inofensivo com o banco atual.
 2. `supabase/diagnostics/reservation_standby_preflight.sql` — precisa terminar em `STANDBY_PREFLIGHT_OK | OK`.
@@ -125,13 +205,15 @@ Depois do passo 5 o comportamento do sistema continua o mesmo: o status só pode
 
 ## Testes
 
+`tests/reservation-standby-admin.test.ts` cobre a etapa 3 contra o mesmo Postgres em memória — funções do painel, autorização de cada operação, paginação acima de 500, régua do mesmo valor, links, auditoria — e a planilha, com snapshots lidos do banco e sincronizados contra a planilha falsa. `tests/reservation-standby-panel.test.ts` cobre ativação, validação, contratos das rotas e a regra do modo "somente atualizar".
+
 `tests/reservation-standby.test.ts` roda contra um Postgres real em memória, com todas as migrations aplicadas; `tests/reservation-standby-payments.test.ts` roda `confirmPayment` de verdade contra o duplo de pagamentos. Cobrem entrada, desfazer, reagendamento, uso único, repetição, disputa de vaga, rollback em falha, check-in e QR, receita, links, grants, preflight, postcheck e rollback.
 
 Limite conhecido: o banco de teste tem uma única conexão. A ordem de chegada de duas requisições e o estado que cada uma encontra são exercitados; a espera real no `FOR UPDATE` entre duas sessões do Postgres, não. A ordem dos locks é verificada como contrato do SQL.
 
 ## Pendências
 
-- **Etapa 3 — painel.** Botões, lista, geração de link e o modo "somente atualizar" da planilha para a turma de origem. Sem essa proteção, sincronizar uma reserva de uma das 14 sessões históricas criaria as linhas dela na planilha; por isso nenhuma operação de Stand-by é chamada pelo código ainda.
+- **Teste de concorrência com duas conexões** antes de ativar: o banco de teste tem uma só.
 - **Etapa 4 — e-mail** de reagendamento confirmado.
-- **Etapa 5 — autoatendimento**, com limite de tentativas e checagem de origem.
+- **Etapa 5 — autoatendimento**, com limite de tentativas e checagem de origem. É quando a página pública passa a ler o link individual.
 - **Ambiente de teste de ponta a ponta:** o Preview da Vercel usa o banco de produção e não pode ser usado para operações de escrita.

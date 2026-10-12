@@ -11,6 +11,7 @@ import { adminExperienceLabel, experiencesInBase, itemsInBase, parseAdminBaseFil
 import { listAdminBases, listAdminExperiences, listAdminReservations, listAdminSessions } from "@/lib/admin/data";
 import type { AdminReservationFilters } from "@/lib/admin/types";
 import { PAYMENT_STATUSES, type PaymentStatus } from "@/lib/admin/types";
+import { isStandbyAdminEnabled } from "@/lib/admin/standby";
 import { RESERVATION_STATUSES, type ReservationStatus } from "@/lib/reservations/types";
 import { formatSessionDateShort } from "@/lib/sessions/date-time";
 
@@ -65,7 +66,7 @@ export default async function AdminReservationsPage({ searchParams }: { searchPa
             <label><span className={labelClass}>Base</span><select name="base" defaultValue={filters.base} className={inputClass}><option value="">Todas as bases</option>{bases.map((base) => <option key={base.slug} value={base.slug}>{base.name}{base.status === "COMING_SOON" ? " (em breve)" : ""}</option>)}</select></label>
             <label><span className={labelClass}>Data</span><input type="date" name="date" defaultValue={filters.date} className={inputClass} /></label>
             <label><span className={labelClass}>Experiência</span><select name="experienceId" defaultValue={filters.experienceId} className={inputClass}><option value="">Todas</option>{baseExperiences.map((item) => <option key={item.id} value={item.id}>{adminExperienceLabel(item)}</option>)}</select></label>
-            <label><span className={labelClass}>Status</span><select name="status" defaultValue={filters.status} className={inputClass}><option value="">Todos</option><option value="PRE_RESERVED">Pré-reserva</option><option value="CONFIRMED">Confirmada</option><option value="EXPIRED">Expirada</option><option value="CANCELLED">Cancelada</option></select></label>
+            <label><span className={labelClass}>Status</span><select name="status" defaultValue={filters.status} className={inputClass}><option value="">Todos</option><option value="PRE_RESERVED">Pré-reserva</option><option value="CONFIRMED">Confirmada</option><option value="EXPIRED">Expirada</option><option value="CANCELLED">Cancelada</option><option value="AWAITING_RESCHEDULE">Aguardando reagendamento</option></select></label>
             <label><span className={labelClass}>Pagamento</span><select name="paymentStatus" defaultValue={filters.paymentStatus} className={inputClass}><option value="">Todos</option><option value="PENDING">Pendente</option><option value="PAID">Pago</option><option value="PAID_AFTER_EXPIRATION">Pago após expirar</option><option value="NOT_PAID">Não pago</option></select></label>
             <label><span className={labelClass}>Sessão</span><select name="sessionId" defaultValue={filters.sessionId} className={inputClass}><option value="">Todas</option>{sessions.map((item) => <option key={item.id} value={item.id}>{item.experienceTitle} · {formatSessionDateShort(item.startsAt)}</option>)}</select></label>
             <label><span className={labelClass}>Busca</span><input name="query" defaultValue={filters.query} className={inputClass} placeholder="Nome ou código" /></label>
@@ -75,7 +76,7 @@ export default async function AdminReservationsPage({ searchParams }: { searchPa
           </div>
           <div className="mt-5 flex flex-wrap justify-end gap-3">{hasFilters ? <Link href="/admin/reservas" className={buttonVariants({ variant: "ghost", size: "sm" })}><X className="size-4" /> Limpar</Link> : null}<button type="submit" className={buttonVariants({ size: "sm" })}><Search className="size-4" /> Aplicar filtros</button></div>
         </form>
-        <div className="mt-6"><p className="mb-4 text-sm text-ink/50">{reservations.length} {reservations.length === 1 ? "reserva encontrada" : "reservas encontradas"}</p><ReservationsList reservations={reservations} hasFilters={hasFilters} /></div>
+        <div className="mt-6"><p className="mb-4 text-sm text-ink/50">{reservations.length} {reservations.length === 1 ? "reserva encontrada" : "reservas encontradas"}</p><ReservationsList reservations={reservations} hasFilters={hasFilters} standbyEnabled={isStandbyAdminEnabled()} /></div>
       </div>
     );
   } catch {

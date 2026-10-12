@@ -15,8 +15,10 @@ const MIGRATIONS = new URL("../../supabase/migrations/", import.meta.url);
  */
 export async function fullDatabase(options: { until?: string } = {}) {
   const db = new PGlite({ extensions: { pgcrypto } });
+  // Como no Supabase, a service role ignora RLS: é o que deixa o servidor ler
+  // reservation_standby, que tem RLS ligada e nenhuma policy.
   await db.exec(`
-    create role anon; create role authenticated; create role service_role;
+    create role anon; create role authenticated; create role service_role bypassrls;
     create schema auth; create table auth.users (id uuid primary key, email text);
     create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
     create schema extensions; create extension pgcrypto with schema extensions;

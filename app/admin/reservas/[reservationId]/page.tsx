@@ -10,6 +10,8 @@ import { getAdminReservation, listAdminExperiences, listAdminReservationSessionC
 import { lookupCheckin } from "@/lib/checkin/data";
 import { PRESENCE_LABELS, presenceState } from "@/lib/checkin/token";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency, formatMaskedCpf } from "@/lib/admin/format";
+import { isStandbyAdminEnabled, standbyActorLabel, standbyEventLabel, standbyResolutionLabel } from "@/lib/admin/standby";
+import { getStandbyHistory } from "@/lib/admin/standby-data";
 import { isUuid } from "@/lib/admin/validation";
 import { getSheetSyncState, isSheetSyncEnabled } from "@/lib/integrations/google-sheets/service";
 import { getConfirmationEmailState, isConfirmationEmailEnabled } from "@/lib/reservations/confirmation-email-service";
@@ -51,6 +53,16 @@ export default async function AdminReservationDetailPage({ params }: { params: P
   const baseName = (await listAdminExperiences(context.profile.userId).catch(() => []))
     .find((experience) => experience.id === reservation.experienceId)?.baseName ?? null;
 
+  // Stand-by: trilha interna de cada vez que a reserva saiu da turma. Com o
+  // painel desligado, ou sem a migration aplicada, a seção simplesmente não
+  // aparece e o detalhe continua igual.
+  const standbyEnabled = isStandbyAdminEnabled();
+  const standbyHistory = standbyEnabled
+    ? await getStandbyHistory(context.profile.userId, reservation.id).catch(() => null)
+    : null;
+  const openStandby = standbyHistory?.cycles.find((cycle) => cycle.open) ?? null;
+  const awaitingReschedule = reservation.status === "AWAITING_RESCHEDULE";
+
   const fields = [
     ["Nome", reservation.fullName],
     ["CPF", formatMaskedCpf(reservation.cpfLast4)],
@@ -59,7 +71,9 @@ export default async function AdminReservationDetailPage({ params }: { params: P
     ["Quantidade", String(reservation.quantity)],
     ["Valor unitário", formatCurrency(reservation.unitPriceCents)],
     ["Valor total", formatCurrency(reservation.totalCents)],
-    ["Sessão", `${reservation.experienceTitle} · ${formatSessionDateTime(reservation.startsAt)}`],
+    // Em Stand-by a reserva ainda aponta para a turma de onde saiu — e não
+    // ocupa mais vaga nela.
+    [awaitingReschedule ? "Turma anterior" : "Sessão", `${reservation.experienceTitle} · ${formatSessionDateTime(reservation.startsAt)}`],
     ...(baseName ? [["Base", baseName]] : []),
     ["Código da reserva", reservation.publicCode],
     ["Criada em", formatAdminDateTime(reservation.createdAt)],
@@ -154,6 +168,62 @@ export default async function AdminReservationDetailPage({ params }: { params: P
           </ul>
         </section>
       ) : null}
+      {standbyHistory && standbyHistory.cycles.length ? (
+        <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6">
+          <h2 className="text-sm font-semibold">Stand-by</h2>
+          <p className="mt-2 text-sm text-ink/50">Registro interno de cada vez que a reserva saiu da turma para aguardar reagendamento. O pagamento, o código e o QR Code são os mesmos em todo o percurso.</p>
+          <ul className="mt-5 space-y-4">
+            {standbyHistory.cycles.map((cycle) => (
+              <li key={cycle.standbyId} className="rounded-2xl border border-ink/10 bg-mist/40 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-ink">
+                    {cycle.originalExperienceTitle} · {formatSessionDateShort(cycle.originalStartsAt)} · {formatSessionTime(cycle.originalStartsAt)}
+                    {cycle.targetStartsAt && cycle.resolution !== "CANCELLED"
+                      ? ` → ${cycle.targetExperienceTitle} · ${formatSessionDateShort(cycle.targetStartsAt)} · ${formatSessionTime(cycle.targetStartsAt)}`
+                      : ""}
+                  </p>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-ink ring-1 ring-ink/10">{standbyResolutionLabel(cycle)}</span>
+                </div>
+                <p className="mt-1 text-xs text-ink/50">
+                  Entrou em {formatAdminDateTime(cycle.enteredAt)} · por {cycle.enteredByName || "administrador removido"} · {cycle.quantity} {cycle.quantity === 1 ? "participante" : "participantes"} · {formatCurrency(cycle.totalCents)} pagos
+                  {cycle.originalBaseName ? ` · ${cycle.originalBaseName}` : ""}
+                </p>
+                {cycle.reason ? <p className="mt-2 whitespace-pre-wrap text-sm text-ink/70"><span className="font-semibold text-ink">Motivo:</span> {cycle.reason}</p> : null}
+                {cycle.resolvedAt ? (
+                  <p className="mt-2 text-xs text-ink/50">
+                    {standbyResolutionLabel(cycle)} em {formatAdminDateTime(cycle.resolvedAt)}
+                    {cycle.resolution === "CANCELLED" ? "" : ` · ${standbyActorLabel({ actorName: cycle.resolvedByName, actorType: cycle.resolvedByType ?? "ADMIN", access: cycle.resolvedAccess })}`}
+                    {cycle.targetBaseName && cycle.resolution !== "CANCELLED" ? ` · ${cycle.targetBaseName}` : ""}
+                    {cycle.resolvedReason ? ` · ${cycle.resolvedReason}` : ""}
+                  </p>
+                ) : null}
+                {cycle.linkCreatedAt || cycle.linkRevokedAt ? (
+                  <p className="mt-2 text-xs text-ink/50">
+                    {cycle.hasActiveLink
+                      ? `Link individual ativo, gerado em ${formatAdminDateTime(cycle.linkCreatedAt)}${cycle.linkCreatedByName ? ` por ${cycle.linkCreatedByName}` : ""}.`
+                      : cycle.linkRevokedAt
+                        ? `Link individual revogado em ${formatAdminDateTime(cycle.linkRevokedAt)}.`
+                        : "O link individual deste Stand-by não vale mais."}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {standbyHistory.events.length ? (
+            <>
+              <h3 className="mt-6 text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">Auditoria</h3>
+              <ol className="mt-3 space-y-2">
+                {standbyHistory.events.map((event) => (
+                  <li key={event.id} className="flex flex-wrap gap-x-2 text-sm text-ink/70">
+                    <span className="font-semibold text-ink">{standbyEventLabel(event.action)}</span>
+                    <span className="text-ink/50">{formatAdminDateTime(event.at)} · {standbyActorLabel(event)}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          ) : null}
+        </section>
+      ) : null}
       {checkin ? (
         <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -169,7 +239,12 @@ export default async function AdminReservationDetailPage({ params }: { params: P
         </section>
       ) : null}
       <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Observações</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/60">{reservation.notes ?? "Nenhuma observação informada."}</p></section>
-      <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Ações</h2><p className="mt-2 text-sm text-ink/50">A mensagem é apenas preparada; revise antes do envio.</p><div className="mt-5"><ReservationActions reservationId={reservation.id} status={reservation.status} fullName={reservation.fullName} phone={reservation.phone} email={reservation.email} publicCode={reservation.publicCode} checkoutUrl={reservation.checkoutUrl} showMessageButton showSheetSync={sheetEnabled} showEmailResend={emailEnabled} showQrResend={emailEnabled} /></div></section>
+      <section className="mt-6 rounded-3xl border border-ink/10 bg-white p-6"><h2 className="text-sm font-semibold">Ações</h2><p className="mt-2 text-sm text-ink/50">A mensagem é apenas preparada; revise antes do envio.</p><div className="mt-5"><ReservationActions reservationId={reservation.id} status={reservation.status} fullName={reservation.fullName} phone={reservation.phone} email={reservation.email} publicCode={reservation.publicCode} checkoutUrl={reservation.checkoutUrl} showMessageButton showSheetSync={sheetEnabled} showEmailResend={emailEnabled} showQrResend={emailEnabled} standby={standbyEnabled ? {
+        entry: reservation.status === "CONFIRMED" && reservation.paymentStatus === "PAID"
+          ? { experienceTitle: reservation.experienceTitle, startsAt: reservation.startsAt, quantity: reservation.quantity, totalCents: reservation.totalCents, checkinBlocked: (checkin?.checkedInCount ?? 0) > 0 }
+          : undefined,
+        hasActiveLink: openStandby?.hasActiveLink ?? false,
+      } : undefined} /></div></section>
     </div>
   );
 }

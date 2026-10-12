@@ -341,7 +341,10 @@ test("funções: internas não são executáveis por ninguém; RPCs só pela ser
       assert.equal(await call(`has_function_privilege($1, $2::oid, 'EXECUTE')`, [role, fn.oid]), false, `${fn.proname} × ${role}`);
     }
     const serviceRole = await call(`has_function_privilege('service_role', $1::oid, 'EXECUTE')`, [fn.oid]);
-    assert.equal(serviceRole, SERVER_FUNCTIONS.includes(fn.proname), `${fn.proname} × service_role`);
+    // `202610140001` retira de propósito o privilégio do reagendamento sem
+    // régua de preço: o painel só alcança o que exige o mesmo valor.
+    const reachable = SERVER_FUNCTIONS.includes(fn.proname) && fn.proname !== "admin_reschedule_reservation_from_standby";
+    assert.equal(serviceRole, reachable, `${fn.proname} × service_role`);
   }
 
   // As funções substituídas continuam restritas.

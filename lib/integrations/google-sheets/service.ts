@@ -21,21 +21,29 @@ import {
   OPPORTUNISTIC_DRAIN_LIMIT,
   readGoogleSheetsConfig,
 } from "./config.ts";
-import { createSheetsClient, type SheetsClient } from "./client.ts";
+import { createSheetsClient } from "./client.ts";
 import { sanitizeErrorCode } from "./errors.ts";
-import { parseSnapshot } from "./mapping.ts";
+import { isFrozenSheetSession } from "./frozen-sessions.ts";
+import { parseSnapshot, type SyncSnapshot } from "./mapping.ts";
 import { logSheets } from "./observability.ts";
-import { syncSnapshot } from "./sync.ts";
+import { isStandbyOriginUpdateOnly, isStandbyTableMissing, parseStandbyOriginRows, standbyLookupNeed } from "./standby-guard.ts";
+import { syncSnapshot, type SheetsGateway, type SyncSkipReason } from "./sync.ts";
 
 export type SheetSyncEntity = "RESERVATION" | "SESSION";
 
-export type SheetSyncOperation = "CONFIRMED" | "CANCELLED" | "ADMIN" | "REBUILD" | "SESSION_CHANGED";
+export type SheetSyncOperation = "CONFIRMED" | "CANCELLED" | "ADMIN" | "REBUILD" | "SESSION_CHANGED" | "STANDBY";
 
-export type SheetSyncOutcome = "SYNCED" | "PENDING" | "DISABLED";
+/**
+ * `SKIPPED`: nada foi escrito e não há o que tentar de novo. `skipReason` diz
+ * se a sessão é histórica e está congelada, ou se era uma sincronização em modo
+ * "somente atualizar" de uma turma que não está na planilha.
+ */
+export type SheetSyncOutcome = "SYNCED" | "PENDING" | "DISABLED" | "SKIPPED";
 
 export type SheetSyncResult = {
   outcome: SheetSyncOutcome;
   errorCode?: string;
+  skipReason?: SyncSkipReason;
 };
 
 export type SheetSyncState = {
@@ -77,16 +85,51 @@ async function loadSnapshot(admin: SupabaseClient, entity: SheetSyncEntity, enti
 }
 
 /**
+ * Decide se esta sincronização só pode atualizar a planilha — ver
+ * `standby-guard.ts`. Consultado a cada execução, e não passado por quem chama,
+ * para valer também nos jobs pendentes retomados depois.
+ *
+ * A consulta só acontece quando o snapshot não basta para decidir
+ * (`standbyLookupNeed`): reserva cancelada e reconstrução de sessão. A
+ * sincronização de uma reserva confirmada — o caminho do pagamento — não lê
+ * `reservation_standby`.
+ *
+ * Quando a consulta é necessária e falha por um motivo que não seja "este banco
+ * não tem Stand-by", a sincronização é interrompida e o job fica pendente: sem
+ * saber se a turma é origem de um Stand-by, o seguro é não escrever agora.
+ */
+async function standbyUpdateOnly(admin: SupabaseClient, entity: SheetSyncEntity, entityId: string, snapshot: SyncSnapshot) {
+  const need = standbyLookupNeed(entity, entityId, snapshot.reservations);
+  if (need !== "LOOKUP") return need === "UPDATE_ONLY";
+
+  const sessionId = snapshot.session.id;
+  const result = await admin
+    .from("reservation_standby")
+    .select("reservation_id, resolved_at, resolution, resolved_session_id")
+    .eq("original_session_id", sessionId);
+  if (result.error) {
+    if (isStandbyTableMissing(result.error.code)) return false;
+    throw new Error("STANDBY_LOOKUP_UNAVAILABLE");
+  }
+  return isStandbyOriginUpdateOnly(entity, entityId, sessionId, parseStandbyOriginRows(result.data));
+}
+
+/**
  * Executa uma sincronização e fecha o job correspondente.
  *
  * Devolve true quando sincronizou. Nunca propaga exceção: o erro vira código
  * sanitizado no job e uma linha de log.
+ *
+ * É o ponto central: o envio imediato e a fila de pendentes passam os dois por
+ * aqui, e é aqui que ficam as duas proteções da planilha — sessão histórica
+ * congelada e modo "somente atualizar". Exportada para os testes exercitarem o
+ * serviço de verdade, com um banco e uma planilha de teste.
  */
-async function runJob(
+export async function runSheetSyncJob(
   admin: SupabaseClient,
-  client: SheetsClient,
+  client: SheetsGateway,
   job: { id: string | null; entityType: SheetSyncEntity; entityId: string; operation: string; attempt: number },
-): Promise<{ synced: boolean; errorCode?: string }> {
+): Promise<{ synced: boolean; skipped?: boolean; skipReason?: SyncSkipReason; errorCode?: string }> {
   const startedAt = Date.now();
 
   try {
@@ -107,12 +150,44 @@ async function runJob(
       return { synced: true };
     }
 
+    // Sessão histórica congelada: encerra antes de ler o Stand-by e antes de
+    // qualquer chamada ao Google. Vale para toda origem, porque todo job — o
+    // imediato e o retomado da fila — passa por esta função.
+    if (isFrozenSheetSession(snapshot.session.id)) {
+      if (job.id) await admin.rpc("complete_integration_sync_job", { p_job_id: job.id });
+      logSheets({
+        stage: "sync",
+        outcome: "skipped",
+        entityType: job.entityType,
+        entityId: job.entityId,
+        operation: job.operation,
+        errorCode: "SESSION_FROZEN",
+      });
+      return { synced: true, skipped: true, skipReason: "SESSION_FROZEN" };
+    }
+
+    const updateOnly = await standbyUpdateOnly(admin, job.entityType, job.entityId, snapshot);
     const report = await syncSnapshot(client, snapshot, {
       syncedAt: new Date().toISOString(),
       reconcileSession: job.entityType === "SESSION",
+      updateOnly,
     });
 
     if (job.id) await admin.rpc("complete_integration_sync_job", { p_job_id: job.id });
+
+    // Turma de origem de um Stand-by que não está na planilha: nada foi escrito
+    // e o job é encerrado — repetir não mudaria a decisão.
+    if (report.skipped) {
+      logSheets({
+        stage: "sync",
+        outcome: "skipped",
+        entityType: job.entityType,
+        entityId: job.entityId,
+        operation: job.operation,
+        errorCode: report.skipReason ?? "SESSION_NOT_IN_SHEET",
+      });
+      return { synced: true, skipped: true, skipReason: report.skipReason ?? "SESSION_NOT_IN_SHEET" };
+    }
     logSheets({
       stage: "sync",
       outcome: "synced",
@@ -156,7 +231,7 @@ async function runJob(
  * confirmado limpa a fila que o pagamento anterior deixou para trás. O limite
  * baixo mantém o webhook rápido.
  */
-async function drainPendingJobs(admin: SupabaseClient, client: SheetsClient, limit: number) {
+export async function drainPendingSheetJobs(admin: SupabaseClient, client: SheetsGateway, limit: number) {
   const claim = await admin.rpc("claim_integration_sync_jobs", {
     p_integration: GOOGLE_SHEETS_INTEGRATION,
     p_limit: limit,
@@ -168,7 +243,7 @@ async function drainPendingJobs(admin: SupabaseClient, client: SheetsClient, lim
   let synced = 0;
   for (const job of jobs) {
     const entityType: SheetSyncEntity = job.entity_type === "SESSION" ? "SESSION" : "RESERVATION";
-    const result = await runJob(admin, client, {
+    const result = await runSheetSyncJob(admin, client, {
       id: job.id,
       entityType,
       entityId: job.entity_id,
@@ -217,7 +292,7 @@ export async function syncSheetEntity(
 
   try {
     const client = createSheetsClient(config);
-    const result = await runJob(admin, client, {
+    const result = await runSheetSyncJob(admin, client, {
       id: jobId,
       entityType: entity,
       entityId,
@@ -226,10 +301,11 @@ export async function syncSheetEntity(
     });
 
     if (!result.synced) return { outcome: "PENDING", errorCode: result.errorCode };
+    if (result.skipped) return { outcome: "SKIPPED", skipReason: result.skipReason };
 
     // Só drena quando a própria sincronização deu certo: se o Google está fora,
     // insistir em mais três jobs só atrasaria a resposta.
-    await drainPendingJobs(admin, client, OPPORTUNISTIC_DRAIN_LIMIT).catch(() => 0);
+    await drainPendingSheetJobs(admin, client, OPPORTUNISTIC_DRAIN_LIMIT).catch(() => 0);
     return { outcome: "SYNCED" };
   } catch (error) {
     // Rede de segurança final. Nada aqui pode escapar para quem confirmou o
