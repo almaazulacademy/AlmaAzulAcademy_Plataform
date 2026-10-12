@@ -6,8 +6,8 @@
  * snapshots, os jobs e as autorizações de Stand-by são os do banco; só o Google
  * e o Supabase hospedado são dublês. Nenhum teste fala com a rede.
  *
- * Os `session_id` congelados vêm do registro do código, não de valores inventados
- * aqui: cada teste percorre o que estiver em `FROZEN_SHEET_SESSION_IDS`.
+ * As 14 sessões históricas estão escritas abaixo, por extenso, e são comparadas
+ * com o registro do código: mudar a lista exige mudar este arquivo junto.
  */
 
 import assert from "node:assert/strict";
@@ -15,12 +15,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
-import {
-  FROZEN_SHEET_SESSION_IDS,
-  HISTORICAL_SESSION_PREFIXES,
-  isFrozenSheetSession,
-  pendingHistoricalPrefixes,
-} from "../lib/integrations/google-sheets/frozen-sessions.ts";
+import { FROZEN_SHEET_SESSION_IDS, isFrozenSheetSession } from "../lib/integrations/google-sheets/frozen-sessions.ts";
 import { parseSnapshot, reservationRow, sessionRow, spotRows, type SyncSnapshot } from "../lib/integrations/google-sheets/mapping.ts";
 import {
   ACTIVE_YES,
@@ -60,6 +55,36 @@ type Entity = "RESERVATION" | "SESSION";
 type AdminClient = Parameters<typeof runSheetSyncJob>[0];
 type Gateway = Parameters<typeof runSheetSyncJob>[1];
 
+/**
+ * Os 14 `session_id` devolvidos pelo Supabase de produção em 12/10/2026 para os
+ * 14 prefixos do documento do incidente. É a lista inteira, e é só esta.
+ */
+const HISTORICAL_SESSION_IDS = [
+  "49a818bf-297a-4361-8d41-02e0491006b3",
+  "4d77bf1d-fe49-4c7b-b582-29a95e3f8b7b",
+  "8796cfff-0172-400e-b271-94b6ee935657",
+  "9b40060d-8022-476e-aa68-c10e54e2f7a7",
+  "8d78dd76-739b-4821-870b-135be377aaaf",
+  "5589d4c6-df72-4f86-a6e8-42ac9aa38000",
+  "c3969f2c-c0fc-4342-936a-67c9e1e5043a",
+  "0a98cf4c-4d40-411d-987e-a383479fc2e1",
+  "87077465-49ee-4b94-b89d-aa56296aabd0",
+  "c42e5181-83d6-4323-854d-4acd11a2e204",
+  "6547901a-ebd6-4306-8f24-7b50355812dd",
+  "86480dee-c466-4779-be07-938f67349dde",
+  "d47907c1-9f09-49b1-bc11-45ec4b7eb359",
+  "0ca42ebe-3732-4fa4-bbcf-26af6c953835",
+] as const;
+
+/** As duas turmas de 15/08/2026 que já têm linhas na planilha, com parte das reservas. */
+const PARTIALLY_PRESENT_IDS = [
+  "0a98cf4c-4d40-411d-987e-a383479fc2e1",
+  "87077465-49ee-4b94-b89d-aa56296aabd0",
+] as const;
+
+/** As doze que não aparecem em nenhuma aba. */
+const ABSENT_IDS = HISTORICAL_SESSION_IDS.filter((id) => !(PARTIALLY_PRESENT_IDS as readonly string[]).includes(id));
+
 const FROZEN_IDS = [...FROZEN_SHEET_SESSION_IDS];
 const ADMIN = "c0000000-0000-4000-8000-000000000001";
 const AT = "2026-10-14T12:00:00.000Z";
@@ -93,6 +118,23 @@ function sessionIds(sheets: FakeSheets) {
 
 function reservationRows(sheets: FakeSheets, sessionId: string) {
   return sheets.dataRows(RESERVATIONS_TAB).filter((row) => row[RESERVATION_COLUMN.sessionId - 1] === sessionId);
+}
+
+/** Chaves das linhas que pertencem a uma sessão, por aba. */
+function historicalKeys(sheets: FakeSheets, sessionId: string): Record<string, string[]> {
+  return {
+    [SESSIONS_TAB]: sheets.dataRows(SESSIONS_TAB).filter((row) => row[0] === sessionId).map((row) => String(row[0])),
+    [RESERVATIONS_TAB]: reservationRows(sheets, sessionId).map((row) => String(row[0])),
+    [SPOTS_TAB]: spotRowsOf(sheets, sessionId).map((row) => String(row[0])),
+  };
+}
+
+/** Nenhuma sessão, reserva ou vaga aparece em duas linhas. */
+function assertNoDuplicates(sheets: FakeSheets) {
+  for (const tab of [SESSIONS_TAB, RESERVATIONS_TAB, SPOTS_TAB]) {
+    const keys = sheets.dataRows(tab).map((row) => String(row[0]));
+    assert.equal(new Set(keys).size, keys.length, `${tab}: chave duplicada`);
+  }
 }
 
 function spotRowsOf(sheets: FakeSheets, sessionId: string) {
@@ -293,44 +335,40 @@ for (const sessionId of FROZEN_IDS) absentSessions.set(sessionId, await absent.h
 
 const partial = await createWorld();
 const partialSessions = new Map<string, Historical>();
-for (const sessionId of FROZEN_IDS) partialSessions.set(sessionId, await partial.historicalSession(sessionId));
+for (const sessionId of PARTIALLY_PRESENT_IDS) partialSessions.set(sessionId, await partial.historicalSession(sessionId));
 
 // =============================================================================
 // 1. O registro
 // =============================================================================
 
-test("registro: os prefixos do código são exatamente os 14 do documento do incidente", () => {
+function documentedPrefixes() {
   const document = source("docs/incident-2026-10-google-sheets-grid-limit.md");
   const line = document.split("\n").find((entry) => entry.startsWith("Prefixos dos `session_id`"));
   assert.ok(line, "o documento do incidente lista os prefixos");
-  const documented = [...line.matchAll(/`([0-9a-f]{8})`/g)].map((match) => match[1]);
+  return [...line.matchAll(/`([0-9a-f]{8})`/g)].map((match) => match[1]);
+}
+
+test("registro: exatamente os 14 session_id completos — nem um a mais, nem um a menos", () => {
+  assert.equal(HISTORICAL_SESSION_IDS.length, 14);
+  assert.equal(FROZEN_SHEET_SESSION_IDS.size, 14);
+  assert.deepEqual([...FROZEN_IDS].sort(), [...HISTORICAL_SESSION_IDS].sort());
+  for (const id of FROZEN_IDS) assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, id);
+  // As duas parcialmente presentes fazem parte das 14; as outras doze completam.
+  for (const id of PARTIALLY_PRESENT_IDS) assert.ok(FROZEN_SHEET_SESSION_IDS.has(id));
+  assert.equal(ABSENT_IDS.length, 12);
+});
+
+test("registro: cada id é de um dos 14 prefixos do documento do incidente, um por prefixo, e o documento lista os ids inteiros", () => {
+  const documented = documentedPrefixes();
   assert.equal(documented.length, 14);
   assert.equal(new Set(documented).size, 14);
-  assert.deepEqual([...HISTORICAL_SESSION_PREFIXES].sort(), [...documented].sort());
-});
+  assert.deepEqual(FROZEN_IDS.map((id) => id.slice(0, 8)).sort(), [...documented].sort());
 
-test("registro: só session_id completo, cada um de um prefixo documentado, sem repetição", () => {
-  assert.ok(FROZEN_IDS.length >= 2);
-  for (const id of FROZEN_IDS) {
-    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, id);
-    assert.ok((HISTORICAL_SESSION_PREFIXES as readonly string[]).includes(id.slice(0, 8)), `${id} não é uma das 14 sessões documentadas`);
-  }
-  assert.equal(new Set(FROZEN_IDS.map((id) => id.slice(0, 8))).size, FROZEN_IDS.length, "um id por prefixo");
-  // As duas turmas de 15/08/2026 parcialmente presentes na planilha.
-  assert.ok(FROZEN_SHEET_SESSION_IDS.has("0a98cf4c-4d40-411d-987e-a383479fc2e1"));
-  assert.ok(FROZEN_SHEET_SESSION_IDS.has("87077465-49ee-4b94-b89d-aa56296aabd0"));
-});
-
-test("registro: PENDENTE — doze das 14 ainda sem o session_id completo", () => {
-  // O documento do incidente guarda só os oito primeiros caracteres, e as doze
-  // sessões abaixo não estão na planilha nem no repositório. Quando os ids
-  // completos vierem do Supabase e entrarem no registro, esta lista fica vazia —
-  // e este teste precisa ser atualizado junto, de propósito.
-  assert.deepEqual(pendingHistoricalPrefixes(), [
-    "0ca42ebe", "49a818bf", "4d77bf1d", "5589d4c6", "6547901a", "86480dee",
-    "8796cfff", "8d78dd76", "9b40060d", "c3969f2c", "c42e5181", "d47907c1",
-  ]);
-  assert.equal(FROZEN_IDS.length + pendingHistoricalPrefixes().length, 14);
+  const document = source("docs/incident-2026-10-google-sheets-grid-limit.md");
+  for (const id of HISTORICAL_SESSION_IDS) assert.ok(document.includes(`\`${id}\``), `o documento do incidente registra ${id}`);
+  // Nenhum outro UUID é apresentado no documento como sessão congelada.
+  const listed = [...document.matchAll(/`([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`/g)].map((match) => match[1]);
+  assert.deepEqual([...new Set(listed)].sort(), [...HISTORICAL_SESSION_IDS].sort());
 });
 
 test("registro: só o id inteiro congela — prefixo, id parecido e lixo não", () => {
@@ -343,12 +381,16 @@ test("registro: só o id inteiro congela — prefixo, id parecido e lixo não", 
     assert.equal(isFrozenSheetSession(`${id.slice(0, -1)}${id.endsWith("0") ? "1" : "0"}`), false, "um caractere de diferença");
     assert.equal(isFrozenSheetSession(`${id}0`), false);
   }
-  // Os prefixos ainda sem id completo não congelam nada: não há regra por prefixo.
-  for (const prefix of pendingHistoricalPrefixes()) {
-    assert.equal(isFrozenSheetSession(prefix), false);
-    assert.equal(isFrozenSheetSession(`${prefix}-0000-4000-8000-000000000000`), false);
-  }
   for (const value of ["", "5b1a0000-0000-4000-8000-00000000aaaa", null, undefined, 42, {}]) assert.equal(isFrozenSheetSession(value), false);
+});
+
+test("registro: sem regra por data, prefixo ou faixa — só comparação com a lista", () => {
+  const registry = source("lib/integrations/google-sheets/frozen-sessions.ts");
+  const code = registry.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assert.doesNotMatch(code, /startsWith\(|new Date\(|Date\.parse|Date\.now|starts_at|startsAt|slice\(|substring\(|RegExp\(/);
+  assert.match(code, /FROZEN_SHEET_SESSION_IDS\.has\(normalized\)/);
+  // E a regra não é configurável por ambiente: é código versionado.
+  assert.doesNotMatch(registry, /process\.env/);
 });
 
 test("a consulta que devolve os ids completos é somente leitura, sem dado pessoal e cobre os 14 prefixos", async () => {
@@ -356,11 +398,12 @@ test("a consulta que devolve os ids completos é somente leitura, sem dado pesso
   const code = sql.replace(/--.*$/gm, "");
   assert.ok(!/\b(insert|update|delete|alter|create|drop|grant|revoke|truncate)\b/i.test(code.replace(/'[^']*'/g, "''")), "somente leitura");
   assert.doesNotMatch(code, /full_name|cpf|phone|email|public_code/i, "sem dado pessoal");
-  assert.deepEqual([...code.matchAll(/'([0-9a-f]{8})'/g)].map((match) => match[1]).sort(), [...HISTORICAL_SESSION_PREFIXES].sort());
+  assert.deepEqual([...code.matchAll(/'([0-9a-f]{8})'/g)].map((match) => match[1]).sort(), FROZEN_IDS.map((id) => id.slice(0, 8)).sort());
 
-  // Roda de verdade e devolve o id inteiro das sessões que existem neste banco.
+  // Roda de verdade e devolve exatamente os 14 ids inteiros.
   const result = await absent.rows(sql);
-  assert.deepEqual(result.map((row) => row.session_id).sort(), [...FROZEN_IDS].sort());
+  assert.equal(result.length, 14);
+  assert.deepEqual(result.map((row) => row.session_id).sort(), [...HISTORICAL_SESSION_IDS].sort());
   for (const row of result) {
     assert.equal(row.prefixo, String(row.session_id).slice(0, 8));
     assert.equal(row.inicio, "15/08/2026 09:00");
@@ -372,8 +415,8 @@ test("a consulta que devolve os ids completos é somente leitura, sem dado pesso
 // 2. O motor
 // =============================================================================
 
-test("motor: sessão congelada não é lida nem escrita, em nenhum modo", async () => {
-  for (const sessionId of FROZEN_IDS) {
+test("motor: nenhuma das 14 é lida nem escrita, em nenhum modo", async () => {
+  for (const sessionId of HISTORICAL_SESSION_IDS) {
     const data = await absent.snapshot("SESSION", sessionId);
     assert.equal(data.session.id, sessionId);
     assert.equal(data.reservations.length, 6);
@@ -387,10 +430,10 @@ test("motor: sessão congelada não é lida nem escrita, em nenhum modo", async 
 });
 
 // =============================================================================
-// 3. Todas as origens, sessão ausente da planilha
+// 3. Todas as origens, as doze sessões ausentes da planilha
 // =============================================================================
 
-for (const sessionId of FROZEN_IDS) {
+for (const sessionId of ABSENT_IDS) {
   test(`sessão histórica ${sessionId.slice(0, 8)}, ausente da planilha: nenhuma origem cria, reconstrói ou acrescenta linha`, async () => {
     const session = absentSessions.get(sessionId)!;
     const target = countingSheets();
@@ -411,11 +454,12 @@ for (const sessionId of FROZEN_IDS) {
     assert.equal(reservationRows(target.sheets, destination)[0][0], session.d);
     assert.equal(reservationRows(target.sheets, otherDestination)[0][0], session.e);
     assert.equal(spotRowsOf(target.sheets, destination).filter((row) => row[SPOT_COLUMN.active - 1] === ACTIVE_YES).length, 1);
+    assertNoDuplicates(target.sheets);
   });
 }
 
 // =============================================================================
-// 4. Todas as origens, sessão parcialmente presente na planilha
+// 4. Todas as origens, as duas sessões parcialmente presentes na planilha
 // =============================================================================
 
 /** Grava na planilha, como a sincronização teria gravado em agosto, a sessão e duas das seis reservas. */
@@ -437,7 +481,7 @@ async function seedPartialSession(world: World, target: Target, session: Histori
   ]);
 }
 
-for (const sessionId of FROZEN_IDS) {
+for (const sessionId of PARTIALLY_PRESENT_IDS) {
   test(`sessão histórica ${sessionId.slice(0, 8)}, parcialmente presente: as linhas existentes não são reescritas e nenhuma é acrescentada`, async () => {
     const session = partialSessions.get(sessionId)!;
     const target = countingSheets();
@@ -449,6 +493,7 @@ for (const sessionId of FROZEN_IDS) {
     assert.equal(reservationRows(target.sheets, sessionId).length, 2, "duas das seis reservas estão na planilha");
     assert.equal(spotRowsOf(target.sheets, sessionId).length, 2);
     const reservationCountBefore = target.sheets.dataRows(RESERVATIONS_TAB).length;
+    const keysBefore = historicalKeys(target.sheets, sessionId);
 
     // Até a reserva `d` sair da sessão, a planilha não pode mudar em nada:
     // pagamento repetido, cancelamentos e Stand-by acontecem com ela congelada.
@@ -475,6 +520,12 @@ for (const sessionId of FROZEN_IDS) {
     }
     assert.deepEqual(reservationRows(target.sheets, sessionId).map((row) => row[0]), [session.a], "só a reserva que ficou");
     assert.equal(spotRowsOf(target.sheets, sessionId).length, 1);
+    // Em nenhuma das três abas a sessão histórica ganhou uma linha que não tinha.
+    const keysAfter = historicalKeys(target.sheets, sessionId);
+    for (const tab of [SESSIONS_TAB, RESERVATIONS_TAB, SPOTS_TAB]) {
+      for (const key of keysAfter[tab]) assert.ok(keysBefore[tab].includes(key), `${tab}: a linha ${key} não existia na sessão histórica`);
+      assert.ok(keysAfter[tab].length <= keysBefore[tab].length, `${tab}: a sessão histórica não cresceu`);
+    }
 
     // A única linha que mudou é a da reserva reagendada: ela deixou de pertencer
     // à sessão histórica, e a mesma linha — mesma chave — passou para a turma nova.
@@ -484,6 +535,12 @@ for (const sessionId of FROZEN_IDS) {
     assert.deepEqual(reservationRows(target.sheets, otherDestination).map((row) => row[0]), [session.e]);
     assert.equal(target.sheets.dataRows(RESERVATIONS_TAB).length, reservationCountBefore + 1, "uma única linha nova: a da reserva `e`, na turma nova");
     assert.deepEqual(sessionIds(target.sheets), [sessionId, destination, otherDestination].sort());
+    // A reserva transferida tem uma vaga só, ativa, e na turma nova — sem participante duplicado.
+    const movedSpots = target.sheets.dataRows(SPOTS_TAB).filter((row) => row[SPOT_COLUMN.reservationId - 1] === session.d);
+    assert.equal(movedSpots.length, 1);
+    assert.equal(movedSpots[0][SPOT_COLUMN.sessionId - 1], destination);
+    assert.equal(movedSpots[0][SPOT_COLUMN.active - 1], ACTIVE_YES);
+    assertNoDuplicates(target.sheets);
   });
 }
 
