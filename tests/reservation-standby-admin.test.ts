@@ -187,6 +187,11 @@ function checkin(reservationId: string, count: number | null) {
   return call(`public.admin_register_checkin($1::uuid, $2::uuid, $3, 'MANUAL', null::uuid, false)`, [ADMIN, reservationId, count]);
 }
 
+/** Id da autorização aberta da reserva. */
+async function setLookup(reservationId: string): Promise<string> {
+  return (await one(`select id from public.reservation_standby where reservation_id = $1::uuid and resolved_at is null`, [reservationId])).id;
+}
+
 async function functionHashes(database: typeof db) {
   const result = await database.query(
     `select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as fn, md5(p.prosrc) as hash
@@ -549,6 +554,108 @@ test("concorrência e capacidade: duas reservas em Stand-by disputam a última v
     [target],
   );
   assert.ok(confirmedInTarget.total <= 3);
+});
+
+test("a régua de preço não tem atalho: o reagendamento sem régua saiu do alcance da service role", async () => {
+  const signature = "public.admin_reschedule_reservation_from_standby(uuid,uuid,uuid,text)";
+  // A função foi preservada, com o mesmo corpo da etapa anterior…
+  const before = await fullDatabase({ until: STANDBY_MIGRATION });
+  const hash = (database: typeof db) => database.query(`select md5(prosrc) as hash from pg_proc where oid = '${signature}'::regprocedure`).then((result) => (result.rows[0] as Row).hash);
+  assert.equal(await hash(db), await hash(before));
+  // …mas nenhum papel da API a executa mais. Antes da migration, a service role executava.
+  const allowedBefore = (await before.query(`select has_function_privilege('service_role', '${signature}', 'EXECUTE') as allowed`)).rows[0] as Row;
+  assert.equal(allowedBefore.allowed, true);
+  for (const role of ["service_role", "authenticated", "anon"]) {
+    assert.equal(await call(`has_function_privilege($1, '${signature}', 'EXECUTE')`, [role]), false, role);
+  }
+  const acl = await one(`select proacl::text as acl from pg_proc where oid = '${signature}'::regprocedure`);
+  assert.ok(!/(^|[{,])=X/.test(acl.acl ?? ""), "sem execute para PUBLIC");
+
+  // O que o painel usa continua ao alcance — e só ele.
+  assert.equal(await call(`has_function_privilege('service_role', 'public.admin_reschedule_standby_same_price(uuid,uuid,uuid,text)', 'EXECUTE')`), true);
+  // O reagendamento tradicional não foi tocado.
+  assert.equal(await call(`has_function_privilege('service_role', 'public.admin_change_reservation_session(uuid,uuid,uuid,text)', 'EXECUTE')`), true);
+});
+
+test("como a service role, o servidor não consegue reagendar um Stand-by para turma de outro preço — por nenhuma função", async () => {
+  const price = uniquePrice();
+  const origin = await makeSession(IMERSAO.id, { price });
+  const dearer = await makeSession(IMERSAO.id, { price: price + 2500 });
+  const cheaper = await makeSession(IMERSAO.id, { price: price - 2500 });
+  const samePrice = await makeSession(SUNSET_CONCHA.id, { price });
+  const booking = await reserve(origin);
+  await setStandby(booking.id);
+  const standbyId = await setLookup(booking.id);
+
+  // As chamadas abaixo saem com o papel que a aplicação usa. As conferências do
+  // teste ficam fora: neste banco a service role não lê `reservations` direto.
+  const asServiceRole = async (run: () => Promise<void>) => {
+    await db.exec(`set role service_role`);
+    try {
+      await run();
+    } finally {
+      await db.exec(`reset role`);
+    }
+  };
+
+  await asServiceRole(async () => {
+    // 1. A função sem régua é recusada pelo Postgres antes de executar.
+    await rejects(
+      call(`public.admin_reschedule_reservation_from_standby($1::uuid, $2::uuid, $3::uuid, 'Tentativa')`, [ADMIN, booking.id, dearer]),
+      /permission denied for function admin_reschedule_reservation_from_standby/,
+    );
+    // 2. A função do painel recusa preço maior e preço menor.
+    await rejects(reschedule(booking.id, dearer), /PRICE_NOT_ELIGIBLE/);
+    await rejects(reschedule(booking.id, cheaper), /PRICE_NOT_ELIGIBLE/);
+    // 3. O núcleo não é chamável diretamente.
+    await rejects(
+      call(`public.reservation_standby_resolve($1::uuid, $2::uuid, 'ADMIN', $3::uuid, 'ADMIN', null)`, [standbyId, dearer, ADMIN]),
+      /permission denied for function reservation_standby_resolve/,
+    );
+    // 4. O reagendamento tradicional não alcança reserva em Stand-by.
+    await rejects(
+      call(`public.admin_change_reservation_session($1::uuid, $2::uuid, $3::uuid, 'Tentativa')`, [ADMIN, booking.id, dearer]),
+      /RESERVATION_NOT_CONFIRMED/,
+    );
+    // 5. Escrever direto na tabela também não: a service role só lê.
+    await rejects(db.query(`update public.reservation_standby set resolved_at = now() where reservation_id = $1::uuid`, [booking.id]), /permission denied/);
+    // …e lê de verdade, apesar da RLS — é disso que a proteção da planilha depende.
+    assert.equal((await rows(`select id from public.reservation_standby where reservation_id = $1::uuid`, [booking.id])).length, 1);
+  });
+
+  // Nada mudou depois de todas as tentativas.
+  const untouched = await reservation(booking.id);
+  assert.equal(untouched.status, "AWAITING_RESCHEDULE");
+  assert.equal(untouched.session_id, origin);
+  assert.equal((await one(`select resolved_at from public.reservation_standby where id = $1::uuid`, [standbyId])).resolved_at, null);
+
+  // 6. O caminho legítimo funciona com o mesmo papel: turma do mesmo valor.
+  await asServiceRole(async () => {
+    const result = await reschedule(booking.id, samePrice);
+    assert.equal(result.resolution, "RESCHEDULED");
+  });
+
+  const moved = await reservation(booking.id);
+  assert.equal(moved.session_id, samePrice);
+  assert.equal(moved.unit_price_cents, price);
+  const change = await one(`select previous_session_price_cents, target_session_price_cents from public.reservation_session_changes where reservation_id = $1::uuid`, [booking.id]);
+  assert.equal(change.previous_session_price_cents, change.target_session_price_cents, "o histórico registra o mesmo preço nas duas pontas");
+});
+
+test("a régua de preço é conferida com a sessão travada, na mesma transação que move a reserva", () => {
+  const sql = readFileSync(new URL(`../supabase/migrations/${PANEL_MIGRATION}`, import.meta.url), "utf8");
+  const body = sql.slice(sql.indexOf("create or replace function public.admin_reschedule_standby_same_price"));
+  const fn = body.slice(0, body.indexOf("$$;"));
+  const lockReservation = fn.indexOf("from public.reservations where id = p_reservation_id for update");
+  const lockSession = fn.indexOf("from public.sessions where id = p_target_session_id for update");
+  const rule = fn.indexOf("reservation_standby_target_rejection(target.id, p_target_session_id, 'CUSTOMER')");
+  const resolve = fn.indexOf("return public.reservation_standby_resolve(");
+  assert.ok(lockReservation > 0 && lockSession > lockReservation, "reserva antes da sessão: a ordem de locks do núcleo");
+  assert.ok(rule > lockSession, "a régua é lida com as duas linhas travadas");
+  assert.ok(resolve > rule, "só depois o núcleo move a reserva");
+  // Uma função plpgsql é uma transação só, e ela não abre nem fecha transação.
+  assert.doesNotMatch(fn, /\b(commit|rollback|begin\s*;)/i);
+  assert.match(fn, /raise exception '%', rejection/);
 });
 
 // =============================================================================
@@ -1096,52 +1203,173 @@ async function diagnostic(database: typeof db, path: string) {
   return (await database.query(sql)).rows as Array<{ check_name: string; result: string; status: string }>;
 }
 
-test("preflight do painel: aprovado antes da migration, reprovado depois e sem a etapa anterior", async () => {
+/** Recria a função com outro texto, preservando dono e privilégios. */
+async function redefine(database: typeof db, name: string, transform: (definition: string) => string) {
+  const result = await database.query(
+    `select pg_get_functiondef(p.oid) as definition from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = $1`,
+    [name],
+  );
+  await database.exec(transform((result.rows[0] as Row).definition as string));
+}
+
+/** Só formatação: CRLF, tabulação e recuo diferentes. Nenhuma palavra muda. */
+const reformat = (definition: string) => definition.replace(/\n/g, "\r\n\t   ");
+
+function failing(result: Array<{ check_name: string; status: string }>) {
+  return result.filter((row) => row.status !== "OK").map((row) => `${row.check_name}=${row.status}`);
+}
+
+function resultOf(result: Array<{ check_name: string; result: string }>, name: string) {
+  return result.find((row) => row.check_name === name)?.result ?? "";
+}
+
+const PREFLIGHT = "diagnostics/reservation_standby_admin_panel_preflight.sql";
+const POSTCHECK = "diagnostics/reservation_standby_admin_panel_postcheck.sql";
+
+test("preflight do painel: aprovado antes da migration e reprovado depois dela", async () => {
   const before = await fullDatabase({ until: STANDBY_MIGRATION });
-  const approved = await diagnostic(before, "diagnostics/reservation_standby_admin_panel_preflight.sql");
-  assert.deepEqual(approved.filter((row) => row.status !== "OK"), [], JSON.stringify(approved, null, 2));
+  const approved = await diagnostic(before, PREFLIGHT);
+  assert.deepEqual(failing(approved), [], JSON.stringify(approved, null, 2));
   assert.equal(approved.at(-1)?.check_name, "STANDBY_PAINEL_PREFLIGHT_OK");
+  assert.equal(approved.at(-1)?.result, "0 falha(s), 0 ponto(s) de atenção");
+  assert.match(resultOf(approved, "REAGENDAMENTO_SEM_REGUA_COM_A_ASSINATURA_ESPERADA"), /ainda executável pela service_role/);
+  for (const row of approved) assert.ok(["OK", "ATENCAO", "FALHOU"].includes(row.status), `${row.check_name}: ${row.status}`);
 
-  const after = (await diagnostic(db, "diagnostics/reservation_standby_admin_panel_preflight.sql")).filter((row) => row.status !== "OK").map((row) => row.check_name);
-  assert.deepEqual(after, ["FUNCOES_DO_PAINEL_AINDA_NAO_EXISTEM", "STANDBY_PAINEL_PREFLIGHT_OK"]);
-
-  // Função da etapa anterior alterada à mão: o preflight acusa.
-  await before.exec(`create or replace function public.reservation_latest_standby(p_reservation_id uuid) returns uuid language sql stable security definer set search_path = public as $$ select null::uuid $$;`);
-  const tampered = (await diagnostic(before, "diagnostics/reservation_standby_admin_panel_preflight.sql")).filter((row) => row.status !== "OK").map((row) => row.check_name);
-  assert.deepEqual(tampered, ["FUNCOES_DE_QUE_O_PAINEL_DEPENDE", "STANDBY_PAINEL_PREFLIGHT_OK"]);
+  assert.deepEqual(failing(await diagnostic(db, PREFLIGHT)), ["FUNCOES_DO_PAINEL_AINDA_NAO_EXISTEM=FALHOU", "STANDBY_PAINEL_PREFLIGHT_OK=FALHOU"]);
 });
 
-test("postcheck do painel: aprovado depois da migration, com Stand-by em uso, e sensível a definição alterada", async () => {
+test("preflight do painel: diferença só de formatação não bloqueia; diferença de conteúdo é identificada", async () => {
+  // 1. Só formatação — em função chamada pelo painel e em função não substituída.
+  const formatted = await fullDatabase({ until: STANDBY_MIGRATION });
+  await redefine(formatted, "reservation_standby_resolve", reformat);
+  await redefine(formatted, "admin_change_reservation_session", reformat);
+  const formatOnly = await diagnostic(formatted, PREFLIGHT);
+  assert.deepEqual(failing(formatOnly), [], "formatação diferente não reprova nem pede atenção");
+  assert.match(resultOf(formatOnly, "FUNCOES_QUE_O_PAINEL_CHAMA"), /reservation_standby_resolve=IDENTICA_SO_FORMATACAO/);
+  assert.match(resultOf(formatOnly, "FUNCOES_QUE_O_PAINEL_CHAMA"), /reservation_latest_standby=IDENTICA(,|$)/);
+  assert.match(resultOf(formatOnly, "FUNCOES_NAO_SUBSTITUIDAS"), /admin_change_reservation_session=IDENTICA_SO_FORMATACAO/);
+
+  // 2. Conteúdo diferente em função que o painel chama: bloqueia.
+  const dependency = await fullDatabase({ until: STANDBY_MIGRATION });
+  await redefine(dependency, "reservation_standby_target_rejection", (definition) => definition.replace("candidate.price_cents <> target.unit_price_cents", "candidate.price_cents > target.unit_price_cents"));
+  const blocked = await diagnostic(dependency, PREFLIGHT);
+  assert.deepEqual(failing(blocked), ["FUNCOES_QUE_O_PAINEL_CHAMA=FALHOU", "STANDBY_PAINEL_PREFLIGHT_OK=FALHOU"]);
+  assert.match(resultOf(blocked, "FUNCOES_QUE_O_PAINEL_CHAMA"), /reservation_standby_target_rejection=DIFERENTE/);
+
+  // 3. Conteúdo diferente em função que a migration não substitui: não bloqueia,
+  //    mas aparece — com nome, veredito e contagem na linha final.
+  const untouched = await fullDatabase({ until: STANDBY_MIGRATION });
+  await redefine(untouched, "admin_change_reservation_session", (definition) => definition.replace("'SESSION_MUST_BE_FUTURE'", "'SESSION_MUST_BE_FUTURE_X'"));
+  const attention = await diagnostic(untouched, PREFLIGHT);
+  assert.deepEqual(failing(attention), ["FUNCOES_NAO_SUBSTITUIDAS=ATENCAO"]);
+  assert.match(resultOf(attention, "FUNCOES_NAO_SUBSTITUIDAS"), /admin_change_reservation_session=DIFERENTE/);
+  assert.equal(attention.at(-1)?.status, "OK", "ATENCAO não reprova a linha final");
+  assert.equal(attention.at(-1)?.result, "0 falha(s), 1 ponto(s) de atenção");
+
+  // 4. A service role sem ignorar RLS leria a tabela vazia, em silêncio: bloqueia.
+  const blind = await fullDatabase({ until: STANDBY_MIGRATION });
+  await blind.exec(`alter role service_role nobypassrls;`);
+  const unreadable = await diagnostic(blind, PREFLIGHT);
+  assert.deepEqual(failing(unreadable), ["SERVICE_ROLE_LE_AS_AUTORIZACOES=FALHOU", "STANDBY_PAINEL_PREFLIGHT_OK=FALHOU"]);
+  assert.equal(resultOf(unreadable, "SERVICE_ROLE_LE_AS_AUTORIZACOES"), "select=true, ignora_rls=false");
+
+  // 5. Função ausente — a que a migration precisa encontrar para revogar: bloqueia.
+  const missing = await fullDatabase({ until: STANDBY_MIGRATION });
+  await missing.exec(`drop function public.admin_reschedule_reservation_from_standby(uuid, uuid, uuid, text);`);
+  assert.deepEqual(failing(await diagnostic(missing, PREFLIGHT)), [
+    "FUNCOES_NAO_SUBSTITUIDAS=FALHOU",
+    "REAGENDAMENTO_SEM_REGUA_COM_A_ASSINATURA_ESPERADA=FALHOU",
+    "STANDBY_PAINEL_PREFLIGHT_OK=FALHOU",
+  ]);
+});
+
+test("postcheck do painel: aprovado depois da migration, com Stand-by em uso", async () => {
   // `db` já tem centenas de reservas em Stand-by dos testes acima: o postcheck
   // do painel não depende de a tabela estar vazia.
-  const approved = await diagnostic(db, "diagnostics/reservation_standby_admin_panel_postcheck.sql");
-  assert.deepEqual(approved.filter((row) => row.status !== "OK"), [], JSON.stringify(approved, null, 2));
+  const approved = await diagnostic(db, POSTCHECK);
+  assert.deepEqual(failing(approved), [], JSON.stringify(approved, null, 2));
   assert.equal(approved.at(-1)?.check_name, "STANDBY_PAINEL_POSTCHECK_OK");
+  assert.equal(approved.at(-1)?.result, "0 falha(s), 0 ponto(s) de atenção");
+  assert.equal(resultOf(approved, "REAGENDAMENTO_SEM_REGUA_FORA_DO_ALCANCE"), "presente; executável por: nenhum papel da API");
 
-  const fresh = await fullDatabase();
-  await fresh.exec(`grant execute on function public.admin_standby_reschedule_options(uuid, uuid) to authenticated;`);
-  const exposed = (await diagnostic(fresh, "diagnostics/reservation_standby_admin_panel_postcheck.sql")).filter((row) => row.status !== "OK").map((row) => row.check_name);
-  assert.deepEqual(exposed, ["NENHUMA_FUNCAO_EXECUTAVEL_PELA_API_PUBLICA", "STANDBY_PAINEL_POSTCHECK_OK"]);
+  // Antes da migration, o postcheck não passa: nada do painel existe ainda.
+  const before = await fullDatabase({ until: STANDBY_MIGRATION });
+  const notApplied = failing(await diagnostic(before, POSTCHECK));
+  for (const expected of ["FUNCOES_DO_PAINEL_COM_A_DEFINICAO_DO_REPOSITORIO=FALHOU", "FUNCOES_EXECUTAVEIS_PELA_SERVICE_ROLE=FALHOU", "REAGENDAMENTO_SEM_REGUA_FORA_DO_ALCANCE=FALHOU", "STANDBY_PAINEL_POSTCHECK_OK=FALHOU"]) {
+    assert.ok(notApplied.includes(expected), `${expected} precisa acusar que a migration não foi aplicada`);
+  }
 
-  // O postcheck da etapa anterior continua aprovado depois desta migration.
-  const clean = await fullDatabase();
-  const previous = await diagnostic(clean, "diagnostics/reservation_standby_postcheck.sql");
-  assert.deepEqual(previous.filter((row) => row.status !== "OK"), [], JSON.stringify(previous, null, 2));
+  // O postcheck da etapa anterior vale nos dois estados: logo depois dela, com a
+  // função sem régua ainda executável, e depois desta, com o privilégio retirado.
+  assert.deepEqual(failing(await diagnostic(before, "diagnostics/reservation_standby_postcheck.sql")), []);
+  assert.deepEqual(failing(await diagnostic(await fullDatabase(), "diagnostics/reservation_standby_postcheck.sql")), []);
 });
 
-test("rollback do painel: remove só as quatro funções, não depende de Stand-by vazio e pode ser refeito", async () => {
+test("postcheck do painel: sensível a privilégio, a conteúdo alterado e a privilégio devolvido — e tolerante a formatação", async () => {
+  // Função do painel exposta à API pública.
+  const exposed = await fullDatabase();
+  await exposed.exec(`grant execute on function public.admin_standby_reschedule_options(uuid, uuid) to authenticated;`);
+  assert.deepEqual(failing(await diagnostic(exposed, POSTCHECK)), ["NENHUMA_FUNCAO_EXECUTAVEL_PELA_API_PUBLICA=FALHOU", "STANDBY_PAINEL_POSTCHECK_OK=FALHOU"]);
+
+  // O reagendamento sem régua voltou ao alcance da service role (por exemplo,
+  // reaplicando a migration da etapa anterior).
+  const regranted = await fullDatabase();
+  await applyMigration(regranted, STANDBY_MIGRATION);
+  const reopened = await diagnostic(regranted, POSTCHECK);
+  assert.deepEqual(failing(reopened), ["REAGENDAMENTO_SEM_REGUA_FORA_DO_ALCANCE=FALHOU", "STANDBY_PAINEL_POSTCHECK_OK=FALHOU"]);
+  assert.equal(resultOf(reopened, "REAGENDAMENTO_SEM_REGUA_FORA_DO_ALCANCE"), "presente; executável por: service_role");
+  // Reaplicar a migration do painel corrige.
+  await applyMigration(regranted, PANEL_MIGRATION);
+  assert.deepEqual(failing(await diagnostic(regranted, POSTCHECK)), []);
+
+  // Só formatação, em função criada e em função não substituída: continua OK.
+  const formatted = await fullDatabase();
+  await redefine(formatted, "admin_reschedule_standby_same_price", reformat);
+  await redefine(formatted, "admin_change_reservation_session", reformat);
+  const formatOnly = await diagnostic(formatted, POSTCHECK);
+  assert.deepEqual(failing(formatOnly), []);
+  assert.equal(resultOf(formatOnly, "FUNCOES_DO_PAINEL_COM_A_DEFINICAO_DO_REPOSITORIO"), "admin_reschedule_standby_same_price=IDENTICA_SO_FORMATACAO");
+
+  // Conteúdo alterado na função criada: a régua de preço foi removida à mão.
+  const weakened = await fullDatabase();
+  await redefine(weakened, "admin_reschedule_standby_same_price", (definition) => definition.replace("'CUSTOMER'", "'ADMIN'"));
+  const functional = await diagnostic(weakened, POSTCHECK);
+  assert.deepEqual(failing(functional), ["FUNCOES_DO_PAINEL_COM_A_DEFINICAO_DO_REPOSITORIO=FALHOU", "STANDBY_PAINEL_POSTCHECK_OK=FALHOU"]);
+  assert.match(resultOf(functional, "FUNCOES_DO_PAINEL_COM_A_DEFINICAO_DO_REPOSITORIO"), /admin_reschedule_standby_same_price=DIFERENTE/);
+
+  // Conteúdo alterado no reagendamento tradicional: atenção, sem reprovar.
+  const traditional = await fullDatabase();
+  await redefine(traditional, "admin_change_reservation_session", (definition) => definition.replace("'SESSION_MUST_BE_FUTURE'", "'SESSION_MUST_BE_FUTURE_X'"));
+  const attention = await diagnostic(traditional, POSTCHECK);
+  assert.deepEqual(failing(attention), ["FUNCOES_NAO_SUBSTITUIDAS=ATENCAO"]);
+  assert.equal(attention.at(-1)?.result, "0 falha(s), 1 ponto(s) de atenção");
+});
+
+test("rollback do painel: remove as quatro funções, devolve o privilégio e pode ser refeito", async () => {
   const database = await fullDatabase();
   const before = await functionHashes(database);
+  const canExecute = () => database.query(
+    `select has_function_privilege('service_role', 'public.admin_reschedule_reservation_from_standby(uuid,uuid,uuid,text)', 'EXECUTE') as allowed`,
+  ).then((result) => (result.rows[0] as Row).allowed as boolean);
+  assert.equal(await canExecute(), false);
+
   await database.exec(operationsFile("rollback/202610140001_reservation_standby_admin_panel.rollback.sql"));
   const after = await functionHashes(database);
 
   const removed = [...before.keys()].filter((fn) => !after.has(fn)).map((fn) => fn.slice(0, fn.indexOf("("))).sort();
   assert.deepEqual(removed, PANEL_FUNCTIONS);
   for (const [fn, hash] of after) assert.equal(before.get(fn), hash, `${fn} não pode mudar`);
+  assert.equal(await canExecute(), true, "o estado anterior à migration: a service role volta a executar");
 
   // A etapa anterior segue inteira, e a migration pode ser reaplicada.
-  const standby = await diagnostic(database, "diagnostics/reservation_standby_postcheck.sql");
-  assert.deepEqual(standby.filter((row) => row.status !== "OK"), []);
+  assert.deepEqual(failing(await diagnostic(database, "diagnostics/reservation_standby_postcheck.sql")), []);
   await applyMigration(database, PANEL_MIGRATION);
   assert.deepEqual([...(await functionHashes(database)).entries()], [...before.entries()]);
+  assert.equal(await canExecute(), false);
+  assert.deepEqual(failing(await diagnostic(database, POSTCHECK)), []);
+
+  // Refazer o rollback não quebra.
+  await database.exec(operationsFile("rollback/202610140001_reservation_standby_admin_panel.rollback.sql"));
+  await database.exec(operationsFile("rollback/202610140001_reservation_standby_admin_panel.rollback.sql"));
+  assert.equal(await canExecute(), true);
 });

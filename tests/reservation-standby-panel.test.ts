@@ -177,6 +177,24 @@ test("as rotas só chamam as operações de Stand-by — nenhuma escreve em tabe
   assert.doesNotMatch(data, /sendReservationConfirmationEmail|resend/i);
 });
 
+test("o painel não tem como contornar a régua de preço: a função sem régua não é citada em nenhum código da aplicação", () => {
+  const application = [...files("app"), ...files("lib"), ...files("components")].filter((path) => /\.tsx?$/.test(path));
+  assert.ok(application.length > 100);
+  for (const path of application) {
+    assert.doesNotMatch(source(path), /admin_reschedule_reservation_from_standby/, `${path} não pode chamar o reagendamento sem régua de preço`);
+  }
+  // Um único lugar reagenda um Stand-by, e é pela função do mesmo valor.
+  const callers = application.filter((path) => /\.rpc\("admin_reschedule_standby_same_price"/.test(source(path)));
+  assert.deepEqual(callers, ["lib/admin/standby-data.ts"]);
+  // A rota entrega só a turma e o motivo: preço, quantidade e valor não trafegam.
+  const route = source("app/api/admin/reservations/[reservationId]/standby/reschedule/route.ts");
+  assert.match(route, /rescheduleReservationFromStandby\(\s*authorization\.context\.profile\.userId,\s*reservationId,\s*validation\.data\.targetSessionId,\s*validation\.data\.reason,\s*\)/);
+  assert.doesNotMatch(route, /priceCents|unitPrice|totalCents|quantity/);
+  // E o reagendamento tradicional segue pela própria função, sem régua nova.
+  assert.match(source("lib/admin/data.ts"), /\.rpc\("admin_change_reservation_session", \{/);
+  assert.doesNotMatch(source("lib/admin/data.ts"), /same_price|standby/i);
+});
+
 // =============================================================================
 // 3. Token do link: aparece uma vez e não é registrado
 // =============================================================================
@@ -521,7 +539,7 @@ test("motor: em modo 'somente atualizar', turma ausente não gera nenhuma escrit
   const counting = { ...sheets, batchUpdate: async (updates: Parameters<typeof sheets.batchUpdate>[0]) => { writes += 1; return sheets.batchUpdate(updates); } };
 
   const report = await syncSnapshot(counting, { session: SHEET_SESSION, reservations: [sheetReservation()] }, { syncedAt: "2026-10-14T12:00:00.000Z", updateOnly: true });
-  assert.deepEqual(report, { sessionId: SESSION_A, reservations: 1, rowsUpdated: 0, rowsAppended: 0, spotsDeactivated: 0, skipped: true });
+  assert.deepEqual(report, { sessionId: SESSION_A, reservations: 1, rowsUpdated: 0, rowsAppended: 0, spotsDeactivated: 0, skipped: true, skipReason: "SESSION_NOT_IN_SHEET" });
   assert.equal(writes, 0);
   assert.equal(sheets.ensureRowsCalls(), 0);
   for (const tab of [SESSIONS_TAB, RESERVATIONS_TAB, SPOTS_TAB]) assert.equal(sheets.dataRows(tab).length, 0, tab);
@@ -561,27 +579,30 @@ test("motor: em modo 'somente atualizar', turma presente é atualizada normalmen
   assert.equal(JSON.stringify([SESSIONS_TAB, RESERVATIONS_TAB, SPOTS_TAB].map((tab) => sheets.grid(tab))), frozen);
 });
 
-test("serviço: o modo é decidido a cada execução, lendo o banco — vale para job pendente retomado", () => {
+test("serviço: o modo é decidido a cada execução — vale para job pendente retomado", () => {
   const service = source("lib/integrations/google-sheets/service.ts");
-  const runJob = service.slice(service.indexOf("async function runJob"), service.indexOf("async function drainPendingJobs"));
+  const runJob = service.slice(service.indexOf("export async function runSheetSyncJob"), service.indexOf("export async function drainPendingSheetJobs"));
 
-  // A decisão acontece dentro de `runJob`, que é o caminho comum do envio
-  // imediato e da fila — nenhum chamador a informa.
-  assert.match(runJob, /const updateOnly = await standbyUpdateOnly\(admin, job\.entityType, job\.entityId, snapshot\.session\.id\);/);
+  // A decisão acontece dentro do job, que é o caminho comum do envio imediato e
+  // da fila — nenhum chamador a informa.
+  assert.match(runJob, /const updateOnly = await standbyUpdateOnly\(admin, job\.entityType, job\.entityId, snapshot\);/);
   assert.match(runJob, /updateOnly,\s*\}\);/);
   assert.ok(runJob.indexOf("standbyUpdateOnly(") < runJob.indexOf("syncSnapshot("), "decide antes de escrever");
   assert.doesNotMatch(service, /export async function syncSheetEntity\([^)]*updateOnly/);
 
-  // A mesma consulta que o teste de banco reproduz.
-  assert.match(service, /\.from\("reservation_standby"\)\s*\.select\("reservation_id, resolved_at, resolution, resolved_session_id"\)\s*\.eq\("original_session_id", sessionId\)/);
+  // O banco só é consultado quando o snapshot não basta — e a consulta é a que o
+  // teste de banco reproduz.
+  const lookup = service.slice(service.indexOf("async function standbyUpdateOnly"), service.indexOf("export async function runSheetSyncJob"));
+  assert.ok(lookup.indexOf('if (need !== "LOOKUP") return need === "UPDATE_ONLY";') < lookup.indexOf('.from("reservation_standby")'), "o atalho vem antes da consulta");
+  assert.match(lookup, /\.from\("reservation_standby"\)\s*\.select\("reservation_id, resolved_at, resolution, resolved_session_id"\)\s*\.eq\("original_session_id", sessionId\)/);
 
-  // Falha na consulta interrompe: job pendente, nada escrito.
-  assert.match(service, /if \(isStandbyTableMissing\(result\.error\.code\)\) return false;\s*throw new Error\("STANDBY_LOOKUP_UNAVAILABLE"\);/);
+  // Falha na consulta necessária interrompe: job pendente, nada escrito.
+  assert.match(lookup, /if \(isStandbyTableMissing\(result\.error\.code\)\) return false;\s*throw new Error\("STANDBY_LOOKUP_UNAVAILABLE"\);/);
   assert.equal(sanitizeErrorCode(new Error("STANDBY_LOOKUP_UNAVAILABLE")), "STANDBY_LOOKUP_UNAVAILABLE");
 
   // Turma fora da planilha: job encerrado, resultado próprio, sem nova tentativa.
-  assert.match(runJob, /if \(report\.skipped\) \{[\s\S]*?errorCode: "SESSION_NOT_IN_SHEET"[\s\S]*?return \{ synced: true, skipped: true \};/);
-  assert.match(service, /if \(result\.skipped\) return \{ outcome: "SKIPPED" \};/);
+  assert.match(runJob, /if \(report\.skipped\) \{[\s\S]*?return \{ synced: true, skipped: true, skipReason: report\.skipReason \?\? "SESSION_NOT_IN_SHEET" \};/);
+  assert.match(service, /if \(result\.skipped\) return \{ outcome: "SKIPPED", skipReason: result\.skipReason \};/);
 });
 
 test("todos os caminhos que sincronizam a turma de origem passam pelo mesmo serviço", () => {
