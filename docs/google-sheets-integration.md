@@ -140,6 +140,27 @@ As duas convergem em qualquer ordem. Se um retry rodar a turma antiga primeiro, 
 
 E a regra de sempre continua valendo: uma falha do Google **não** desfaz a troca de turma. A reserva permanece na turma nova no Supabase, o pagamento permanece confirmado, e os dois jobs ficam pendentes para uma próxima tentativa.
 
+### Sessões históricas congeladas
+
+Catorze sessões anteriores a 19/08/2026 ficaram fora da sincronização por decisão administrativa ([incidente da grade cheia](incident-2026-10-google-sheets-grid-limit.md#as-14-sessões-históricas-fora-da-planilha)). Doze não aparecem em nenhuma aba; duas, de 15/08/2026, aparecem com parte das reservas.
+
+`lib/integrations/google-sheets/frozen-sessions.ts` registra o `session_id` completo dessas sessões. Para uma sessão registrada, **nenhuma sincronização lê ou escreve nada**: a linha da turma não é criada nem reescrita, a lista não é reconstruída, nenhuma reserva é acrescentada e as linhas que já existem ficam como estão — inclusive nas duas parcialmente presentes.
+
+A checagem fica em dois lugares, um dentro do outro:
+
+- **no serviço central**, `runSheetSyncJob`, logo depois de ler o snapshot: o job é encerrado antes da consulta ao Stand-by e antes de qualquer chamada ao Google. Todo job passa por ali — o enviado na hora e o retomado da fila;
+- **no motor**, `syncSnapshot`, antes da primeira leitura da planilha: vale para qualquer chamador, presente ou futuro.
+
+Por ser do serviço, e não das rotas, vale para toda origem: confirmação de pagamento (webhook, retorno e "Verificar pagamento"), reconciliação, confirmação manual, cancelamento, entrada em Stand-by, reagendamento a partir do Stand-by, reagendamento tradicional, os botões "Sincronizar planilha" e "Sincronizar lista da sessão", e a recuperação de jobs pendentes. Os botões respondem "sessão histórica mantida fora da sincronização".
+
+Três coisas que seguem disso:
+
+- **Só id inteiro.** Não há regra por prefixo nem por data: um id errado deixaria uma sessão sem proteção ou bloquearia uma turma normal. Um teste confere o registro contra os 14 prefixos do documento do incidente.
+- **A reserva que sai da sessão histórica.** Quando uma reserva é reagendada para outra turma — pelo Stand-by ou por "Alterar turma" —, ela deixa de pertencer à sessão histórica. A sincronização dela passa a ser a da turma nova: se a linha dela já existia na planilha, é essa mesma linha que passa a mostrar a turma nova. A linha da sessão histórica e as das outras reservas dela não mudam.
+- **O que fica parado.** Nas duas sessões parcialmente presentes, um cancelamento ou uma entrada em Stand-by feitos depois não aparecem na planilha: a linha continua como estava em agosto. É o efeito pedido — "histórico mantido como está".
+
+**Estado do registro:** as duas sessões de 15/08/2026 estão registradas. As outras doze dependem do id completo, que o documento do incidente não guarda — ver `supabase/diagnostics/google_sheets_historical_sessions.sql`.
+
 ### Stand-by: modo "somente atualizar"
 
 Uma reserva em Stand-by continua apontando para a turma original. Sincronizá-la do jeito normal escreveria a linha dessa turma em `Sessões` mesmo que ela nunca tenha estado na planilha — o caso das 14 sessões anteriores a 19/08/2026, mantidas fora de propósito ([incidente da grade cheia](incident-2026-10-google-sheets-grid-limit.md)).
@@ -149,20 +170,33 @@ Por isso, quando a turma do snapshot é **origem de um Stand-by**, a sincroniza�
 - a turma **já está** em `Sessões` → tudo é atualizado normalmente: a linha da reserva passa a "Aguardando reagendamento" (ou "Cancelada"), as vagas dela ficam inativas e os totais da turma são recalculados;
 - a turma **não está** em `Sessões` → nada é escrito, em nenhuma aba, e o job é encerrado. O painel informa "a turma não está na planilha operacional".
 
-A decisão não vem de quem chamou. Ela é tomada a cada execução, em `runJob`, lendo `reservation_standby` pela turma do snapshot (`lib/integrations/google-sheets/standby-guard.ts`):
+A decisão não vem de quem chamou. Ela é tomada a cada execução, em `runSheetSyncJob` (`lib/integrations/google-sheets/standby-guard.ts`):
 
 | Sincronização | "Somente atualizar" quando |
 | --- | --- |
 | Reserva | ela está em Stand-by, ou foi cancelada em Stand-by, com aquela turma como origem |
 | Sessão (reconstrução) | a turma foi origem de algum Stand-by que não terminou nela mesma |
 
+**Quando o banco é consultado.** Só quando o snapshot já lido não basta para decidir:
+
+| Sincronização | Decisão |
+| --- | --- |
+| Reserva confirmada, em pré-reserva ou expirada | normal, **sem consulta** — é o caminho da confirmação de pagamento |
+| Reserva em Stand-by | "somente atualizar", sem consulta: o banco só deixa esse status existir com a autorização aberta |
+| Reserva cancelada | consulta `reservation_standby`: foi cancelada em Stand-by? |
+| Reconstrução de sessão | consulta `reservation_standby`: a turma já foi origem de um Stand-by? |
+
+A confirmação de pagamento, portanto, não lê `reservation_standby` e não herda nenhuma falha dessa leitura.
+
 Como a regra é do serviço, ela vale para todos os caminhos: entrada em Stand-by, reagendamento (a reconstrução da turma antiga), cancelamento de reserva em Stand-by, os botões "Sincronizar planilha" e "Sincronizar lista da sessão", e um job pendente retomado horas depois.
 
 Depois de reagendada ou devolvida à turma, a reserva está confirmada em uma turma futura e a sincronização volta ao normal — a turma nova é criada na planilha se ainda não existir, exatamente como em uma confirmação de pagamento.
 
-Se a leitura de `reservation_standby` falhar, a sincronização é interrompida com `STANDBY_LOOKUP_UNAVAILABLE` e o job fica pendente: sem saber se a turma é origem de um Stand-by, nada é escrito. A exceção é o banco que não tem a tabela — sem ela não existe Stand-by, e a sincronização segue normal.
+Se a leitura de `reservation_standby` for necessária e falhar, a sincronização é interrompida com `STANDBY_LOOKUP_UNAVAILABLE` e o job fica pendente: sem saber se a turma é origem de um Stand-by, nada é escrito — nem a planilha é lida. A fila retoma na sincronização seguinte. A exceção é o banco que não tem a tabela — sem ela não existe Stand-by, e a sincronização segue normal.
 
-A estrutura das abas não mudou. O que este modo **não** cobre: a troca de turma tradicional e a reconstrução manual de uma sessão histórica que nunca teve Stand-by continuam se comportando como antes.
+A leitura é feita como service role, e a tabela tem RLS ligada sem nenhuma policy: funciona porque a service role do Supabase ignora RLS. O preflight e o postcheck do painel conferem isso (`SERVICE_ROLE_LE_AS_AUTORIZACOES`); sem essa condição a leitura voltaria vazia em silêncio.
+
+A estrutura das abas não mudou. Este modo protege turmas comuns que foram origem de um Stand-by; as sessões históricas têm proteção própria, mais forte, descrita acima.
 
 ## 3. Estrutura das abas
 

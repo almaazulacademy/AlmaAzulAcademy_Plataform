@@ -30,10 +30,10 @@ A reserva continua sendo a mesma — mesmo id, mesmo código, mesma quantidade, 
 5. **Dois acessos para o cliente:** CPF + código, ou link individual gerado pelo admin.
 6. **Desfazer** devolve a reserva à turma original se ela estiver aberta, no futuro e com vagas. Senão a operação é recusada e o Stand-by continua.
 7. **A turma original é um destino válido** para o cliente, nas mesmas condições das demais.
-8. **Planilha:** as 14 sessões históricas fora da planilha não são reinseridas. A sincronização que parte da turma de origem só atualiza o que já existe — ver [Planilha](#planilha).
+8. **Planilha:** as sessões históricas fora da planilha não são reinseridas, nem reescritas. Elas ficam congeladas por `session_id`, para toda sincronização; e a sincronização que parte da turma de origem de um Stand-by só atualiza o que já existe — ver [Planilha](#planilha).
 9. **Reagendamento pelo painel:** mesma régua do cliente — turma futura, aberta, publicada, com vagas e mesmo valor por participante, em qualquer base.
 
-`admin_reschedule_reservation_from_standby`, da etapa 2, não tem regra de preço e continua no banco, mas o painel não a chama: ele usa `admin_reschedule_standby_same_price`.
+`admin_reschedule_reservation_from_standby`, da etapa 2, não tem regra de preço. Ela continua no banco, com o mesmo corpo, mas a migration do painel retira da service role a permissão de executá-la: o servidor só alcança `admin_reschedule_standby_same_price`. O reagendamento tradicional (`admin_change_reservation_session`, só para reserva confirmada) continua sem regra de preço, por decisão de negócio.
 
 ## Modelo de dados
 
@@ -53,7 +53,7 @@ Todas `security definer`, com `search_path` fixo e executáveis apenas pela serv
 | --- | --- |
 | `admin_set_reservation_standby(actor, reserva, motivo)` | Coloca em Stand-by. Motivo obrigatório. |
 | `admin_undo_reservation_standby(actor, reserva, motivo)` | Desfaz: volta à turma original. |
-| `admin_reschedule_reservation_from_standby(actor, reserva, sessão, motivo)` | Reagenda pelo admin. |
+| `admin_reschedule_reservation_from_standby(actor, reserva, sessão, motivo)` | Reagenda pelo admin, sem regra de preço. Fora do alcance da service role desde `202610140001`; o painel usa `admin_reschedule_standby_same_price`. |
 | `admin_list_standby_reservations(actor)` | Lista "Aguardando reagendamento". |
 | `admin_generate_reservation_standby_link(actor, reserva)` | Gera (ou substitui) o link. Devolve o token uma única vez. |
 | `admin_revoke_reservation_standby_link(actor, reserva)` | Revoga o link. |
@@ -155,7 +155,11 @@ As rotas ficam em `/api/admin/reservations/[reservationId]/standby` (`GET` e `PO
 
 ## Planilha
 
-Uma reserva em Stand-by ainda aponta para a turma original. Para ela não recriar a turma na planilha, a sincronização que parte dessa turma roda em modo "somente atualizar": atualiza se a turma já estiver em `Sessões`, não escreve nada se não estiver. A regra é decidida a cada execução dentro do serviço, lendo `reservation_standby`, e por isso cobre a entrada em Stand-by, o reagendamento, o cancelamento de reserva em Stand-by, os dois botões manuais e jobs pendentes retomados depois. Detalhes e limites em [google-sheets-integration.md](google-sheets-integration.md#stand-by-modo-somente-atualizar).
+Duas proteções, as duas no serviço central de sincronização (`runSheetSyncJob`), por onde passa todo job — o enviado na hora e o retomado da fila.
+
+**Sessões históricas congeladas.** As sessões anteriores a 19/08/2026 mantidas fora da planilha são identificadas pelo `session_id` completo em `lib/integrations/google-sheets/frozen-sessions.ts`. Para elas nenhuma sincronização lê ou escreve nada, venha de onde vier: pagamento, reconciliação, cancelamento, Stand-by, reagendamento do Stand-by ou tradicional, botões manuais, jobs pendentes. Nas duas parcialmente presentes, as linhas existentes também não são reescritas. Estão registradas as duas sessões de 15/08/2026; as outras doze dependem do id completo — ver [Pendências](#pendências). Detalhes em [google-sheets-integration.md](google-sheets-integration.md#sessões-históricas-congeladas).
+
+**Modo "somente atualizar".** Uma reserva em Stand-by ainda aponta para a turma original. Para ela não criar a turma na planilha, a sincronização que parte dessa turma atualiza se a turma já estiver em `Sessões` e não escreve nada se não estiver. Vale para turmas comuns; cobre a entrada em Stand-by, o reagendamento, o cancelamento de reserva em Stand-by, os dois botões manuais e jobs pendentes. A confirmação de pagamento não consulta `reservation_standby`: o banco só é lido para reserva cancelada e para reconstrução de sessão. Detalhes em [google-sheets-integration.md](google-sheets-integration.md#stand-by-modo-somente-atualizar).
 
 ## Publicação
 
@@ -163,15 +167,25 @@ Uma reserva em Stand-by ainda aponta para a turma original. Para ela não recria
 
 Cada passo depende de autorização própria. Nenhum deles liga o painel sozinho, exceto o último.
 
-1. **Merge e deploy do código.** Sem a variável, o painel não existe; a única mudança ativa é o modo "somente atualizar" da planilha, que só age sobre turmas de origem de Stand-by — hoje, nenhuma.
+1. **Merge e deploy do código.** Sem a variável, o painel não existe. O que passa a valer na hora é a proteção da planilha: as sessões históricas registradas ficam congeladas para toda sincronização, e o modo "somente atualizar" age sobre turmas de origem de Stand-by — hoje, nenhuma.
 2. `supabase/diagnostics/reservation_standby_admin_panel_preflight.sql` → `STANDBY_PAINEL_PREFLIGHT_OK | OK`.
-3. Migration `202610140001_reservation_standby_admin_panel.sql`. Só cria quatro funções; não trava tabela nem toca linha.
+3. Migration `202610140001_reservation_standby_admin_panel.sql`. Cria quatro funções e retira da service role a execução de `admin_reschedule_reservation_from_standby`; não trava tabela nem toca linha.
 4. `supabase/diagnostics/reservation_standby_admin_panel_postcheck.sql` → `STANDBY_PAINEL_POSTCHECK_OK | OK`.
 5. **Ativação:** `STANDBY_ADMIN_ENABLED=true` na Vercel, só em Production, seguido de um novo deploy.
 
+**Como ler o preflight e o postcheck.** Cada linha vem `OK`, `ATENCAO` ou `FALHOU`. `FALHOU` interrompe. `ATENCAO` não bloqueia a migration, mas precisa ser lida antes de seguir: aparece quando uma função que a migration **não substitui** — o reagendamento tradicional, por exemplo — tem conteúdo diferente do repositório. A linha final fica `OK` sem nenhum `FALHOU` e diz quantos pontos de atenção existem.
+
+As funções são comparadas pelo texto exato e pelo texto com o espaço em branco normalizado. Diferença só de formatação — LF ou CRLF, espaços, recuo — vira `IDENTICA_SO_FORMATACAO` e continua `OK`; palavra, operador ou número diferente é `DIFERENTE`. `DIFERENTE` é `FALHOU` para as quatro funções criadas e para as três que elas chamam, e `ATENCAO` para as que a migration não substitui.
+
+`SERVICE_ROLE_LE_AS_AUTORIZACOES` confere que o servidor consegue ler `reservation_standby` (privilégio de leitura e RLS ignorada pela service role). Se falhar, a proteção da planilha leria a tabela vazia: não ativar.
+
 Não testar operações de escrita no Preview: ele usa o banco de produção.
 
-**Rollback da etapa 3.** Desligar a variável e publicar de novo já tira o painel do ar. Do banco: `supabase/rollback/202610140001_reservation_standby_admin_panel.rollback.sql` remove as quatro funções e nada mais; reservas em Stand-by não o impedem e não são afetadas. Para reverter também a `202610130002`, este rollback vem primeiro.
+**Rollback da etapa 3.** Desligar a variável e publicar de novo já tira o painel do ar. Do banco: `supabase/rollback/202610140001_reservation_standby_admin_panel.rollback.sql` remove as quatro funções e devolve à service role a execução de `admin_reschedule_reservation_from_standby` — ou seja, o reagendamento de Stand-by sem regra de preço volta a ser alcançável pelo servidor, como era na etapa 2. Reservas em Stand-by não impedem o rollback e não são afetadas. Para reverter também a `202610130002`, este rollback vem primeiro.
+
+Reaplicar `202610130002` depois de `202610140001` também devolve aquele privilégio (ela o concede); o postcheck do painel acusa em `REAGENDAMENTO_SEM_REGUA_FORA_DO_ALCANCE`, e reaplicar a `202610140001` corrige.
+
+A proteção das sessões históricas é código, não banco: sai com o deploy e volta com ele. Reverter o deploy para uma versão anterior a esta tira a proteção.
 
 ### Etapa 2 (fundação) — concluída
 
@@ -197,7 +211,7 @@ Limite conhecido: o banco de teste tem uma única conexão. A ordem de chegada d
 
 ## Pendências
 
-- **Fora do modo "somente atualizar":** a troca de turma tradicional a partir de uma sessão histórica, e a reconstrução manual de uma sessão histórica que nunca teve Stand-by, continuam criando a turma na planilha, como antes desta etapa.
+- **Doze `session_id` completos.** O documento do incidente registra as 14 sessões históricas só pelo prefixo. As duas presentes na planilha estão congeladas; as outras doze precisam do id completo, que vem do Supabase com `supabase/diagnostics/google_sheets_historical_sessions.sql`. Até lá, essas doze estão protegidas apenas nas sincronizações de Stand-by — e não em pagamento repetido, cancelamento comum, "Alterar turma" ou botão manual. **Completar antes de ativar o painel.**
 - **Teste de concorrência com duas conexões** antes de ativar: o banco de teste tem uma só.
 - **Etapa 4 — e-mail** de reagendamento confirmado.
 - **Etapa 5 — autoatendimento**, com limite de tentativas e checagem de origem. É quando a página pública passa a ler o link individual.

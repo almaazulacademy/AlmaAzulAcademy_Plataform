@@ -87,6 +87,20 @@ Catorze sessões têm, juntas, 97 reservas confirmadas (200 vagas) no Supabase q
 
 Prefixos dos `session_id`: `0a98cf4c`, `0ca42ebe`, `49a818bf`, `4d77bf1d`, `5589d4c6`, `6547901a`, `86480dee`, `87077465`, `8796cfff`, `8d78dd76`, `9b40060d`, `c3969f2c`, `c42e5181`, `d47907c1`.
 
+#### Proteção no código (desde 12/10/2026)
+
+A decisão passou a ser garantida pelo serviço de sincronização, não só pelo cuidado de quem opera. `lib/integrations/google-sheets/frozen-sessions.ts` guarda o `session_id` **completo** de cada sessão congelada, e uma sessão registrada ali não é lida nem escrita por nenhuma sincronização — confirmação de pagamento, reconciliação, cancelamento, Stand-by, reagendamento, botões manuais ou job pendente retomado. Detalhes em [google-sheets-integration.md](google-sheets-integration.md#sessões-históricas-congeladas).
+
+A comparação é pelo id inteiro. Este documento só registrava os oito primeiros caracteres, então a lista no código está sendo completada em duas partes:
+
+| Sessão | `session_id` completo | Situação na planilha | No código |
+| --- | --- | --- | --- |
+| Remada do Nascer do Sol · 15/08/2026 06:00 | `0a98cf4c-4d40-411d-987e-a383479fc2e1` | presente, com parte das reservas | congelada |
+| Imersão Paranoá · 15/08/2026 12:00 | `87077465-49ee-4b94-b89d-aa56296aabd0` | presente, com parte das reservas | congelada |
+| As outras doze | só o prefixo, acima | ausentes de todas as abas | **pendente** |
+
+Os dois ids completos foram lidos da própria aba `Sessões` em 12/10/2026. Os outros doze não estão na planilha nem no repositório: a consulta somente leitura `supabase/diagnostics/google_sheets_historical_sessions.sql` os devolve a partir dos prefixos. Até entrarem no registro, essas doze continuam protegidas só nas sincronizações de Stand-by (modo "somente atualizar"), e não nas demais.
+
 ## Se acontecer algo parecido
 
 1. Abrir o detalhe da falha: o aviso do painel mostra o código. `HTTP_400` em sincronizações que criam linha nova aponta para a estrutura da planilha (grade, aba renomeada, intervalo).
