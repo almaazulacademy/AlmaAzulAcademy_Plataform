@@ -1,0 +1,17 @@
+-- Novo status de reserva: AWAITING_RESCHEDULE ("Aguardando reagendamento").
+--
+-- Reserva que já foi confirmada e paga, saiu da turma original por decisão
+-- administrativa e ainda não tem nova turma. Não é cancelamento, expiração,
+-- estorno nem pagamento pendente.
+--
+-- Esta migration contém somente o `ADD VALUE`, pelo mesmo motivo de
+-- `202608040001_session_archived_status.sql`: o Postgres não permite usar um
+-- valor novo de enum na mesma transação em que ele foi criado. Tudo que usa o
+-- status — tabela, travas financeiras e RPCs — está em
+-- `202610130002_reservation_standby.sql`, que deve ser aplicada depois, em
+-- outra execução.
+--
+-- Aditiva e idempotente. Não altera nenhuma reserva: nenhuma linha recebe este
+-- status até a operação de Stand-by existir e ser usada. O valor não pode ser
+-- removido de um enum; se a funcionalidade for abandonada, ele fica inerte.
+alter type public.reservation_status add value if not exists 'AWAITING_RESCHEDULE';
