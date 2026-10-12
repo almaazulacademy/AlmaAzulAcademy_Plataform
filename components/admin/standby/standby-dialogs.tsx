@@ -142,7 +142,7 @@ export function SetStandbyDialog({ open, reservationId, fullName, publicCode, su
       if (!response.ok) throw new Error(payload.message ?? "Não foi possível colocar a reserva em Stand-by.");
       notify({
         title: "Reserva em Stand-by",
-        description: `${participantsLabel(summary.quantity)} saíram da turma de ${turmaLabel(summary.startsAt)}. O pagamento não foi alterado.`,
+        description: `A reserva saiu da turma de ${turmaLabel(summary.startsAt)} e ${summary.quantity === 1 ? "1 vaga foi liberada" : `${summary.quantity} vagas foram liberadas`}. O pagamento não foi alterado.`,
       });
       onClose();
       router.refresh();
@@ -175,8 +175,10 @@ export function SetStandbyDialog({ open, reservationId, fullName, publicCode, su
       ) : (
         <>
           <p className="mt-5 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-            <strong className="font-semibold">As {participantsLabel(summary.quantity)} deixam de ocupar vaga na turma original.</strong>{" "}
-            As vagas voltam a ficar disponíveis para venda. Para devolver a reserva a esta turma depois, ela precisará estar aberta, no futuro e com vagas.
+            <strong className="font-semibold">
+              {summary.quantity === 1 ? "A vaga desta reserva será liberada" : `As ${summary.quantity} vagas desta reserva serão liberadas`} na turma original.
+            </strong>{" "}
+            Elas voltam a ficar disponíveis para venda. Para devolver a reserva a esta turma depois, ela precisará estar aberta, no futuro e com vagas.
           </p>
 
           <label className="mt-5 block">
@@ -541,7 +543,7 @@ export function UndoStandbyDialog({ open, reservationId, onClose }: {
           {data.restore.allowed ? (
             <>
               <p className="text-sm leading-6 text-ink/60">
-                A reserva volta a ficar confirmada na turma original e as {participantsLabel(data.quantity)} voltam a ocupar vaga nela
+                A reserva volta a ficar confirmada na turma original e passa a ocupar {data.quantity === 1 ? "1 vaga" : `${data.quantity} vagas`} nela
                 ({data.restore.remainingSpots} {data.restore.remainingSpots === 1 ? "vaga disponível" : "vagas disponíveis"} agora). O pagamento, o código e o QR Code não mudam.
               </p>
               <label className="block">

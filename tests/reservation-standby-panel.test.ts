@@ -264,7 +264,8 @@ test("as telas pedem a confirmação que a rota exige", () => {
   assert.match(dialogs, /type="checkbox"/);
   assert.match(dialogs, /disabled=\{saving \|\| !confirmed\}/);
   assert.match(dialogs, /JSON\.stringify\(\{ reason: reason\.trim\(\), confirmed: true \}\)/);
-  assert.match(dialogs, /deixam de ocupar vaga na turma original/);
+  assert.match(dialogs, /vagas desta reserva serão liberadas/);
+  assert.match(dialogs, /na turma original/);
   for (const label of ["Cliente", "Código da reserva", "Experiência", "Turma original", "Participantes", "Valor pago", "Motivo do Stand-by"]) {
     assert.ok(dialogs.includes(label), `o modal mostra "${label}"`);
   }
