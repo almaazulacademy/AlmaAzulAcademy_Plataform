@@ -420,13 +420,18 @@ test("chave recusada duas vezes pelo provedor (409): é conflito — ninguém re
   assert.equal(provider.requests.length, 3);
   assert.equal((await email(emailId)).attempts, 3);
 
-  // Uma pessoa decide reenviar: chave nova, mensagem nova.
-  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "SENT" });
+  // Nem uma pessoa pedindo, sem aceitar o risco de duplicidade.
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "NEEDS_CONFIRMATION" });
+  assert.equal(provider.requests.length, 3);
+  assert.equal((await email(emailId)).attempts, 3);
+
+  // Com o aceite: chave nova, mensagem nova.
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id, { acceptUncertain: true }), { outcome: "SENT" });
   assert.equal(provider.requests[3].idempotencyKey, keyOf(emailId, 2));
   row = await email(emailId);
   assert.deepEqual([row.status, row.generation], ["SENT", 2]);
   const [audit] = await rows(`select metadata from public.admin_audit_log where action = 'RESERVATION_RESCHEDULE_EMAIL_RESEND' and entity_id = $1::uuid`, [booking.id]);
-  assert.deepEqual(audit.metadata, { emailId, attempt: 4, generation: 2, previousStatus: "UNCERTAIN" });
+  assert.deepEqual(audit.metadata, { emailId, attempt: 4, generation: 2, previousStatus: "UNCERTAIN", acceptedDuplicateRisk: true });
 });
 
 test("a segunda recusa só conta na mesma chave: em gerações diferentes, cada uma começa do zero", async () => {
@@ -511,13 +516,93 @@ test("janela vencida com resultado desconhecido: a fila para em vez de reenviar 
     description: UNCERTAIN_DELIVERY_NOTE,
   });
 
-  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "SENT" });
+  // Um clique sem o aceite não envia: o banco exige que a pessoa tenha visto o aviso.
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "NEEDS_CONFIRMATION" });
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id, { acceptUncertain: false }), { outcome: "NEEDS_CONFIRMATION" });
+  assert.equal(provider.requests.length, 1);
+  assert.equal((await rows(`select 1 from public.admin_audit_log where action = 'RESERVATION_RESCHEDULE_EMAIL_RESEND' and entity_id = $1::uuid`, [booking.id])).length, 0);
+
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id, { acceptUncertain: true }), { outcome: "SENT" });
   assert.equal(provider.requests[1].idempotencyKey, keyOf(emailId, 2), "chave nova: a anterior já não protege nada");
   row = await email(emailId);
   assert.deepEqual([row.status, row.generation, row.attempts], ["SENT", 2, 2]);
   const [audit] = await rows(`select actor_user_id, metadata from public.admin_audit_log where action = 'RESERVATION_RESCHEDULE_EMAIL_RESEND' and entity_id = $1::uuid`, [booking.id]);
   assert.equal(audit.actor_user_id, ADMIN);
-  assert.equal(audit.metadata.previousStatus, "UNCERTAIN");
+  assert.deepEqual([audit.metadata.previousStatus, audit.metadata.acceptedDuplicateRisk], ["UNCERTAIN", true]);
+});
+
+test("tentativas esgotadas com resultado desconhecido e janela vencida: o painel ainda dizia 'falhou' — e o reenvio não sai sem o aceite", async () => {
+  const { booking, emailId, changeId } = await rescheduled({ startsIn: "20 days" });
+  const { runtime, provider } = createRuntime();
+
+  // O provedor aceitou a primeira e nunca respondeu; as outras cinco deram 503.
+  provider.next("accepted-then-timeout", ...Array.from({ length: MAX_ATTEMPTS - 1 }, () => new EmailProviderError("HTTP_503", true, "UNKNOWN")));
+  await sendRescheduleEmailForChange(runtime, changeId);
+  for (let attempt = 2; attempt <= MAX_ATTEMPTS; attempt += 1) await routine(runtime);
+  assert.equal(provider.delivered.length, 1, "o cliente já recebeu — e ninguém sabe");
+  let row = await email(emailId);
+  assert.deepEqual([row.status, row.attempts, row.generation_uncertain], ["FAILED", MAX_ATTEMPTS, true]);
+
+  // Um dia depois. Nada automático toca num e-mail esgotado, então ele continua
+  // "falhou" — e é assim que o painel o mostra, com o botão de reenvio comum.
+  await ageGeneration(emailId, "25 hours");
+  provider.advance(25);
+  assert.deepEqual(await routine(runtime), { outcome: "PROCESSED", processed: 0, sent: 0 });
+  const [state] = parseRescheduleEmailStates(await call(`public.admin_reservation_reschedule_emails($1::uuid, $2::uuid)`, [ADMIN, booking.id]));
+  assert.equal(state.status, "FAILED");
+
+  // O clique nesse botão não manda aceite. O banco percebe que a entrega não foi
+  // confirmada e que o provedor já não deduplica: não envia, e passa a dizer isso.
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "NEEDS_CONFIRMATION" });
+  assert.equal(provider.requests.length, MAX_ATTEMPTS, "nenhum pedido novo ao provedor");
+  row = await email(emailId);
+  assert.deepEqual([row.status, row.last_error_code, row.attempts, row.frozen_message], ["UNCERTAIN", "IDEMPOTENCY_WINDOW_EXPIRED", MAX_ATTEMPTS, null]);
+  assert.equal((await rows(`select 1 from public.admin_audit_log where action = 'RESERVATION_RESCHEDULE_EMAIL_RESEND' and entity_id = $1::uuid`, [booking.id])).length, 0);
+  // Repetir o clique não muda nada.
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "NEEDS_CONFIRMATION" });
+  assert.equal(provider.requests.length, MAX_ATTEMPTS);
+
+  // Só com o aceite — que o painel só manda depois do aviso — o e-mail sai, com chave nova.
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id, { acceptUncertain: true }), { outcome: "SENT" });
+  assert.equal(provider.requests.at(-1)!.idempotencyKey, keyOf(emailId, 2));
+  assert.equal(provider.delivered.length, 2, "o risco aceito: o cliente recebeu de novo");
+  const [audit] = await rows(`select metadata from public.admin_audit_log where action = 'RESERVATION_RESCHEDULE_EMAIL_RESEND' and entity_id = $1::uuid`, [booking.id]);
+  assert.deepEqual([audit.metadata.previousStatus, audit.metadata.acceptedDuplicateRisk], ["UNCERTAIN", true]);
+});
+
+test("o aceite do risco não contorna nenhuma outra regra", async () => {
+  const { runtime, provider } = createRuntime();
+
+  // Dentro da janela, o aceite é irrelevante: a repetição reusa a chave e o provedor deduplica.
+  const inside = await rescheduled();
+  provider.next("accepted-then-timeout");
+  await sendRescheduleEmailForChange(runtime, inside.changeId);
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, inside.booking.id, { acceptUncertain: true }), { outcome: "SENT" });
+  assert.equal(provider.requests.at(-1)!.idempotencyKey, keyOf(inside.emailId, 1));
+  assert.equal(provider.deliveredTo(inside.booking.email).length, 1);
+
+  // Enviado continua enviado.
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, inside.booking.id, { acceptUncertain: true }), { outcome: "SKIPPED" });
+
+  // Reserva cancelada não recebe, com ou sem aceite.
+  const cancelled = await rescheduled();
+  provider.next("accepted-then-timeout");
+  await sendRescheduleEmailForChange(runtime, cancelled.changeId);
+  await ageGeneration(cancelled.emailId, "25 hours");
+  await call(`public.admin_cancel_reservation($1::uuid, $2::uuid, 'Cliente desistiu')`, [ADMIN, cancelled.booking.id]);
+  const before = provider.requests.length;
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, cancelled.booking.id, { acceptUncertain: true }), { outcome: "SKIPPED" });
+  assert.equal(provider.requests.length, before);
+  assert.equal((await email(cancelled.emailId)).status, "SKIPPED");
+
+  // Envio em curso não é atropelado, nem com aceite.
+  const flying = await rescheduled();
+  await claimFor(flying.changeId);
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, flying.booking.id, { acceptUncertain: true }), { outcome: "SKIPPED" });
+
+  // E só a equipe: o aceite não substitui a autorização.
+  const refused = await rescheduled();
+  await assert.rejects(call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, 2, 1380, true)`, [INSTRUCTOR, refused.booking.id]), /ADMIN_FORBIDDEN/);
 });
 
 test("janela vencida sem incerteza não bloqueia nada: só recusas comprovadas, ou fila nunca tentada", async () => {
@@ -848,8 +933,16 @@ test("o detalhe da reserva avisa com destaque enquanto o cliente não recebeu, e
   assert.match(page, /const latestRescheduleEmail = reservation\.status === "CONFIRMED" \? rescheduleEmails\[0\] \?\? null : null;/);
   assert.match(page, /latestRescheduleEmail\.status === "UNCERTAIN" \? "CONFIRM" : "DIRECT"/);
   const actions = source("components/admin/reservation-actions.tsx");
-  assert.match(actions, /standby\.rescheduleEmailResend === "CONFIRM" \? \(\) => setAction\("resendReschedule"\) : resendRescheduleEmail/);
+  assert.match(actions, /standby\.rescheduleEmailResend === "CONFIRM" \? \(\) => setAction\("resendReschedule"\) : \(\) => resendRescheduleEmail\(false\)/);
   assert.match(actions, /open=\{action === "resendReschedule"\}\s+title="Reenviar sem saber se o cliente já recebeu\?"/);
+  // O aceite só sai do diálogo de confirmação; e se o banco pedir confirmação no
+  // meio do caminho, o diálogo é aberto em vez de o envio acontecer.
+  assert.match(actions, /onConfirm=\{\(\) => resendRescheduleEmail\(true\)\}/);
+  assert.equal((actions.match(/resendRescheduleEmail\(true\)/g) ?? []).length, 1, "um único lugar manda o aceite");
+  assert.match(actions, /if \(payload\.outcome === "NEEDS_CONFIRMATION"\) \{\s+setAction\("resendReschedule"\);/);
+  const resendRoute = source("app/api/admin/reservations/[reservationId]/standby/reschedule-email/route.ts");
+  assert.match(resendRoute, /\.acceptUncertain === true;/, "só o valor exato true conta como aceite");
+  assert.match(resendRoute, /result\.outcome === "NEEDS_CONFIRMATION" \? 409/);
 
   // Na lista de Stand-by: o bloco de quem não recebeu, antes dos filtros.
   const list = source("app/admin/stand-by/page.tsx");

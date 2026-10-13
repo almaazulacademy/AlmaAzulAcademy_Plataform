@@ -235,9 +235,11 @@ Só começa geração nova, com chave nova, quando:
 - **a geração atual só teve recusas comprovadas** — nada pode ter saído com aquela chave. Uma recusa no meio não apaga a incerteza de uma tentativa anterior;
 - **o destinatário mudou** — é outra entrega, para outro endereço. O endereço novo recebe uma vez;
 - **os dados da turma mudaram** — experiência, data, horário, base, ponto de encontro, endereço ou link do mapa. A mensagem guardada informaria algo que já não vale; a nova é uma correção. É o único caso em que o cliente pode receber dois e-mails do mesmo reagendamento, e de propósito;
-- **uma pessoa pede o reenvio** de um e-mail `UNCERTAIN`.
+- **uma pessoa pede o reenvio** de uma entrega não confirmada, aceitando o risco de duplicidade.
 
 **A janela.** A fila considera a chave válida por 23 horas — uma a menos que o provedor. Passado isso com resultado ainda desconhecido, repetir a chave já não protege: o e-mail vai para `UNCERTAIN` e nada sai sozinho. O painel avisa "não sabemos se o cliente recebeu" e o reenvio pede confirmação, porque pode duplicar.
+
+**Quem garante o aviso é o banco, não a tela.** Reabrir uma entrega não confirmada exige um aceite explícito (`p_accept_uncertain`), que o painel só manda depois de a pessoa confirmar o diálogo. Sem ele, o banco não envia e responde "precisa de confirmação" — inclusive quando a tela ainda mostrava "falhou", como nas seis tentativas esgotadas com resultado desconhecido e a janela já vencida. O aceite fica na auditoria.
 
 **O 409.** Os dois motivos só se distinguem pelo corpo da resposta, que pode citar o destinatário. O cliente do Resend continua lendo **só o status**, como já fazia; quem decide é a fila, pelo histórico: uma recusa pode ser um pedido ainda em curso; duas, com a mesma chave, já não é.
 

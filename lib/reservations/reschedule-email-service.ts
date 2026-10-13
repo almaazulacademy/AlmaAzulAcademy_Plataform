@@ -99,12 +99,15 @@ export async function retryPendingRescheduleConfirmationEmails(): Promise<Resche
   }
 }
 
-/** Botão "Reenviar e-mail de reagendamento". Nunca lança. */
-export async function resendRescheduleConfirmationEmail(actorUserId: string, reservationId: string): Promise<RescheduleEmailResult> {
+/**
+ * Botão "Reenviar e-mail de reagendamento". Nunca lança. `acceptUncertain` só é
+ * true quando a pessoa confirmou, no painel, que aceita o risco de duplicidade.
+ */
+export async function resendRescheduleConfirmationEmail(actorUserId: string, reservationId: string, acceptUncertain: boolean): Promise<RescheduleEmailResult> {
   try {
     const active = runtime();
     if (!active) return DISABLED;
-    return await resendRescheduleEmail(active, actorUserId, reservationId);
+    return await resendRescheduleEmail(active, actorUserId, reservationId, { acceptUncertain });
   } catch (error) {
     const errorCode = sanitizeEmailErrorCode(error);
     logEmail({ stage: "reschedule_retry", outcome: "failed", reservationId, errorCode });

@@ -168,8 +168,9 @@ export async function rescheduleFixtures(query: Query) {
     return call(`public.claim_pending_reservation_reschedule_emails($1, $2, $3, $4)`, [limit, maxAttempts, LEASE_MINUTES, WINDOW_MINUTES]);
   }
 
-  function adminClaim(reservationId: string, actor = ADMIN) {
-    return call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, $3, $4)`, [actor, reservationId, LEASE_MINUTES, WINDOW_MINUTES]);
+  /** `acceptUncertain`: a pessoa aceitou o risco de duplicidade de uma entrega não confirmada. */
+  function adminClaim(reservationId: string, actor = ADMIN, acceptUncertain = false) {
+    return call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, $3, $4, $5)`, [actor, reservationId, LEASE_MINUTES, WINDOW_MINUTES, acceptUncertain]);
   }
 
   function freeze(emailId: string, token: string, message: { to: string; subject: string; html: string; text: string } | Row | null) {

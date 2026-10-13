@@ -18,11 +18,11 @@
 -- FALHOU. Para as três de apoio, é ATENCAO.
 
 with expected(fn, kind, exact, norm) as (values
-    ('admin_claim_reservation_reschedule_email', 'OPERACAO', 'd48ef8b29ee9d0d94541f1e7388c96ed', '1dd9fb0a7a7aacfdf19a216b1c2a7b2c'),
+    ('admin_claim_reservation_reschedule_email', 'OPERACAO', 'fae5cbb991f2fd50b763179a3a609d75', '2348d83ef7b4d8ecb098644cd212ba19'),
     ('admin_list_undelivered_reschedule_emails', 'OPERACAO', '0cc7dd18a8bcaaeea7881e0c7f6df3f2', 'a5afe16db6c262d782a69da920a78089'),
     ('admin_reservation_reschedule_emails', 'OPERACAO', '8d0c4e4775da0fb3a6ccc7ca5a96a9c1', '6c8de5ad7586fb72fdd0425a6017c048'),
-    ('claim_pending_reservation_reschedule_emails', 'OPERACAO', 'bf2e671a470da132a2a17e2eb263dd38', '80cb49c28c71f8d541f01ae5db1135e6'),
-    ('claim_reservation_reschedule_email', 'OPERACAO', '4d78bc97bf50f34716daf034d9743c4a', 'cea930a805b1307ae321ae1778cf4364'),
+    ('claim_pending_reservation_reschedule_emails', 'OPERACAO', 'ef2e82c6486091bab8a53d623331ea01', 'c175515a1bcfb4cad0476af2382cef76'),
+    ('claim_reservation_reschedule_email', 'OPERACAO', '4cc229575d76077e221bbc8b31ab9600', '7acf682d10c7f786e48ac62240d97aa9'),
     ('complete_reservation_reschedule_email', 'OPERACAO', 'f6fe4e6011cd3488a89b0da9bbbf658c', '55dbff363263d4dcffeacc6387217795'),
     ('fail_reservation_reschedule_email', 'OPERACAO', 'c498ba5ea42e8cda6d0df266e89d6964', 'b03c9aa3569380877a883b31a11f562c'),
     ('freeze_reservation_reschedule_email', 'OPERACAO', '47dda81cc620092c8a586956312d36be', 'f59f31d3dfa80a209af8fe37e7eb4259'),
@@ -30,7 +30,7 @@ with expected(fn, kind, exact, norm) as (values
     ('reservation_reschedule_email_fingerprint', 'INTERNA', 'd00cd9347802a1dfe1a8833c9b98b490', '1afa3b09ea103af7921060ca3cc956ca'),
     ('reservation_reschedule_email_payload', 'INTERNA', '507c881d4cafd8d7b1333d08fddc2aaf', 'df46dbde232095b8987033dcf00a8777'),
     ('reservation_reschedule_email_rejection', 'INTERNA', 'b6ebf8700224ca45a30feb7f2e063df4', 'c0f470ab07ffbd5564c3e46a06d883a7'),
-    ('reservation_reschedule_email_take', 'INTERNA', '60396b777957aca393dd059fcd831adc', '92c46cc79cfa983420a6db5127950df8'),
+    ('reservation_reschedule_email_take', 'INTERNA', '6be05b5dac44c0f1bbc424c4eaf100e4', '90445c056d3a44303eec6532d8b4b525'),
     ('reservation_standby_resolve', 'ORIGEM', 'ee2c16b8a8e2960656a6eb45c8021924', 'd8a5f75fdaf19ae2926cac272fac224b'),
     ('is_active_admin', 'APOIO', 'd4a5f6d71d3732cca38bd0a73ae12620', 'b4560566fbfc891fa821d4264ae24f69'),
     ('reservation_confirmation_email', 'APOIO', '6b53ea280f7cfcc91d4d756bd6348ecf', '27c37a1249bb3baebe60366e0dd9402e'),

@@ -678,7 +678,7 @@ test("depois do teto, só uma pessoa da equipe reenvia — e isso fica na audito
   );
   assert.equal(audit.length, 1);
   assert.equal(audit[0].actor_user_id, ADMIN);
-  assert.deepEqual(audit[0].metadata, { emailId, attempt: MAX_ATTEMPTS + 1, generation: manual.generation, previousStatus: "FAILED" });
+  assert.deepEqual(audit[0].metadata, { emailId, attempt: MAX_ATTEMPTS + 1, generation: manual.generation, previousStatus: "FAILED", acceptedDuplicateRisk: false });
 
   assert.equal(await complete(emailId, manual.claimToken), true);
   assert.equal((await emails(booking.id))[0].status, "SENT");
@@ -1683,7 +1683,7 @@ test("postcheck: sensível a privilégio, conteúdo, trigger, espera e unicidade
     }
     assert.deepEqual(failing(await diagnostic(database, POSTCHECK)), [], `${label}: desfeito`);
   };
-  const take = "public.reservation_reschedule_email_take(uuid, integer, integer, integer, text, uuid)";
+  const take = "public.reservation_reschedule_email_take(uuid, integer, integer, integer, text, uuid, boolean)";
 
   await expectFailure("peça interna ao alcance do servidor", `grant execute on function ${take} to service_role;`, `revoke execute on function ${take} from service_role;`, "PECAS_INTERNAS_FORA_DO_ALCANCE");
   await expectFailure(
@@ -1829,5 +1829,6 @@ test("rollback: remove a trigger e as funções, mantém o registro, e o reagend
   const claimed = (await fx.claimPending(25)).map((item: Row) => item.emailId).sort();
   assert.ok(claimed.includes(first.emailId) && claimed.includes(refused.emailId));
   assert.ok(!claimed.includes(unsure.emailId), "resultado desconhecido não volta à fila sozinho");
-  assert.equal((await fx.adminClaim(unsure.booking.id)).generation, 2, "uma pessoa reenvia, com chave nova");
+  assert.deepEqual(await fx.adminClaim(unsure.booking.id), { needsConfirmation: true }, "nem com uma pessoa pedindo, sem aceitar o risco");
+  assert.equal((await fx.adminClaim(unsure.booking.id, ADMIN, true)).generation, 2, "com o aceite, reenvia — com chave nova");
 });

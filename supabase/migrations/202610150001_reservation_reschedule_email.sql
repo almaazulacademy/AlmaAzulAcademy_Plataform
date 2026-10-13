@@ -79,7 +79,8 @@
 --   * a geração atual só teve recusas comprovadas (nada saiu com aquela chave);
 --   * o destinatário ou os dados da turma mudaram (`content_fingerprint`): é
 --     outra entrega — outro endereço, ou uma correção do que foi informado;
---   * uma pessoa pede o reenvio de um e-mail UNCERTAIN.
+--   * uma pessoa pede o reenvio de um e-mail UNCERTAIN, aceitando explicitamente
+--     o risco de duplicidade.
 --
 -- A chave do provedor vale por tempo limitado. Passada a janela com resultado
 -- ainda desconhecido, a fila para e marca UNCERTAIN em vez de reenviar às cegas.
@@ -430,15 +431,22 @@ $$;
 -- reivindicando, concluindo ou registrando uma falha — esta devolve null em vez
 -- de esperar. Quem recebe null não envia.
 --
--- `p_max_attempts` null é o reenvio pedido por uma pessoa: sem teto, sem espera
--- entre tentativas e com direito a reabrir um e-mail UNCERTAIN.
+-- `p_max_attempts` null é o reenvio pedido por uma pessoa: sem teto e sem espera
+-- entre tentativas.
+--
+-- Reabrir uma entrega não confirmada — UNCERTAIN, ou resultado desconhecido com
+-- a janela da chave já vencida — é a única decisão que esta função não toma
+-- sozinha nem por omissão: só acontece com uma pessoa pedindo **e** aceitando
+-- explicitamente o risco de duplicidade (`p_accept_uncertain`). Sem o aceite, o
+-- e-mail fica (ou passa a ficar) UNCERTAIN e nada é enviado.
 create or replace function public.reservation_reschedule_email_take(
   p_email_id uuid,
   p_max_attempts integer,
   p_lease_minutes integer,
   p_window_minutes integer,
   p_source text,
-  p_actor_id uuid
+  p_actor_id uuid,
+  p_accept_uncertain boolean
 )
 returns jsonb
 language plpgsql
@@ -492,7 +500,6 @@ begin
   end if;
 
   if not manual then
-    if queued.status = 'UNCERTAIN' then return null; end if;
     if queued.attempts >= greatest(p_max_attempts, 1) then return null; end if;
     if queued.next_attempt_at is not null and queued.next_attempt_at > now() then return null; end if;
   end if;
@@ -506,13 +513,16 @@ begin
         or not queued.generation_uncertain
         or queued.content_fingerprint is distinct from fingerprint;
 
-  -- Mesma entrega, resultado desconhecido, e o provedor já não deduplica:
-  -- reenviar sozinho seria apostar. Só uma pessoa decide.
-  if not fresh and queued.generation_started_at + idempotency_window <= now() then
-    if not manual then
-      update public.reservation_reschedule_emails
-      set status = 'UNCERTAIN', last_error_code = 'IDEMPOTENCY_WINDOW_EXPIRED', next_attempt_at = null, frozen_message = null
-      where id = queued.id;
+  -- Entrega não confirmada: a fila já tinha parado por isso, ou é a mesma
+  -- entrega com resultado desconhecido e o provedor já não deduplica. Reenviar
+  -- seria apostar — e quem aposta é uma pessoa, sabendo do risco.
+  if queued.status = 'UNCERTAIN' or (not fresh and queued.generation_started_at + idempotency_window <= now()) then
+    if not (manual and coalesce(p_accept_uncertain, false)) then
+      if queued.status <> 'UNCERTAIN' then
+        update public.reservation_reschedule_emails
+        set status = 'UNCERTAIN', last_error_code = 'IDEMPOTENCY_WINDOW_EXPIRED', next_attempt_at = null, frozen_message = null
+        where id = queued.id;
+      end if;
       return null;
     end if;
     fresh := true;
@@ -584,7 +594,7 @@ begin
   if not found then return null; end if;
 
   return public.reservation_reschedule_email_take(
-    email_id, greatest(coalesce(p_max_attempts, 6), 1), p_lease_minutes, p_window_minutes, 'RESCHEDULE', null
+    email_id, greatest(coalesce(p_max_attempts, 6), 1), p_lease_minutes, p_window_minutes, 'RESCHEDULE', null, false
   );
 end;
 $$;
@@ -623,7 +633,7 @@ begin
     limit least(greatest(coalesce(p_limit, 1), 0), 25)
   loop
     begin
-      claim := public.reservation_reschedule_email_take(candidate.id, max_attempts, p_lease_minutes, p_window_minutes, 'RETRY', null);
+      claim := public.reservation_reschedule_email_take(candidate.id, max_attempts, p_lease_minutes, p_window_minutes, 'RETRY', null, false);
     exception when lock_not_available then
       claim := null;
     end;
@@ -943,13 +953,18 @@ $$;
 -- "Reenviar e-mail de reagendamento": reivindica o e-mail do reagendamento mais
 -- recente da reserva, sem teto de tentativas — é uma pessoa pedindo. As demais
 -- regras são as mesmas: enviado não reenvia, envio em curso não é atropelado e
--- reserva que saiu daquela turma não recebe. É também o único caminho que reabre
--- um e-mail UNCERTAIN, e isso fica registrado na auditoria.
+-- reserva que saiu daquela turma não recebe.
+--
+-- É também o único caminho que reabre uma entrega não confirmada, e só com
+-- `p_accept_uncertain`: sem ele, a resposta é `{"needsConfirmation": true}` —
+-- o painel precisa mostrar o risco de duplicidade e pedir de novo. O aceite
+-- fica registrado na auditoria.
 create or replace function public.admin_claim_reservation_reschedule_email(
   p_actor_id uuid,
   p_reservation_id uuid,
   p_lease_minutes integer,
-  p_window_minutes integer
+  p_window_minutes integer,
+  p_accept_uncertain boolean
 )
 returns jsonb
 language plpgsql
@@ -972,23 +987,32 @@ begin
   limit 1;
   if not found then return null; end if;
 
-  claim := public.reservation_reschedule_email_take(latest_id, null, p_lease_minutes, p_window_minutes, 'ADMIN', p_actor_id);
+  claim := public.reservation_reschedule_email_take(
+    latest_id, null, p_lease_minutes, p_window_minutes, 'ADMIN', p_actor_id, coalesce(p_accept_uncertain, false)
+  );
 
-  if claim is not null then
-    insert into public.admin_audit_log (actor_user_id, action, entity_type, entity_id, metadata)
-    values (
-      p_actor_id,
-      'RESERVATION_RESCHEDULE_EMAIL_RESEND',
-      'RESERVATION',
-      p_reservation_id,
-      jsonb_build_object(
-        'emailId', latest_id,
-        'attempt', claim -> 'attempt',
-        'generation', claim -> 'generation',
-        'previousStatus', previous_status
-      )
-    );
+  if claim is null then
+    if not coalesce(p_accept_uncertain, false)
+       and exists (select 1 from public.reservation_reschedule_emails q where q.id = latest_id and q.status = 'UNCERTAIN') then
+      return jsonb_build_object('needsConfirmation', true);
+    end if;
+    return null;
   end if;
+
+  insert into public.admin_audit_log (actor_user_id, action, entity_type, entity_id, metadata)
+  values (
+    p_actor_id,
+    'RESERVATION_RESCHEDULE_EMAIL_RESEND',
+    'RESERVATION',
+    p_reservation_id,
+    jsonb_build_object(
+      'emailId', latest_id,
+      'attempt', claim -> 'attempt',
+      'generation', claim -> 'generation',
+      'previousStatus', previous_status,
+      'acceptedDuplicateRisk', coalesce(p_accept_uncertain, false)
+    )
+  );
 
   return claim;
 end;
@@ -1004,7 +1028,7 @@ revoke all on function public.enqueue_reservation_reschedule_email() from public
 revoke all on function public.reservation_reschedule_email_rejection(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.reservation_reschedule_email_payload(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.reservation_reschedule_email_fingerprint(uuid) from public, anon, authenticated, service_role;
-revoke all on function public.reservation_reschedule_email_take(uuid, integer, integer, integer, text, uuid) from public, anon, authenticated, service_role;
+revoke all on function public.reservation_reschedule_email_take(uuid, integer, integer, integer, text, uuid, boolean) from public, anon, authenticated, service_role;
 
 revoke all on function public.claim_reservation_reschedule_email(uuid, integer, integer, integer) from public, anon, authenticated;
 revoke all on function public.claim_pending_reservation_reschedule_emails(integer, integer, integer, integer) from public, anon, authenticated;
@@ -1013,7 +1037,7 @@ revoke all on function public.complete_reservation_reschedule_email(uuid, uuid) 
 revoke all on function public.fail_reservation_reschedule_email(uuid, uuid, text, text, integer) from public, anon, authenticated;
 revoke all on function public.admin_reservation_reschedule_emails(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.admin_list_undelivered_reschedule_emails(uuid, integer) from public, anon, authenticated;
-revoke all on function public.admin_claim_reservation_reschedule_email(uuid, uuid, integer, integer) from public, anon, authenticated;
+revoke all on function public.admin_claim_reservation_reschedule_email(uuid, uuid, integer, integer, boolean) from public, anon, authenticated;
 
 grant execute on function public.claim_reservation_reschedule_email(uuid, integer, integer, integer) to service_role;
 grant execute on function public.claim_pending_reservation_reschedule_emails(integer, integer, integer, integer) to service_role;
@@ -1022,4 +1046,4 @@ grant execute on function public.complete_reservation_reschedule_email(uuid, uui
 grant execute on function public.fail_reservation_reschedule_email(uuid, uuid, text, text, integer) to service_role;
 grant execute on function public.admin_reservation_reschedule_emails(uuid, uuid) to service_role;
 grant execute on function public.admin_list_undelivered_reschedule_emails(uuid, integer) to service_role;
-grant execute on function public.admin_claim_reservation_reschedule_email(uuid, uuid, integer, integer) to service_role;
+grant execute on function public.admin_claim_reservation_reschedule_email(uuid, uuid, integer, integer, boolean) to service_role;

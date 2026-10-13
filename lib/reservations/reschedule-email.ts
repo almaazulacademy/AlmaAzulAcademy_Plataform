@@ -112,6 +112,8 @@ export type RescheduleEmailOutcome =
   | "SKIPPED"
   /** Não saiu; ficou na fila para nova tentativa. */
   | "PENDING"
+  /** Só no reenvio pelo painel: a entrega anterior não foi confirmada, e reenviar exige aceitar o risco de duplicidade. */
+  | "NEEDS_CONFIRMATION"
   /** E-mail de reagendamento desligado, ou provedor não configurado. */
   | "DISABLED";
 
@@ -173,7 +175,8 @@ export type RescheduleRpcClient = {
 export type RescheduleEmailQueue = {
   claim(changeId: string): Promise<RescheduleEmailClaim | null>;
   claimPending(limit: number): Promise<RescheduleEmailClaim[]>;
-  claimForAdmin(actorUserId: string, reservationId: string): Promise<RescheduleEmailClaim | null>;
+  /** `acceptUncertain`: a pessoa viu o aviso e aceita o risco de o cliente receber duas vezes. */
+  claimForAdmin(actorUserId: string, reservationId: string, acceptUncertain: boolean): Promise<RescheduleEmailClaim | "NEEDS_CONFIRMATION" | null>;
   /** Grava a mensagem da geração antes do envio. false = não congelou; nada pode ser enviado. */
   freeze(claim: RescheduleEmailClaim, message: RescheduleEmailContent): Promise<boolean>;
   complete(claim: RescheduleEmailClaim): Promise<void>;
@@ -446,13 +449,16 @@ export function createRescheduleEmailQueue(
         ? claims.flatMap((item) => parseRescheduleEmailClaim(item) ?? [])
         : [];
     },
-    async claimForAdmin(actorUserId, reservationId) {
-      return parseRescheduleEmailClaim(await call("admin_claim_reservation_reschedule_email", {
+    async claimForAdmin(actorUserId, reservationId, acceptUncertain) {
+      const answer = await call("admin_claim_reservation_reschedule_email", {
         p_actor_id: actorUserId,
         p_reservation_id: reservationId,
         p_lease_minutes: options.leaseMinutes,
         p_window_minutes: options.windowMinutes,
-      }, "CLAIM_UNAVAILABLE"));
+        p_accept_uncertain: acceptUncertain,
+      }, "CLAIM_UNAVAILABLE");
+      if (asRow(answer)?.needsConfirmation === true) return "NEEDS_CONFIRMATION";
+      return parseRescheduleEmailClaim(answer);
     },
     async freeze(claim, message) {
       const frozen = await call("freeze_reservation_reschedule_email", {
@@ -661,12 +667,20 @@ export async function retryPendingRescheduleEmails(runtime: RescheduleEmailRunti
  *
  * O banco confere de novo quem pede e o que há para enviar: e-mail já enviado
  * não é reenviado, e clicar dez vezes não gera dez e-mails. É também o único
- * caminho que reabre um e-mail com entrega não confirmada — uma decisão que só
- * uma pessoa pode tomar.
+ * caminho que reabre um e-mail com entrega não confirmada — e só com
+ * `acceptUncertain`, que significa "a pessoa viu o aviso de possível
+ * duplicidade e decidiu reenviar". Sem ele, a resposta é NEEDS_CONFIRMATION e
+ * nada é enviado.
  */
-export async function resendRescheduleEmail(runtime: RescheduleEmailRuntime, actorUserId: string, reservationId: string): Promise<RescheduleEmailResult> {
+export async function resendRescheduleEmail(
+  runtime: RescheduleEmailRuntime,
+  actorUserId: string,
+  reservationId: string,
+  options: { acceptUncertain?: boolean } = {},
+): Promise<RescheduleEmailResult> {
   try {
-    const claim = await runtime.queue.claimForAdmin(actorUserId, reservationId);
+    const claim = await runtime.queue.claimForAdmin(actorUserId, reservationId, options.acceptUncertain === true);
+    if (claim === "NEEDS_CONFIRMATION") return { outcome: "NEEDS_CONFIRMATION" };
     if (!claim) return { outcome: "SKIPPED" };
     return await deliverClaimed(runtime, claim, "reschedule_retry");
   } catch (error) {

@@ -53,7 +53,7 @@ where frozen_message is not null
 -- Nada mais vai repetir os demais: a mensagem guardada deixa de ter uso.
 update public.reservation_reschedule_emails set frozen_message = null where frozen_message is not null;
 
-drop function if exists public.admin_claim_reservation_reschedule_email(uuid, uuid, integer, integer);
+drop function if exists public.admin_claim_reservation_reschedule_email(uuid, uuid, integer, integer, boolean);
 drop function if exists public.admin_list_undelivered_reschedule_emails(uuid, integer);
 drop function if exists public.admin_reservation_reschedule_emails(uuid, uuid);
 drop function if exists public.fail_reservation_reschedule_email(uuid, uuid, text, text, integer);
@@ -61,7 +61,7 @@ drop function if exists public.complete_reservation_reschedule_email(uuid, uuid)
 drop function if exists public.freeze_reservation_reschedule_email(uuid, uuid, jsonb);
 drop function if exists public.claim_pending_reservation_reschedule_emails(integer, integer, integer, integer);
 drop function if exists public.claim_reservation_reschedule_email(uuid, integer, integer, integer);
-drop function if exists public.reservation_reschedule_email_take(uuid, integer, integer, integer, text, uuid);
+drop function if exists public.reservation_reschedule_email_take(uuid, integer, integer, integer, text, uuid, boolean);
 drop function if exists public.reservation_reschedule_email_fingerprint(uuid);
 drop function if exists public.reservation_reschedule_email_payload(uuid);
 drop function if exists public.reservation_reschedule_email_rejection(uuid);
