@@ -197,50 +197,108 @@ Não há evento retroativo: reagendamento feito antes da migration não entra na
 | Estado | Significa |
 | --- | --- |
 | `QUEUED` | Nasceu com o reagendamento; ninguém tentou enviar ainda |
-| `SENDING` | Reivindicado; ninguém mais envia até `locked_until` |
+| `SENDING` | Reivindicado; ninguém mais envia até `locked_until` (2 minutos) |
 | `SENT` | O provedor aceitou. Definitivo |
-| `FAILED` | A última tentativa falhou; `last_error_code` diz por quê |
+| `FAILED` | A última tentativa não deu certo; volta à fila depois de `next_attempt_at` |
+| `UNCERTAIN` | Não se sabe se o e-mail saiu, e já não dá para repetir com segurança. Só uma pessoa reenvia |
 | `SKIPPED` | Não enviado de propósito, e nunca será. Definitivo |
 
-Só envia quem reivindica, e a reivindicação é uma única função (`reservation_reschedule_email_take`), que trava a linha antes de decidir:
+Só envia quem reivindica, e a reivindicação é uma única função (`reservation_reschedule_email_take`):
 
-- **Um envio por vez.** A reivindicação dura 15 minutos. Requisição repetida, clique duplo, a rotina agendada e o botão do painel no mesmo instante terminam em um e-mail.
-- **Só se ainda descrever a reserva.** Antes de cada tentativa: a reserva continua `CONFIRMED`, na turma daquele reagendamento, sem troca posterior, e a turma ainda não começou. Senão vira `SKIPPED` com o motivo — `RESERVATION_NOT_CONFIRMED`, `SUPERSEDED` ou `SESSION_STARTED`. É o que impede um e-mail atrasado de anunciar uma data que já não vale.
-- **Três tentativas automáticas.** Depois disso, espera uma pessoa.
+- **Um envio por vez.** Requisição repetida, clique duplo, a rotina e o botão do painel no mesmo instante terminam em um e-mail.
+- **Só se ainda descrever a reserva.** Antes de cada tentativa: a reserva continua `CONFIRMED`, na turma daquele reagendamento, sem troca posterior, e a turma ainda não começou. Senão vira `SKIPPED` com o motivo — `RESERVATION_NOT_CONFIRMED`, `SUPERSEDED` ou `SESSION_STARTED`.
+- **Seis tentativas automáticas**, com espera crescente. Depois disso, espera uma pessoa.
 
-`reservation_reschedule_email_attempts` guarda uma linha por tentativa: quando começou, por onde (`RESCHEDULE`, `RETRY` ou `ADMIN`), como terminou (`SENT`, `FAILED`, `LEASE_EXPIRED`) e o código do erro. Só símbolos curtos são gravados; nenhuma resposta do provedor, e nenhum destinatário, chega ao banco ou ao log.
+`reservation_reschedule_email_attempts` guarda uma linha por tentativa: quando começou, por onde (`RESCHEDULE`, `RETRY` ou `ADMIN`), com que chave (`generation`), como terminou e o código do erro. Só símbolos curtos são gravados; nenhuma resposta do provedor chega ao banco ou ao log.
 
 RLS ligada e nenhum acesso para `anon` ou `authenticated`. A service role só lê as tabelas; toda escrita passa por RPC.
+
+### Idempotência no provedor
+
+O Resend aceita um cabeçalho `Idempotency-Key`. O contrato documentado: a chave vale 24 horas; **mesma chave com o mesmo corpo devolve a resposta do primeiro pedido, sem entregar de novo**; mesma chave com corpo diferente é recusada com 409; outro pedido com a mesma chave ainda em curso também é 409. A documentação não diz se pedidos recusados registram a chave — a política abaixo não depende disso.
+
+**O que se sabe depois de uma tentativa que não deu certo** decide o que a próxima faz:
+
+| Resultado | Quando | Próxima tentativa |
+| --- | --- | --- |
+| `REJECTED` | O provedor respondeu recusando: 4xx (inclusive 429) | Chave nova, mensagem montada de novo. Nada saiu com a anterior |
+| `UNKNOWN` | Timeout, erro de rede, 408, 5xx, ou a instância morreu no meio | **A mesma chave e a mesma mensagem, byte a byte** |
+| `KEY_REFUSED` | 409: a chave foi recusada | Na primeira vez, como `UNKNOWN`. Na segunda com a mesma chave, é conflito: `UNCERTAIN` |
+| `SENT` | O provedor aceitou | — |
+
+Um envio com resultado desconhecido **nunca é tratado como "não enviado"**. Sem informação, o padrão é `UNKNOWN`, no provedor e no banco.
+
+**Gerações.** Uma geração é um conjunto de tentativas com a mesma chave (`reschedule-confirmation/<id>/<geração>`) e a mesma mensagem. A mensagem é montada uma vez e **gravada no banco antes do envio** (`frozen_message`); se a gravação falhar, nada é enviado. Enquanto a geração tiver alguma tentativa de resultado desconhecido, toda nova tentativa manda exatamente o que foi gravado — é o que faz o provedor reconhecer a repetição mesmo que o template (um deploy no meio) ou o nome do cliente tenham mudado. A chave não leva nada do conteúdo: se levasse, qualquer mudança viraria chave nova e o provedor entregaria de novo.
+
+Só começa geração nova, com chave nova, quando:
+
+- **a geração atual só teve recusas comprovadas** — nada pode ter saído com aquela chave. Uma recusa no meio não apaga a incerteza de uma tentativa anterior;
+- **o destinatário mudou** — é outra entrega, para outro endereço. O endereço novo recebe uma vez;
+- **os dados da turma mudaram** — experiência, data, horário, base, ponto de encontro, endereço ou link do mapa. A mensagem guardada informaria algo que já não vale; a nova é uma correção. É o único caso em que o cliente pode receber dois e-mails do mesmo reagendamento, e de propósito;
+- **uma pessoa pede o reenvio** de um e-mail `UNCERTAIN`.
+
+**A janela.** A fila considera a chave válida por 23 horas — uma a menos que o provedor. Passado isso com resultado ainda desconhecido, repetir a chave já não protege: o e-mail vai para `UNCERTAIN` e nada sai sozinho. O painel avisa "não sabemos se o cliente recebeu" e o reenvio pede confirmação, porque pode duplicar.
+
+**O 409.** Os dois motivos só se distinguem pelo corpo da resposta, que pode citar o destinatário. O cliente do Resend continua lendo **só o status**, como já fazia; quem decide é a fila, pelo histórico: uma recusa pode ser um pedido ainda em curso; duas, com a mesma chave, já não é.
+
+A mensagem guardada contém o nome e o e-mail do cliente. Ela é apagada quando o e-mail é enviado, descartado ou vai para `UNCERTAIN`, e nunca aparece para o painel. O e-mail de pagamento continua sendo enviado sem o cabeçalho, exatamente como era.
+
+Fora do alcance desta política, e aceito: se o resultado ficou desconhecido para um endereço, o cadastro mudou para outro, e depois voltou ao primeiro — tudo em 24 horas — o primeiro endereço pode receber duas vezes. O painel não tem tela para trocar o e-mail de uma reserva; isso só acontece por SQL.
+
+### Concorrência
+
+A reivindicação trava a **reserva primeiro, em modo compartilhado, e depois a linha da fila** — sempre nessa ordem, que é a das operações de Stand-by. Nenhuma função trava a linha da fila antes da reserva, então não há ciclo de espera possível.
+
+- **Cancelamento, volta ao Stand-by ou troca de turma em andamento:** a reivindicação espera a outra transação terminar e decide com o estado final. Se a reserva saiu daquela turma, o e-mail é descartado, não enviado.
+- **Duas instâncias no mesmo e-mail:** a linha da fila é pega com `skip locked`. A segunda não espera: recebe "não é sua" e não envia. Duas execuções da rotina dividem a fila.
+- **Prazo vencido durante um envio:** outra instância assume, com a mesma chave e a mesma mensagem. Se a primeira responder depois e tiver dado certo, o e-mail é marcado enviado mesmo assim; se tiver falhado, a falha fica no registro e não solta o envio em curso.
+- **Requisição de reagendamento repetida:** a segunda espera a primeira e recebe a repetição, com o mesmo `changeId`. Um evento, um e-mail.
+- **Reserva presa em outra transação:** a espera pela reserva é limitada a 3 segundos (`lock_timeout`). A rotina pula aquele e-mail e segue com os outros; a reivindicação direta falha sem enviar.
+
+O que nenhum lock fecha: o envio acontece fora do banco, depois de a reivindicação ser confirmada. Se a reserva for cancelada nesses segundos, o e-mail já autorizado pode sair. Uma nova tentativa, não.
 
 ### Recuperação de falhas
 
 Uma falha de envio nunca desfaz o reagendamento: a reserva continua confirmada na turma nova e o e-mail fica na fila.
 
-| Caminho | Quando | Lote |
+| Caminho | Quando | Alcance |
 | --- | --- | --- |
+| Na própria requisição | Logo depois de reagendar: a tentativa imediata e, se a falha for passageira, mais duas em segundo plano | 3 s e 15 s depois |
+| Painel aberto | Ao abrir `/admin/stand-by` ou o detalhe de uma reserva com e-mail pendente, depois da resposta | Até 10 e-mails |
 | Oportunista | Depois de um envio de reagendamento bem-sucedido | 2 |
-| Rotina agendada | `GET /api/cron/confirmation-emails`, a mesma do e-mail de pagamento, logo depois dele | 10 |
-| Painel | **Reenviar e-mail de reagendamento**, no detalhe da reserva | 1 |
+| Rotina agendada | `GET /api/cron/confirmation-emails`, a mesma do e-mail de pagamento, logo depois dele | Até 10, uma vez por dia |
+| Botão | **Reenviar e-mail de reagendamento**, no detalhe da reserva | 1, sem teto e sem espera |
 
-A rotina é diária (limite do plano Hobby). O botão do painel não tem teto de tentativas, é restrito a ADMIN e OPERATOR e fica registrado em `admin_audit_log` (`RESERVATION_RESCHEDULE_EMAIL_RESEND`); ele pede o e-mail do reagendamento mais recente e não reenvia o que já saiu.
+A espera entre tentativas automáticas é gravada pelo banco (`next_attempt_at`): 3 s, 15 s, 5 min, 30 min e 2 h. Uma recusa que repetir não resolve — chave revogada, domínio não verificado — espera pelo menos 5 minutos e não é repetida em segundos. As seis tentativas cabem em menos de 3 horas, dentro da janela da chave.
 
-Três casos de borda, e o que acontece em cada um:
+O botão do painel é restrito a ADMIN e OPERATOR e fica registrado em `admin_audit_log` (`RESERVATION_RESCHEDULE_EMAIL_RESEND`, com o estado anterior). Ele pede o e-mail do reagendamento mais recente e não reenvia o que já saiu.
 
-- **A instância morre no meio do envio.** A linha fica `SENDING`; passado o prazo, a próxima execução registra a tentativa como `LEASE_EXPIRED` e assume.
-- **O provedor aceitou, mas o registro falhou.** A linha nunca vira `FAILED` — isso mandaria o mesmo e-mail de novo. O registro é repetido três vezes; se não der, o prazo vence e a nova tentativa vai com a mesma chave de idempotência (abaixo).
-- **Uma tentativa lenta responde depois do prazo.** Se deu certo, o e-mail é marcado `SENT` mesmo assim. Se falhou, a falha fica no registro e não solta o envio que está em curso.
+**A rotina diária, sozinha, não basta para uma turma no mesmo dia.** No plano Hobby da Vercel um cron roda uma vez por dia, com precisão de ±59 minutos, e uma expressão mais frequente faz o deploy falhar. Um reagendamento às 8h para uma turma às 17h, com o e-mail falhando, só seria retentado pela rotina na manhã seguinte — e descartado, porque a turma já aconteceu. Por isso existem os dois primeiros caminhos da tabela: a falha passageira é resolvida em segundos, e a persistente volta a ser tentada sempre que alguém abre o painel de Stand-by. O que continua descoberto é a falha persistente com o painel fechado; para ela, o aviso no painel pede que o cliente seja avisado por outro canal.
 
-**Chave de idempotência no provedor.** Cada envio leva o cabeçalho `Idempotency-Key` do Resend: `reschedule-confirmation/<id da linha>` mais um resumo do corpo. Por 24 horas, a mesma chave com o mesmo conteúdo devolve a resposta do primeiro envio em vez de entregar outra vez. O e-mail de pagamento continua sem o cabeçalho, exatamente como era.
+**Agendamento mais frequente — não ativado, depende de aprovação.** `vercel.json` não mudou. A rota `/api/cron/reschedule-emails` já existe, com a mesma autenticação das outras rotinas, e recupera só esta fila; hoje ninguém a agenda. As opções, da mais simples à mais cara:
+
+| Opção | O que muda | Consequências |
+| --- | --- | --- |
+| Várias entradas diárias em `vercel.json` apontando para a rota dedicada (por exemplo, de 2 em 2 horas entre 6h e 22h) | Só `vercel.json` | Cabe no limite escrito do Hobby: 100 crons por projeto, cada um rodando uma vez por dia. Cada entrada dispara em algum momento da hora. **Não foi testado se o deploy aceita** várias entradas para o mesmo caminho; a documentação indica o plano Pro para frequência maior. O primeiro deploy precisa ser acompanhado, porque uma expressão recusada derruba o deploy inteiro |
+| GitHub Actions agendado chamando a rota a cada 15 minutos | Um workflow novo e o `CRON_SECRET` também como segredo do GitHub | Gratuito em repositório público. O agendamento do GitHub atrasa sob carga e é desligado depois de 60 dias sem atividade no repositório. O segredo passa a existir em dois lugares |
+| `pg_cron` + `pg_net` no Supabase | Migration nova, extensão `pg_net` e o segredo no Vault | A cada minuto, sem depender de terceiros. Mais peças no banco de produção |
+| Plano Pro da Vercel | Custo mensal | Cron por minuto, com precisão |
+
+Nenhuma delas foi aplicada.
 
 ### No painel
 
-Com o e-mail ativado, o modal de reagendamento avisa antes de confirmar que o cliente será notificado, e o aviso depois da ação diz o que aconteceu — enviado, pendente, ou "avise o cliente" quando o e-mail está desligado. No detalhe da reserva, cada entrada da seção "Stand-by" mostra o estado do e-mail daquele reagendamento.
+- **Antes de reagendar:** com o e-mail ativado, o modal avisa que o cliente será notificado.
+- **Logo depois:** se o e-mail saiu, o aviso diz isso. Se não saiu, o aviso vira alerta — "Reagendada — cliente ainda não avisado".
+- **No detalhe da reserva:** enquanto o cliente não recebeu, um alerta no topo diz o que aconteceu, quando a próxima tentativa fica liberada e o que fazer. Com entrega não confirmada, o texto é "não sabemos se o cliente recebeu" e o botão de reenvio pede confirmação.
+- **Em `/admin/stand-by`:** depois de reagendada, a reserva sai da lista de Stand-by. O bloco "clientes reagendados que ainda não receberam a confirmação" a mantém visível, com contato, a turma mais próxima primeiro, até o e-mail sair. Só entram reservas confirmadas naquela turma e com a turma no futuro.
+- **Na seção "Stand-by" do detalhe:** cada entrada mostra o estado do e-mail daquele reagendamento.
 
 ### Ativação do e-mail
 
 `STANDBY_RESCHEDULE_EMAIL_ENABLED=true`, variável de servidor, independente da do painel. Só esse valor liga o envio; exige também o provedor de e-mail configurado (`RESEND_API_KEY`, `EMAIL_FROM`).
 
-Desligado, o reagendamento funciona igual e a linha fica `QUEUED`. **Ao ligar, a rotina envia o que estiver na fila e ainda for válido** — reserva confirmada naquela turma, turma no futuro. Antes de ligar, rode `supabase/diagnostics/reservation_reschedule_email_report.sql` para ver o que sairia.
+Desligado, o reagendamento funciona igual e a linha fica `QUEUED`. **Ao ligar, a fila envia o que estiver pendente e ainda for válido** — reserva confirmada naquela turma, turma no futuro. Antes de ligar, rode `supabase/diagnostics/reservation_reschedule_email_report.sql` para ver o que sairia.
 
 Desligar a variável é o botão de emergência do e-mail e não afeta o painel.
 
@@ -262,7 +320,7 @@ Cada passo depende de autorização própria. Nenhum deles envia e-mail sozinho,
 
 1. **Merge e deploy do código.** Sem a variável, o serviço responde "desligado" antes de tocar no banco ou no provedor. Publicado antes da migration, nada muda. O e-mail de pagamento segue idêntico: a única alteração no caminho dele é um cabeçalho que só é enviado quando a mensagem traz chave de idempotência — e a dele não traz.
 2. `supabase/diagnostics/reservation_reschedule_email_preflight.sql` → `STANDBY_EMAIL_PREFLIGHT_OK | OK`.
-3. Migration `202610150001_reservation_reschedule_email.sql`. Cria duas tabelas, uma trigger em `reservation_session_changes` e dez funções; não substitui o corpo de nenhuma função e não toca nenhuma linha. Criar as chaves estrangeiras e a trigger pede um lock breve em `reservations`, `sessions`, `reservation_standby` e `reservation_session_changes`: aplicar com `set local lock_timeout = '5s'`, como as anteriores.
+3. Migration `202610150001_reservation_reschedule_email.sql`. Cria duas tabelas, uma trigger em `reservation_session_changes` e treze funções; não substitui o corpo de nenhuma função e não toca nenhuma linha. Criar as chaves estrangeiras e a trigger pede um lock breve em `reservations`, `sessions`, `reservation_standby` e `reservation_session_changes`: aplicar com `set local lock_timeout = '5s'`, como as anteriores.
 4. `supabase/diagnostics/reservation_reschedule_email_postcheck.sql` → `STANDBY_EMAIL_POSTCHECK_OK | OK`. Rodado antes da migration, ele falha com "relation does not exist" em vez de aprovar.
 5. **Ativação do painel**, se ainda não estiver ligado — é ele que permite reagendar. A partir daqui cada reagendamento grava uma linha `QUEUED`.
 6. **Ativação do e-mail:** `STANDBY_RESCHEDULE_EMAIL_ENABLED=true` na Vercel, só em Production, seguido de um novo deploy. Antes, conferir a fila com `reservation_reschedule_email_report.sql`.
@@ -271,7 +329,7 @@ Cada passo depende de autorização própria. Nenhum deles envia e-mail sozinho,
 
 Não testar reagendamento no Preview: ele usa o banco de produção e, com as variáveis de e-mail presentes, enviaria um e-mail de verdade.
 
-**Rollback da etapa 4.** Desligar a variável e publicar de novo já interrompe os envios. Do banco: `supabase/rollback/202610150001_reservation_reschedule_email.rollback.sql` remove a trigger e as dez funções e mantém as duas tabelas, que são o registro do que foi enviado. E-mails ainda na fila deixam de sair. Para reverter também `202610140001` ou `202610130002`, este rollback vem primeiro. Reaplicar a migration depois devolve tudo; os reagendamentos feitos nesse intervalo ficam sem e-mail, e o postcheck avisa em `REAGENDAMENTOS_SEM_LINHA_NA_FILA`.
+**Rollback da etapa 4.** Desligar a variável e publicar de novo já interrompe os envios. Do banco: `supabase/rollback/202610150001_reservation_reschedule_email.rollback.sql` remove a trigger e as treze funções e mantém as duas tabelas, que são o registro do que foi enviado. As mensagens guardadas para repetição são apagadas, e os envios de resultado desconhecido passam a `UNCERTAIN` — não voltam à fila como "não enviados" se a migration for reaplicada. E-mails ainda na fila deixam de sair. Para reverter também `202610140001` ou `202610130002`, este rollback vem primeiro. Reaplicar a migration depois devolve tudo; os reagendamentos feitos nesse intervalo ficam sem e-mail, e o postcheck avisa em `REAGENDAMENTOS_SEM_LINHA_NA_FILA`.
 
 ### Etapa 3 (painel) — migration aplicada, painel ainda desligado
 
@@ -315,7 +373,13 @@ Depois do passo 5 o comportamento do sistema continua o mesmo: o status só pode
 
 ## Testes
 
-`tests/reservation-reschedule-email.test.ts` cobre a etapa 4 contra o mesmo Postgres em memória, com o fluxo de envio de produção ligado a um provedor falso: o evento (um por reagendamento, nenhum nas outras ações, nenhum quando a transação falha), a reivindicação (simultânea, vencida, esgotada), a recuperação de falhas, a régua do "ainda vale", o conteúdo, a ativação, a chave de idempotência do provedor, preflight, postcheck, relatório e rollback. Nenhum teste envia e-mail.
+A etapa 4 tem três arquivos:
+
+- `tests/reservation-reschedule-email.test.ts` — o evento (um por reagendamento, nenhum nas outras ações, nenhum quando a transação falha), a reivindicação, a régua do "ainda vale", o fluxo completo, o conteúdo (inclusive Lago Norte ↔ Cápsula Bar), a ativação, o provedor, preflight, postcheck, relatório e rollback.
+- `tests/reservation-reschedule-email-idempotency.test.ts` — quantas vezes o cliente recebe. O provedor falso segue o contrato documentado da chave de idempotência do Resend e conta o que chegou a uma caixa de entrada: recusa comprovada, timeout com e sem aceitação, aceito sem registro, troca de endereço, mudança de payload entre tentativas, janela vencida, 409, a espera entre tentativas e o que o painel avisa.
+- `tests/reservation-reschedule-email-concurrency.test.ts` — **sessões independentes do Postgres**, com transações mantidas abertas de propósito: quem espera, quem pula e o que cada um decide quando a outra termina. Roda no CI, contra um contêiner `postgres` efêmero do próprio job (`TEST_DATABASE_URL`); ali é obrigatório e falha se o banco faltar. Fora do CI, sem a variável, é pulado com aviso. O módulo recusa qualquer endereço que não seja local.
+
+Os dois primeiros rodam no mesmo Postgres em memória dos demais. Nenhum teste envia e-mail nem fala com o Supabase.
 
 `tests/reservation-standby-admin.test.ts` cobre a etapa 3 contra o mesmo Postgres em memória — funções do painel, autorização de cada operação, paginação acima de 500, régua do mesmo valor, links, auditoria — e a planilha, com snapshots lidos do banco e sincronizados contra a planilha falsa. `tests/reservation-standby-panel.test.ts` cobre ativação, validação, contratos das rotas e a regra do modo "somente atualizar".
 
@@ -325,7 +389,8 @@ Limite conhecido: o banco de teste tem uma única conexão. A ordem de chegada d
 
 ## Pendências
 
-- **Teste de concorrência com duas conexões** antes de ativar: o banco de teste tem uma só. Vale também para a fila do e-mail — a espera real no lock da linha não é exercitada.
+- **Teste de concorrência com duas conexões para as etapas 2 e 3:** o Postgres em memória tem uma conexão só. A fila do e-mail já é testada com sessões independentes no CI, e esses testes passam pelo núcleo do Stand-by (reagendamento simultâneo, repetição), mas as demais operações de Stand-by ainda não têm os seus.
+- **Agendamento mais frequente da recuperação de e-mails:** quatro opções descritas em [Recuperação de falhas](#recuperação-de-falhas), nenhuma aplicada.
 - **Etapa 5 — autoatendimento**, com limite de tentativas e checagem de origem. É quando a página pública passa a ler o link individual. A rota do cliente precisa chamar `sendRescheduleConfirmationEmail(changeId)` depois do reagendamento, como a do painel faz; a linha da fila já é gravada pelo banco nos dois caminhos, então sem a chamada o e-mail sai na rotina do dia seguinte, não some.
 - **Política de cancelamento de reserva reagendada:** definir, e então decidir se entra no e-mail.
 - **Link do mapa do Lago Norte:** preencher `bases.maps_url` faz o botão aparecer em todos os e-mails.
