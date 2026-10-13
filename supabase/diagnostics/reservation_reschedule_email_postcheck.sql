@@ -14,20 +14,23 @@
 -- As funções são conferidas como no preflight: pelo texto exato e pelo texto com
 -- o espaço em branco normalizado. Diferença só de formatação vira
 -- IDENTICA_SO_FORMATACAO e continua OK; diferença de conteúdo é DIFERENTE. Para
--- as dez funções criadas e para `reservation_standby_resolve`, DIFERENTE é
+-- as treze funções criadas e para `reservation_standby_resolve`, DIFERENTE é
 -- FALHOU. Para as três de apoio, é ATENCAO.
 
 with expected(fn, kind, exact, norm) as (values
-    ('admin_claim_reservation_reschedule_email', 'OPERACAO', '3970f87485221002bbe106e0a5743a30', 'a875a3fe398a3659ceaff4ddb89eea3e'),
-    ('admin_reservation_reschedule_emails', 'OPERACAO', '8518e6378ef9113d322ab43dc1bebe6b', 'bd6eb0a5768c13e76256791bcc7edd6f'),
-    ('claim_pending_reservation_reschedule_emails', 'OPERACAO', 'd6230c141313efa0ec157b9d40d50770', 'b49d38f2dc0965a1d9b2444b44c3e47d'),
-    ('claim_reservation_reschedule_email', 'OPERACAO', 'ec0f921108a770658d672fbcffe0837f', '81d328928e40a4007650b821cc9e6e0f'),
-    ('complete_reservation_reschedule_email', 'OPERACAO', 'ebb39373e4a21b53ac93df05e817ea75', '7d46398d1959c4baf01ea7ea33b3a7d6'),
-    ('fail_reservation_reschedule_email', 'OPERACAO', '824d7691067c092da3d071dc22a6acf2', 'a3cb9148403ddeb89eb50d7290aac71d'),
+    ('admin_claim_reservation_reschedule_email', 'OPERACAO', 'd48ef8b29ee9d0d94541f1e7388c96ed', '1dd9fb0a7a7aacfdf19a216b1c2a7b2c'),
+    ('admin_list_undelivered_reschedule_emails', 'OPERACAO', '0cc7dd18a8bcaaeea7881e0c7f6df3f2', 'a5afe16db6c262d782a69da920a78089'),
+    ('admin_reservation_reschedule_emails', 'OPERACAO', '8d0c4e4775da0fb3a6ccc7ca5a96a9c1', '6c8de5ad7586fb72fdd0425a6017c048'),
+    ('claim_pending_reservation_reschedule_emails', 'OPERACAO', 'bf2e671a470da132a2a17e2eb263dd38', '80cb49c28c71f8d541f01ae5db1135e6'),
+    ('claim_reservation_reschedule_email', 'OPERACAO', '4d78bc97bf50f34716daf034d9743c4a', 'cea930a805b1307ae321ae1778cf4364'),
+    ('complete_reservation_reschedule_email', 'OPERACAO', 'f6fe4e6011cd3488a89b0da9bbbf658c', '55dbff363263d4dcffeacc6387217795'),
+    ('fail_reservation_reschedule_email', 'OPERACAO', 'c498ba5ea42e8cda6d0df266e89d6964', 'b03c9aa3569380877a883b31a11f562c'),
+    ('freeze_reservation_reschedule_email', 'OPERACAO', '47dda81cc620092c8a586956312d36be', 'f59f31d3dfa80a209af8fe37e7eb4259'),
     ('enqueue_reservation_reschedule_email', 'INTERNA', '725e61168020dd101290e9fc3112cd18', '66f6e6734a32211d07b15cac1bd0aa1a'),
+    ('reservation_reschedule_email_fingerprint', 'INTERNA', 'd00cd9347802a1dfe1a8833c9b98b490', '1afa3b09ea103af7921060ca3cc956ca'),
     ('reservation_reschedule_email_payload', 'INTERNA', '507c881d4cafd8d7b1333d08fddc2aaf', 'df46dbde232095b8987033dcf00a8777'),
     ('reservation_reschedule_email_rejection', 'INTERNA', 'b6ebf8700224ca45a30feb7f2e063df4', 'c0f470ab07ffbd5564c3e46a06d883a7'),
-    ('reservation_reschedule_email_take', 'INTERNA', '08318d807adb2cc3cb1ef37c25e83533', '2b788c956e4f41d56e101c5336badbfc'),
+    ('reservation_reschedule_email_take', 'INTERNA', '60396b777957aca393dd059fcd831adc', '92c46cc79cfa983420a6db5127950df8'),
     ('reservation_standby_resolve', 'ORIGEM', 'ee2c16b8a8e2960656a6eb45c8021924', 'd8a5f75fdaf19ae2926cac272fac224b'),
     ('is_active_admin', 'APOIO', 'd4a5f6d71d3732cca38bd0a73ae12620', 'b4560566fbfc891fa821d4264ae24f69'),
     ('reservation_confirmation_email', 'APOIO', '6b53ea280f7cfcc91d4d756bd6348ecf', '27c37a1249bb3baebe60366e0dd9402e'),
@@ -77,15 +80,15 @@ checks as (
          case when not exists (select 1 from created where oid is not null and (has_function_privilege('anon', oid, 'EXECUTE') or has_function_privilege('authenticated', oid, 'EXECUTE'))) then 'OK' else 'FALHOU' end
   union all
   select 'OPERACOES_EXECUTAVEIS_PELA_SERVICE_ROLE',
-         (select count(*)::text from created where kind = 'OPERACAO' and oid is not null and has_function_privilege('service_role', oid, 'EXECUTE')) || ' de 6',
-         case when (select count(*) = 6 from created where kind = 'OPERACAO' and oid is not null and has_function_privilege('service_role', oid, 'EXECUTE')) then 'OK' else 'FALHOU' end
+         (select count(*)::text from created where kind = 'OPERACAO' and oid is not null and has_function_privilege('service_role', oid, 'EXECUTE')) || ' de 8',
+         case when (select count(*) = 8 from created where kind = 'OPERACAO' and oid is not null and has_function_privilege('service_role', oid, 'EXECUTE')) then 'OK' else 'FALHOU' end
   union all
-  -- A trigger, a régua do "ainda vale", o conteúdo e o núcleo da fila: nem o
-  -- servidor as chama diretamente.
+  -- A trigger, a régua do "ainda vale", o conteúdo, o resumo da entrega e o
+  -- núcleo da fila: nem o servidor as chama diretamente.
   select 'PECAS_INTERNAS_FORA_DO_ALCANCE',
          coalesce((select string_agg(fn, ', ' order by fn) from created
                    where kind = 'INTERNA' and oid is not null and has_function_privilege('service_role', oid, 'EXECUTE')), 'nenhuma executável pela service_role'),
-         case when (select count(*) = 4 from created where kind = 'INTERNA' and oid is not null and not has_function_privilege('service_role', oid, 'EXECUTE')) then 'OK' else 'FALHOU' end
+         case when (select count(*) = 5 from created where kind = 'INTERNA' and oid is not null and not has_function_privilege('service_role', oid, 'EXECUTE')) then 'OK' else 'FALHOU' end
   union all
   -- RLS ligada, nenhuma policy, service role só lê; a API pública não lê nem escreve.
   select 'TABELAS_DA_FILA_PROTEGIDAS',
@@ -115,6 +118,12 @@ checks as (
                              and e.definition like '%STANDBY_RESCHEDULE%'
                              and e.tgfoid = to_regprocedure('public.enqueue_reservation_reschedule_email()'))
               then 'OK' else 'FALHOU' end
+  union all
+  -- A reivindicação espera pela reserva com limite: sem ele, uma transação presa
+  -- seguraria a fila inteira.
+  select 'REIVINDICACAO_COM_ESPERA_LIMITADA',
+         coalesce((select string_agg(c, ', ') from created f, unnest(f.proconfig) c where f.fn = 'reservation_reschedule_email_take' and c like 'lock_timeout=%'), 'sem lock_timeout'),
+         case when exists (select 1 from created f, unnest(f.proconfig) c where f.fn = 'reservation_reschedule_email_take' and c = 'lock_timeout=3s') then 'OK' else 'FALHOU' end
   union all
   select 'UM_EMAIL_POR_REAGENDAMENTO',
          (select count(*)::text from pg_index i join pg_class c on c.oid = i.indexrelid
@@ -147,6 +156,14 @@ checks as (
          case when not exists (select 1 from public.reservation_reschedule_emails q
                                join public.reservation_session_changes c on c.id = q.change_id
                                where c.origin <> 'STANDBY_RESCHEDULE' or c.standby_id is distinct from q.standby_id)
+              then 'OK' else 'FALHOU' end
+  union all
+  -- A mensagem guardada para repetição tem o nome e o e-mail do cliente: só pode
+  -- existir enquanto o envio não terminou.
+  select 'MENSAGEM_GUARDADA_SO_ENQUANTO_PRECISA',
+         (select count(*)::text from public.reservation_reschedule_emails where frozen_message is not null and status in ('SENT', 'SKIPPED', 'UNCERTAIN')) || ' fora da regra, '
+           || (select count(*)::text from public.reservation_reschedule_emails where frozen_message is not null) || ' em uso',
+         case when not exists (select 1 from public.reservation_reschedule_emails where frozen_message is not null and status in ('SENT', 'SKIPPED', 'UNCERTAIN'))
               then 'OK' else 'FALHOU' end
   union all
   -- Reagendamento anterior à migration: não entrou na fila e não recebe e-mail.

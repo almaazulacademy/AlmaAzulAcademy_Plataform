@@ -1,10 +1,14 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { authorizeStandbyApi, isSameOriginRequest, standbyMutationError } from "@/lib/admin/http";
 import { validateStandbyReschedule } from "@/lib/admin/standby";
 import { rescheduleReservationFromStandby } from "@/lib/admin/standby-data";
 import { isUuid } from "@/lib/admin/validation";
-import { sendRescheduleConfirmationEmail } from "@/lib/reservations/reschedule-email-service";
+import { followUpRescheduleConfirmationEmail, sendRescheduleConfirmationEmail } from "@/lib/reservations/reschedule-email-service";
+
+// A tentativa imediata e as duas seguintes, em segundo plano, cabem com folga:
+// 8 s por envio, mais 3 s e 15 s de espera entre elas.
+export const maxDuration = 60;
 
 type RouteContext = { params: Promise<{ reservationId: string }> };
 
@@ -22,6 +26,10 @@ type RouteContext = { params: Promise<{ reservationId: string }> };
  * que o banco enfileirou na mesma transação — se o reagendamento falhar, não há
  * o que enviar; se a requisição se repetir, a fila não envia de novo. Uma falha
  * do provedor não desfaz o reagendamento: o e-mail fica pendente.
+ *
+ * Se a primeira tentativa não der certo por algo passageiro, a resposta sai
+ * assim mesmo — dizendo que o cliente ainda não foi avisado — e mais duas
+ * tentativas acontecem em seguida, em segundo plano, sem esperar a rotina.
  */
 export async function POST(request: Request, context: RouteContext) {
   if (!isSameOriginRequest(request)) {
@@ -49,6 +57,9 @@ export async function POST(request: Request, context: RouteContext) {
     if (!resolution) return NextResponse.json({ message: "Reserva não encontrada." }, { status: 404 });
 
     const email = await sendRescheduleConfirmationEmail(resolution.changeId);
+    if (email.outcome === "PENDING" && email.retryable !== false) {
+      after(() => followUpRescheduleConfirmationEmail(resolution.changeId));
+    }
     return NextResponse.json({ success: true, resolution, email: { outcome: email.outcome } });
   } catch (error) {
     const failure = standbyMutationError(error);

@@ -481,11 +481,16 @@ export function restoreRejectionMessage(rejection: string | null) {
   return RESTORE_REJECTIONS[rejection] ?? "A turma original não pode receber esta reserva agora.";
 }
 
-const RESCHEDULE_EMAIL_NOTICES: Record<string, string> = {
-  SENT: "O e-mail de confirmação da nova data foi enviado ao cliente.",
-  SKIPPED: "O e-mail de confirmação deste reagendamento já foi enviado ou está em andamento.",
-  PENDING: "O e-mail de confirmação não saiu agora e será tentado de novo; acompanhe no detalhe da reserva.",
+const RESCHEDULE_EMAIL_NOTICES: Record<string, { text: string; delivered: boolean }> = {
+  SENT: { text: "O e-mail de confirmação da nova data foi enviado ao cliente.", delivered: true },
+  SKIPPED: { text: "O e-mail de confirmação deste reagendamento já foi enviado ou está em andamento.", delivered: true },
+  PENDING: {
+    text: "O cliente AINDA NÃO recebeu o e-mail de confirmação: o envio falhou e está sendo tentado de novo. Acompanhe no detalhe da reserva e, se a experiência for em breve, avise o cliente por outro canal.",
+    delivered: false,
+  },
 };
+
+const NO_RESCHEDULE_EMAIL = { text: "Nenhum e-mail foi enviado: avise o cliente.", delivered: false };
 
 /**
  * O que dizer ao admin sobre o e-mail logo depois de reagendar. Sem resultado
@@ -493,7 +498,12 @@ const RESCHEDULE_EMAIL_NOTICES: Record<string, string> = {
  * sempre: ninguém foi avisado.
  */
 export function rescheduleEmailNotice(outcome: string | null | undefined) {
-  return RESCHEDULE_EMAIL_NOTICES[outcome ?? ""] ?? "Nenhum e-mail foi enviado: avise o cliente.";
+  return (RESCHEDULE_EMAIL_NOTICES[outcome ?? ""] ?? NO_RESCHEDULE_EMAIL).text;
+}
+
+/** true quando o aviso precisa de destaque: a reserva foi reagendada e o e-mail não saiu. */
+export function rescheduleEmailNeedsAttention(outcome: string | null | undefined) {
+  return outcome === "PENDING";
 }
 
 const EVENT_LABELS: Record<string, string> = {

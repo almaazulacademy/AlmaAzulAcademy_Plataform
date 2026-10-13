@@ -18,7 +18,7 @@ type RouteContext = { params: Promise<{ reservationId: string }> };
 const MESSAGES = {
   SENT: "E-mail de confirmação do reagendamento enviado.",
   SKIPPED: "Nada a enviar: o e-mail já foi enviado, está em andamento ou a reserva não está mais naquela turma.",
-  PENDING: "Não foi possível enviar agora. O envio ficou pendente e será tentado de novo.",
+  PENDING: "Não foi possível enviar agora: o cliente continua sem a confirmação. O envio ficou pendente.",
   DISABLED: "O e-mail de reagendamento não está ativado neste ambiente.",
 } as const;
 

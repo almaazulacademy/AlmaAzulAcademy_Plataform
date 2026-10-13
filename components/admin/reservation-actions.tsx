@@ -14,7 +14,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { reservationMessage, withErrorCode } from "@/lib/admin/format";
 import { isPaymentSettledStatus, type ReservationStatus } from "@/lib/reservations/types";
 
-type Action = "confirm" | "cancel" | "resendQr" | null;
+type Action = "confirm" | "cancel" | "resendQr" | "resendReschedule" | null;
 type ApiPayload = { message?: string };
 type VerifyPayload = { success?: boolean; outcome?: string; message?: string };
 type SyncPayload = { success?: boolean; outcome?: string; errorCode?: string; message?: string };
@@ -31,8 +31,12 @@ type SyncPayload = { success?: boolean; outcome?: string; errorCode?: string; me
 export type ReservationStandbyControls = {
   entry?: StandbyEntrySummary;
   hasActiveLink?: boolean;
-  /** true quando o e-mail do reagendamento mais recente ainda não saiu. */
-  rescheduleEmailResend?: boolean;
+  /**
+   * Presente quando o e-mail do reagendamento mais recente ainda não saiu.
+   * "CONFIRM" é a entrega não confirmada: reenviar pode duplicar, então o botão
+   * pede confirmação antes.
+   */
+  rescheduleEmailResend?: "DIRECT" | "CONFIRM";
 };
 
 export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false, showSheetSync = false, showEmailResend = false, showQrResend = false, standby }: {
@@ -126,6 +130,7 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   // Reenvia a confirmação do reagendamento mais recente. Outra fila, mesma
   // regra: quem decide é o banco, e o que já saiu não sai de novo.
   const resendRescheduleEmail = async () => {
+    setAction(null);
     setResendingReschedule(true);
     try {
       const response = await fetch(`/api/admin/reservations/${reservationId}/standby/reschedule-email`, { method: "POST" });
@@ -248,7 +253,7 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
           </Button>
         ) : null}
         {standby?.rescheduleEmailResend ? (
-          <Button type="button" size="sm" variant="ghost" disabled={resendingReschedule} onClick={resendRescheduleEmail}>
+          <Button type="button" size="sm" variant="outline" disabled={resendingReschedule} onClick={standby.rescheduleEmailResend === "CONFIRM" ? () => setAction("resendReschedule") : resendRescheduleEmail}>
             <MailCheck className="size-4" /> {resendingReschedule ? "Enviando…" : "Reenviar e-mail de reagendamento"}
           </Button>
         ) : null}
@@ -283,6 +288,14 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
         tone="neutral"
         onClose={() => setAction(null)}
         onConfirm={resendQr}
+      />
+      <ConfirmationDialog
+        open={action === "resendReschedule"}
+        title="Reenviar sem saber se o cliente já recebeu?"
+        description="O último envio ficou sem resposta do provedor e já não há como confirmar se o e-mail saiu. Se ele saiu, o cliente vai receber a confirmação duas vezes. Confirme com o cliente antes, se puder."
+        confirmLabel="Reenviar mesmo assim"
+        onClose={() => setAction(null)}
+        onConfirm={resendRescheduleEmail}
       />
       <ConfirmationDialog
         open={action === "confirm"}

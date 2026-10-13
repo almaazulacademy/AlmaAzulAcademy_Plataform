@@ -18,7 +18,7 @@ import { fieldErrorClass, inputClass, labelClass, textareaClass } from "@/compon
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/admin/format";
-import { rescheduleEmailNotice, restoreRejectionMessage, type StandbyOption, type StandbyOptions } from "@/lib/admin/standby";
+import { rescheduleEmailNeedsAttention, rescheduleEmailNotice, restoreRejectionMessage, type StandbyOption, type StandbyOptions } from "@/lib/admin/standby";
 import { groupSessionsByDay } from "@/lib/sessions/choice";
 import { formatSessionDateShort, formatSessionTime } from "@/lib/sessions/date-time";
 
@@ -324,9 +324,13 @@ export function RescheduleStandbyDialog({ open, reservationId, onClose }: {
       });
       const payload = await response.json().catch(() => ({})) as ApiPayload;
       if (!response.ok) throw new Error(payload.message ?? "Não foi possível reagendar a reserva.");
+      // A reserva foi reagendada nos dois casos. O que muda é o destaque: quando
+      // o e-mail não saiu, o aviso vem como alerta, não como sucesso.
+      const attention = rescheduleEmailNeedsAttention(payload.email?.outcome);
       notify({
-        title: "Reserva reagendada",
+        title: attention ? "Reagendada — cliente ainda não avisado" : "Reserva reagendada",
         description: `A reserva passou para ${selected.experienceTitle} · ${turmaLabel(selected.startsAt)}. ${rescheduleEmailNotice(payload.email?.outcome)}`,
+        variant: attention ? "error" : undefined,
       });
       onClose();
       router.refresh();

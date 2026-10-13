@@ -14,9 +14,9 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import test, { beforeEach } from "node:test";
 
-import { rescheduleEmailNotice } from "../lib/admin/standby.ts";
-import { EmailProviderError, sanitizeEmailErrorCode, type EmailMessage } from "../lib/email/email-provider.ts";
-import { ResendProvider, resendIdempotencyKey } from "../lib/email/resend.ts";
+import { rescheduleEmailNeedsAttention, rescheduleEmailNotice } from "../lib/admin/standby.ts";
+import { EmailProviderError, emailDeliveryOf } from "../lib/email/email-provider.ts";
+import { ResendProvider } from "../lib/email/resend.ts";
 import {
   buildReservationConfirmationEmail,
   buildReservationRescheduleEmail,
@@ -44,44 +44,53 @@ import {
 } from "../lib/reservations/reschedule-email.ts";
 import { applyMigration, fullDatabase } from "./support/full-database.ts";
 import { createPgliteAdmin } from "./support/pglite-admin.ts";
+import {
+  ADMIN,
+  fakeResend,
+  INSTRUCTOR,
+  LEASE_MINUTES,
+  MAX_ATTEMPTS,
+  rescheduleFixtures,
+  STRANGER,
+  WINDOW_MINUTES,
+  type Query,
+  type Row,
+} from "./support/reschedule-email-fixtures.ts";
 
 const PANEL_MIGRATION = "202610140001_reservation_standby_admin_panel.sql";
 const EMAIL_MIGRATION = "202610150001_reservation_reschedule_email.sql";
 
 const QUEUE_FUNCTIONS = [
   "admin_claim_reservation_reschedule_email",
+  "admin_list_undelivered_reschedule_emails",
   "admin_reservation_reschedule_emails",
   "claim_pending_reservation_reschedule_emails",
   "claim_reservation_reschedule_email",
   "complete_reservation_reschedule_email",
   "fail_reservation_reschedule_email",
+  "freeze_reservation_reschedule_email",
 ];
 const INTERNAL_FUNCTIONS = [
   "enqueue_reservation_reschedule_email",
+  "reservation_reschedule_email_fingerprint",
   "reservation_reschedule_email_payload",
   "reservation_reschedule_email_rejection",
   "reservation_reschedule_email_take",
 ];
 
 const db = await fullDatabase();
+const query: Query = async (sql, params = []) => (await db.query(sql, params)).rows as Row[];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Row = Record<string, any>;
+const {
+  rows, one, call,
+  IMERSAO, SUNSET_CONCHA,
+  uniquePrice, makeSession, reserve, setStandby, reschedule, reservation, rescheduled,
+  emails, attempts, queueSize,
+  claimFor, claimPending, adminClaim, freeze, complete, fail, messageFor, claimAndFreeze,
+  expireLease, skipBackoff, settleQueue,
+} = await rescheduleFixtures(query);
 
-async function rows(sql: string, params: unknown[] = []): Promise<Row[]> {
-  return (await db.query(sql, params)).rows as Row[];
-}
-
-async function one(sql: string, params: unknown[] = []): Promise<Row> {
-  const result = await rows(sql, params);
-  assert.ok(result.length >= 1, `sem linhas: ${sql}`);
-  return result[0];
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function call(expression: string, params: unknown[] = []): Promise<any> {
-  return (await one(`select ${expression} as value`, params)).value;
-}
+beforeEach(settleQueue);
 
 async function rejects(promise: Promise<unknown>, pattern: RegExp) {
   await assert.rejects(promise, (error: Error) => {
@@ -90,176 +99,17 @@ async function rejects(promise: Promise<unknown>, pattern: RegExp) {
   });
 }
 
-// --- Equipe -------------------------------------------------------------------
-
-const ADMIN = "c0000000-0000-4000-8000-000000000001";
-const INSTRUCTOR = "c0000000-0000-4000-8000-000000000002";
-const STRANGER = "c0000000-0000-4000-8000-000000000003";
-
-await db.exec(`
-  insert into auth.users (id, email) values
-    ('${ADMIN}', 'admin@teste.local'), ('${INSTRUCTOR}', 'instrutor@teste.local'), ('${STRANGER}', 'estranho@teste.local');
-  insert into public.admin_users (user_id, display_name, role, is_active) values
-    ('${ADMIN}', 'Admin Teste', 'ADMIN', true),
-    ('${INSTRUCTOR}', 'Instrutor Teste', 'INSTRUCTOR', true);
-`);
-
-// --- Catálogo e fábricas ------------------------------------------------------
-
-async function experience(slug: string) {
-  return one(
-    `select e.id, e.title, b.slug as base_slug, b.name as base_name, b.address, b.meeting_point, b.maps_url
-     from public.experiences e join public.bases b on b.id = e.base_id where e.slug = $1`,
-    [slug],
-  );
-}
-
-const IMERSAO = await experience("imersao-paranoa"); // Lago Norte
-const SUNSET_CONCHA = await experience("remada-sunset-concha-acustica"); // Cápsula Bar — Concha Acústica
-
-let sequence = 0;
-
-/** Cada cenário usa um preço próprio: a régua do mesmo valor isola as turmas. */
-function uniquePrice() {
-  sequence += 1;
-  return 40_000 + sequence * 100;
-}
-
-async function makeSession(experienceId: string, options: { price: number; capacity?: number; startsIn?: string }) {
-  sequence += 1;
-  const created = await one(
-    `insert into public.sessions (experience_id, starts_at, duration_minutes, price_cents, capacity, status)
-     values ($1::uuid, now() + $2::interval + make_interval(secs => $3), 90, $4, $5, 'OPEN')
-     returning id`,
-    [experienceId, options.startsIn ?? "10 days", sequence, options.price, options.capacity ?? 6],
-  );
-  return created.id as string;
-}
-
-type Booking = { id: string; cpf: string; code: string; total: number; quantity: number; name: string; email: string };
-
-/** Reserva confirmada pelo caminho real de pagamento. */
-async function reserve(sessionId: string, quantity = 2, name?: string): Promise<Booking> {
-  sequence += 1;
-  const cpf = String(30_000_000_000 + sequence);
-  const fullName = name ?? `Cliente Reagendado ${sequence}`;
-  const email = `reagendado${sequence}@teste.local`;
-  const created = await call(
-    `public.create_pre_reservation($1::uuid, $2, $3, $4, $5, $6, null, gen_random_uuid())`,
-    [sessionId, fullName, cpf, `+55619${String(20_000_000 + sequence)}`, email, quantity],
-  );
-  const confirmed = await call(
-    `public.confirm_reservation_payment($1::uuid, 'INFINITEPAY', $2, $3, 'https://recibo.teste/1', '{}'::jsonb)`,
-    [created.reservationId, `tx-${cpf}`, created.totalCents],
-  );
-  assert.equal(confirmed, true);
-  return { id: created.reservationId, cpf, code: created.publicCode, total: created.totalCents, quantity, name: fullName, email };
-}
-
-function setStandby(reservationId: string) {
-  return call(`public.admin_set_reservation_standby($1::uuid, $2::uuid, 'Turma cancelada por mau tempo')`, [ADMIN, reservationId]);
-}
-
-/** O reagendamento que o painel usa. */
-function reschedule(reservationId: string, sessionId: string) {
-  return call(`public.admin_reschedule_standby_same_price($1::uuid, $2::uuid, $3::uuid, 'Cliente escolheu por telefone')`, [ADMIN, reservationId, sessionId]);
-}
-
-async function reservation(id: string) {
-  return one(`select * from public.reservations where id = $1::uuid`, [id]);
-}
-
-function emails(reservationId: string) {
-  return rows(`select * from public.reservation_reschedule_emails where reservation_id = $1::uuid order by created_at, id`, [reservationId]);
-}
-
-function attempts(emailId: string) {
-  return rows(`select * from public.reservation_reschedule_email_attempts where email_id = $1::uuid order by attempt`, [emailId]);
-}
-
-async function queueSize() {
-  return (await one(`select count(*)::int as n from public.reservation_reschedule_emails`)).n as number;
-}
-
-/**
- * Uma reserva confirmada, colocada em Stand-by e reagendada pelo painel para
- * uma turma de outra base. É o ponto de partida da maioria dos cenários.
- */
-async function rescheduled(options: { quantity?: number; name?: string; targetExperienceId?: string } = {}) {
-  const price = uniquePrice();
-  const origin = await makeSession(IMERSAO.id, { price });
-  const destination = await makeSession(options.targetExperienceId ?? SUNSET_CONCHA.id, { price, startsIn: "14 days" });
-  const booking = await reserve(origin, options.quantity ?? 2, options.name);
-  await setStandby(booking.id);
-  const resolution = await reschedule(booking.id, destination);
-  const [queued] = await emails(booking.id);
-  return { booking, origin, destination, price, resolution, emailId: queued.id as string, changeId: resolution.changeId as string };
-}
-
-// --- Fila e provedor de teste -------------------------------------------------
-
-const MAX_ATTEMPTS = 3;
-const LEASE_MINUTES = 15;
-
-function claimFor(changeId: string) {
-  return call(`public.claim_reservation_reschedule_email($1::uuid, $2, $3)`, [changeId, MAX_ATTEMPTS, LEASE_MINUTES]);
-}
-
-function claimPending(limit = 25) {
-  return call(`public.claim_pending_reservation_reschedule_emails($1, $2, $3)`, [limit, MAX_ATTEMPTS, LEASE_MINUTES]);
-}
-
-function complete(emailId: string, token: string) {
-  return call(`public.complete_reservation_reschedule_email($1::uuid, $2::uuid)`, [emailId, token]);
-}
-
-function fail(emailId: string, token: string, code: string) {
-  return call(`public.fail_reservation_reschedule_email($1::uuid, $2::uuid, $3)`, [emailId, token, code]);
-}
-
-/** Simula a passagem do prazo de uma reivindicação. */
-async function expireLease(emailId: string) {
-  await db.query(`update public.reservation_reschedule_emails set locked_until = now() - interval '1 minute' where id = $1::uuid and status = 'SENDING'`, [emailId]);
-}
-
-/** Encerra tudo o que ficou aberto na fila: cada cenário começa com ela vazia. */
-async function settleQueue() {
-  await db.exec(`
-    update public.reservation_reschedule_emails
-    set status = 'SKIPPED', last_error_code = 'TEST_CLEANUP', locked_until = null
-    where status in ('QUEUED', 'SENDING', 'FAILED');
-  `);
-}
-
-beforeEach(settleQueue);
-
-function fakeProvider() {
-  const sent: EmailMessage[] = [];
-  const failures: unknown[] = [];
-  return {
-    name: "FAKE",
-    sent,
-    /** As próximas chamadas falham com estes erros, na ordem. */
-    failWith(...errors: unknown[]) {
-      failures.push(...errors);
-    },
-    async send(message: EmailMessage) {
-      const failure = failures.shift();
-      if (failure) throw failure;
-      sent.push(message);
-    },
-  };
-}
+/** Sem espera entre tentativas: aqui o que se testa é a fila, não o relógio. */
+const NO_BACKOFF = [0, 0, 0, 0, 0] as const;
 
 function createRuntime() {
   const admin = createPgliteAdmin(db);
-  const provider = fakeProvider();
+  const provider = fakeResend();
   const logs: Row[] = [];
   const runtime: RescheduleEmailRuntime = {
-    queue: createRescheduleEmailQueue(admin.client, { maxAttempts: MAX_ATTEMPTS, leaseMinutes: LEASE_MINUTES }),
+    queue: createRescheduleEmailQueue(admin.client, { maxAttempts: MAX_ATTEMPTS, leaseMinutes: LEASE_MINUTES, windowMinutes: WINDOW_MINUTES, backoffSeconds: NO_BACKOFF }),
     provider,
-    sanitizeError: sanitizeEmailErrorCode,
-    log: (fields) => logs.push(fields),
+    log: (fields) => { logs.push(fields); },
   };
   return { runtime, provider, admin, logs };
 }
@@ -304,7 +154,7 @@ async function schemaSnapshot(database: typeof db) {
   };
 }
 
-test("a migration só acrescenta: duas tabelas, uma trigger e dez funções; nenhuma função anterior muda", async () => {
+test("a migration só acrescenta: duas tabelas, uma trigger e treze funções; nenhuma função anterior muda", async () => {
   const database = await fullDatabase({ until: PANEL_MIGRATION });
   const functionsBefore = await functionHashes(database);
   const schemaBefore = await schemaSnapshot(database);
@@ -348,7 +198,7 @@ test("a migration não substitui nenhuma função e não escreve em reserva, pag
   assert.doesNotMatch(sql, /\b(commit|rollback)\b/i);
 });
 
-test("ninguém da API pública executa a fila; a service role só opera pelas seis RPCs e só lê as tabelas", async () => {
+test("ninguém da API pública executa a fila; a service role só opera pelas oito RPCs e só lê as tabelas", async () => {
   for (const fn of [...QUEUE_FUNCTIONS, ...INTERNAL_FUNCTIONS]) {
     const access = await one(
       `select has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
@@ -542,7 +392,7 @@ test("se a transação do reagendamento falhar depois de gravar o histórico, na
   const { runtime, provider } = createRuntime();
   assert.deepEqual(await sendRescheduleEmailForChange(runtime, "00000000-0000-4000-8000-00000000beef"), { outcome: "SKIPPED" });
   assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "PROCESSED", processed: 0, sent: 0 });
-  assert.equal(provider.sent.length, 0);
+  assert.equal(provider.requests.length, 0);
 
   // E a mesma reserva reagenda normalmente depois.
   const done = await reschedule(booking.id, destination);
@@ -609,8 +459,8 @@ test("o e-mail de pagamento tem a fila dele, e o reagendamento não a lê nem a 
   // 1. O e-mail de pagamento enviado não bloqueia o do reagendamento.
   const { runtime, provider } = createRuntime();
   assert.deepEqual(await sendRescheduleEmailForChange(runtime, resolution.changeId), { outcome: "SENT" });
-  assert.equal(provider.sent.length, 1);
-  assert.match(provider.sent[0].subject, /^Reagendamento confirmado — /);
+  assert.equal(provider.delivered.length, 1);
+  assert.match(provider.delivered[0].subject, /^Reagendamento confirmado — /);
 
   // 2. A linha do e-mail de pagamento continua byte a byte igual…
   assert.deepEqual(await jobs(), before);
@@ -640,6 +490,8 @@ test("a reivindicação devolve o conteúdo da turma nova e ninguém mais reivin
   const claim = await claimFor(changeId);
   assert.equal(claim.emailId, emailId);
   assert.equal(claim.attempt, 1);
+  assert.equal(claim.generation, 1);
+  assert.equal(claim.message, null, "primeira tentativa: a mensagem ainda vai ser montada");
   assert.equal(claim.reservationId, booking.id);
   assert.match(claim.claimToken, /^[0-9a-f-]{36}$/);
 
@@ -665,13 +517,16 @@ test("a reivindicação devolve o conteúdo da turma nova e ninguém mais reivin
   const [row] = await emails(booking.id);
   assert.equal(row.status, "SENDING");
   assert.equal(row.attempts, 1);
+  assert.equal(row.generation, 1);
+  assert.equal(row.generation_uncertain, false);
   assert.ok(new Date(row.locked_until).getTime() > Date.now());
-  assert.deepEqual((await attempts(emailId)).map((item) => [item.attempt, item.source, item.outcome]), [[1, "RESCHEDULE", null]]);
+  assert.ok(new Date(row.locked_until).getTime() <= Date.now() + LEASE_MINUTES * 60_000 + 5_000, "o prazo é o da política");
+  assert.deepEqual((await attempts(emailId)).map((item) => [item.attempt, item.generation, item.source, item.outcome]), [[1, 1, "RESCHEDULE", null]]);
 
   // Enquanto o prazo vale: nem de novo pelo reagendamento, nem pela rotina, nem pelo painel.
   assert.equal(await claimFor(changeId), null);
   assert.deepEqual(await claimPending(), []);
-  assert.equal(await call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, 15)`, [ADMIN, booking.id]), null);
+  assert.equal(await adminClaim(booking.id), null);
   assert.equal((await emails(booking.id))[0].attempts, 1);
 
   // Concluído: definitivo.
@@ -682,7 +537,7 @@ test("a reivindicação devolve o conteúdo da turma nova e ninguém mais reivin
   assert.equal(sent.locked_until, null);
   assert.equal(await claimFor(changeId), null);
   assert.deepEqual(await claimPending(), []);
-  assert.equal(await call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, 15)`, [ADMIN, booking.id]), null);
+  assert.equal(await adminClaim(booking.id), null);
   assert.deepEqual((await attempts(emailId)).map((item) => [item.attempt, item.outcome]), [[1, "SENT"]]);
 });
 
@@ -693,7 +548,7 @@ test("reivindicações simultâneas — do reagendamento, da rotina e do painel 
     claimFor(changeId),
     claimPending(),
     claimFor(changeId),
-    call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, 15)`, [ADMIN, booking.id]),
+    adminClaim(booking.id),
     claimPending(),
     claimFor(changeId),
     claimFor(changeId),
@@ -707,57 +562,89 @@ test("reivindicações simultâneas — do reagendamento, da rotina e do painel 
   assert.equal((await attempts(row.id)).length, 1);
 });
 
-test("a ordem de travas da reivindicação: a linha da fila é travada antes de qualquer decisão", () => {
-  const sql = source(`supabase/migrations/${EMAIL_MIGRATION}`);
-  const take = sql.slice(sql.indexOf("create or replace function public.reservation_reschedule_email_take"), sql.indexOf("-- 5. Operações da fila"));
-  const lock = take.indexOf("from public.reservation_reschedule_emails where id = p_email_id for update");
-  assert.ok(lock > 0);
+test("a ordem de travas: reserva antes da fila, sempre — e a decisão só depois das duas", () => {
+  const sql = source(`supabase/migrations/${EMAIL_MIGRATION}`).replace(/--.*$/gm, "");
+  const body = (fn: string) => {
+    const start = sql.indexOf(`create or replace function public.${fn}(`);
+    assert.ok(start > 0, fn);
+    return sql.slice(start, sql.indexOf("$$;", start));
+  };
+
+  // O núcleo: reserva (compartilhado) → linha da fila → decisão.
+  const take = body("reservation_reschedule_email_take");
+  const reservationLock = take.indexOf("from public.reservations r where r.id = owner_reservation for share");
+  const queueLock = take.indexOf("from public.reservation_reschedule_emails where id = p_email_id for update skip locked");
+  assert.ok(reservationLock > 0 && queueLock > reservationLock, "a reserva é travada antes da linha da fila");
   for (const decision of ["queued.status in ('SENT', 'SKIPPED')", "queued.locked_until > now()", "reservation_reschedule_email_rejection", "insert into public.reservation_reschedule_email_attempts", "set status = 'SENDING'"]) {
-    assert.ok(take.indexOf(decision) > lock, `${decision} vem depois do lock`);
+    assert.ok(take.indexOf(decision) > queueLock, `${decision} vem depois dos dois locks`);
   }
-  // A rotina nunca espera por uma linha que outra execução já pegou.
-  assert.match(sql, /order by q\.created_at, q\.id\s+limit [^\n]+\s+for update skip locked/);
-  // Concluir e falhar travam a mesma linha antes de olhar para a tentativa.
-  for (const fn of ["complete_reservation_reschedule_email", "fail_reservation_reschedule_email"]) {
-    const body = sql.slice(sql.indexOf(`create or replace function public.${fn}`));
-    assert.ok(body.indexOf("where id = p_email_id for update") < body.indexOf("reservation_reschedule_email_attempts a"), fn);
+  // A espera pela reserva tem limite: uma transação presa não segura a fila.
+  assert.match(take, /set lock_timeout = '3s'/);
+
+  // A rotina só escolhe candidatos: não trava a linha da fila antes de o núcleo
+  // travar a reserva, e uma reserva presa não derruba o lote.
+  const batch = body("claim_pending_reservation_reschedule_emails");
+  assert.doesNotMatch(batch, /for update|for share/);
+  assert.match(batch, /exception when lock_not_available then/);
+
+  // Congelar, concluir e falhar só travam a linha da fila — nunca a reserva.
+  for (const fn of ["freeze_reservation_reschedule_email", "complete_reservation_reschedule_email", "fail_reservation_reschedule_email"]) {
+    const code = body(fn);
+    assert.ok(code.indexOf("where id = p_email_id for update") < code.indexOf("reservation_reschedule_email_attempts a"), fn);
+    assert.doesNotMatch(code, /from public\.reservations[^;]*for (update|share)/, `${fn} não trava a reserva`);
+  }
+  // E nenhuma outra função da migration trava reserva ou fila.
+  for (const fn of ["claim_reservation_reschedule_email", "admin_claim_reservation_reschedule_email", "admin_reservation_reschedule_emails", "admin_list_undelivered_reschedule_emails", "reservation_reschedule_email_rejection", "reservation_reschedule_email_payload", "reservation_reschedule_email_fingerprint", "enqueue_reservation_reschedule_email"]) {
+    assert.doesNotMatch(body(fn), /for update|for share/, fn);
   }
 });
 
-test("falha: o erro é registrado como símbolo curto, a tentativa volta à fila e o teto de tentativas é respeitado", async () => {
+test("falha: o erro vira símbolo curto, a espera é respeitada e o teto de tentativas também", async () => {
   const { booking, emailId, changeId } = await rescheduled();
 
   const first = await claimFor(changeId);
   // Mesmo que a aplicação mandasse a resposta inteira do provedor, nenhum pedaço dela é gravado.
-  assert.equal(await fail(emailId, first.claimToken, 'http 422: {"message":"domain not verified","to":"cliente@exemplo.com"}'), true);
+  assert.equal(await fail(emailId, first.claimToken, 'http 422: {"message":"domain not verified","to":"cliente@exemplo.com"}', "REJECTED", 60), true);
   let [row] = await emails(booking.id);
   assert.equal(row.status, "FAILED");
   assert.equal(row.last_error_code, "UNKNOWN_ERROR");
   assert.equal(row.locked_until, null);
+  assert.ok(new Date(row.next_attempt_at).getTime() > Date.now() + 50_000, "a espera pedida foi gravada");
 
-  // Falhou: volta à fila na hora, sem esperar prazo.
+  // Dentro da espera, ninguém tenta sozinho — nem pela requisição, nem pela rotina.
+  assert.equal(await claimFor(changeId), null);
+  assert.deepEqual(await claimPending(), []);
+  assert.equal((await emails(booking.id))[0].attempts, 1);
+
+  // Passada a espera, a rotina pega.
+  await skipBackoff(emailId);
   const second = await claimPending();
   assert.equal(second.length, 1);
   assert.equal(second[0].attempt, 2);
-  await fail(emailId, second[0].claimToken, " http_429 ");
+  await fail(emailId, second[0].claimToken, " http_429 ", "REJECTED");
 
-  const third = await claimFor(changeId);
-  assert.equal(third.attempt, 3);
-  await fail(emailId, third.claimToken, "TIMEOUT");
+  for (let attempt = 3; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const claim = await claimFor(changeId);
+    assert.equal(claim.attempt, attempt);
+    await fail(emailId, claim.claimToken, "TIMEOUT", "UNKNOWN");
+  }
 
-  // Três tentativas: para de tentar sozinho.
+  // Seis tentativas: para de tentar sozinho.
   assert.equal(await claimFor(changeId), null);
   assert.deepEqual(await claimPending(), []);
   [row] = await emails(booking.id);
   assert.equal(row.status, "FAILED");
-  assert.equal(row.attempts, 3);
+  assert.equal(row.attempts, MAX_ATTEMPTS);
   assert.equal(row.last_error_code, "TIMEOUT");
   assert.deepEqual(
     (await attempts(emailId)).map((item) => [item.attempt, item.source, item.outcome, item.error_code]),
     [
-      [1, "RESCHEDULE", "FAILED", "UNKNOWN_ERROR"],
-      [2, "RETRY", "FAILED", "HTTP_429"],
-      [3, "RESCHEDULE", "FAILED", "TIMEOUT"],
+      [1, "RESCHEDULE", "REJECTED", "UNKNOWN_ERROR"],
+      [2, "RETRY", "REJECTED", "HTTP_429"],
+      [3, "RESCHEDULE", "UNKNOWN", "TIMEOUT"],
+      [4, "RESCHEDULE", "UNKNOWN", "TIMEOUT"],
+      [5, "RESCHEDULE", "UNKNOWN", "TIMEOUT"],
+      [6, "RESCHEDULE", "UNKNOWN", "TIMEOUT"],
     ],
   );
   for (const item of await attempts(emailId)) assert.ok(item.finished_at);
@@ -767,16 +654,19 @@ test("depois do teto, só uma pessoa da equipe reenvia — e isso fica na audito
   const { booking, emailId, changeId } = await rescheduled();
   for (let index = 0; index < MAX_ATTEMPTS; index += 1) {
     const claim = await claimFor(changeId);
-    await fail(emailId, claim.claimToken, "HTTP_500");
+    await fail(emailId, claim.claimToken, "HTTP_403", "REJECTED");
   }
   assert.equal(await claimFor(changeId), null);
 
-  await rejects(call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, 15)`, [INSTRUCTOR, booking.id]), /ADMIN_FORBIDDEN/);
-  await rejects(call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, 15)`, [STRANGER, booking.id]), /ADMIN_FORBIDDEN/);
+  await rejects(adminClaim(booking.id, INSTRUCTOR), /ADMIN_FORBIDDEN/);
+  await rejects(adminClaim(booking.id, STRANGER), /ADMIN_FORBIDDEN/);
   await rejects(call(`public.admin_reservation_reschedule_emails($1::uuid, $2::uuid)`, [INSTRUCTOR, booking.id]), /ADMIN_FORBIDDEN/);
+  await rejects(call(`public.admin_list_undelivered_reschedule_emails($1::uuid, 20)`, [INSTRUCTOR]), /ADMIN_FORBIDDEN/);
   assert.equal((await emails(booking.id))[0].attempts, MAX_ATTEMPTS, "quem não é da equipe não gasta tentativa");
 
-  const manual = await call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, 15)`, [ADMIN, booking.id]);
+  // Uma pessoa pedindo: sem teto e sem espera.
+  await rows(`update public.reservation_reschedule_emails set next_attempt_at = now() + interval '2 hours' where id = $1::uuid`, [emailId]);
+  const manual = await adminClaim(booking.id);
   assert.equal(manual.attempt, MAX_ATTEMPTS + 1);
   const last = (await attempts(emailId)).at(-1)!;
   assert.equal(last.source, "ADMIN");
@@ -788,23 +678,23 @@ test("depois do teto, só uma pessoa da equipe reenvia — e isso fica na audito
   );
   assert.equal(audit.length, 1);
   assert.equal(audit[0].actor_user_id, ADMIN);
-  assert.deepEqual(audit[0].metadata, { emailId, attempt: MAX_ATTEMPTS + 1 });
+  assert.deepEqual(audit[0].metadata, { emailId, attempt: MAX_ATTEMPTS + 1, generation: manual.generation, previousStatus: "FAILED" });
 
   assert.equal(await complete(emailId, manual.claimToken), true);
   assert.equal((await emails(booking.id))[0].status, "SENT");
   // Enviado: o painel não reenvia.
-  assert.equal(await call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, 15)`, [ADMIN, booking.id]), null);
+  assert.equal(await adminClaim(booking.id), null);
   const state = await call(`public.admin_reservation_reschedule_emails($1::uuid, $2::uuid)`, [ADMIN, booking.id]);
   assert.equal(state.length, 1);
   assert.equal(state[0].status, "SENT");
   assert.equal(state[0].attempts, MAX_ATTEMPTS + 1);
-  assert.deepEqual(Object.keys(state[0]).sort(), ["actorType", "attempts", "changeId", "createdAt", "emailId", "inFlight", "lastAttemptAt", "lastErrorCode", "sentAt", "standbyId", "status"]);
+  assert.deepEqual(Object.keys(state[0]).sort(), ["actorType", "attempts", "changeId", "createdAt", "emailId", "inFlight", "lastAttemptAt", "lastErrorCode", "nextAttemptAt", "sentAt", "standbyId", "status"]);
 });
 
 test("instância que morre no meio do envio: o prazo vence, a tentativa fica registrada e outra assume", async () => {
   const { booking, emailId, changeId } = await rescheduled();
 
-  const lost = await claimFor(changeId);
+  const lost = await claimAndFreeze(changeId, booking.id);
   assert.deepEqual(await claimPending(), [], "dentro do prazo, ninguém assume");
 
   await expireLease(emailId);
@@ -815,29 +705,31 @@ test("instância que morre no meio do envio: o prazo vence, a tentativa fica reg
   assert.deepEqual((await attempts(emailId)).map((item) => [item.attempt, item.outcome]), [[1, "LEASE_EXPIRED"], [2, null]]);
 
   // A falha tardia da tentativa antiga não solta o envio que está em curso.
-  assert.equal(await fail(emailId, lost.claimToken, "TIMEOUT"), true);
+  assert.equal(await fail(emailId, lost.claimToken, "TIMEOUT", "UNKNOWN"), true);
   let [row] = await emails(booking.id);
   assert.equal(row.status, "SENDING");
   assert.equal(row.attempts, 2);
-  assert.deepEqual((await attempts(emailId)).map((item) => [item.attempt, item.outcome, item.error_code]), [[1, "FAILED", "TIMEOUT"], [2, null, null]]);
+  assert.deepEqual((await attempts(emailId)).map((item) => [item.attempt, item.outcome, item.error_code]), [[1, "UNKNOWN", "TIMEOUT"], [2, null, null]]);
   assert.equal(await claimFor(changeId), null);
 
   assert.equal(await complete(emailId, retaken[0].claimToken), true);
   [row] = await emails(booking.id);
   assert.equal(row.status, "SENT");
 
-  // Um token que nunca existiu não conclui nem falha nada.
-  assert.equal(await complete(emailId, "00000000-0000-4000-8000-000000000000"), false);
-  assert.equal(await fail(emailId, "00000000-0000-4000-8000-000000000000", "X"), false);
+  // Um token que nunca existiu não congela, não conclui nem falha nada.
+  const nobody = "00000000-0000-4000-8000-000000000000";
+  assert.equal(await complete(emailId, nobody), false);
+  assert.equal(await fail(emailId, nobody, "X", "REJECTED"), false);
+  assert.equal(await freeze(emailId, nobody, await messageFor(booking.id)), false);
   // E uma falha tardia não desfaz um envio concluído.
-  assert.equal(await fail(emailId, retaken[0].claimToken, "HTTP_500"), false);
+  assert.equal(await fail(emailId, retaken[0].claimToken, "HTTP_500", "UNKNOWN"), false);
   assert.equal((await emails(booking.id))[0].status, "SENT");
 });
 
 test("a tentativa que respondeu depois do prazo e deu certo encerra o e-mail: ninguém mais envia", async () => {
   const { booking, emailId, changeId } = await rescheduled();
 
-  const slow = await claimFor(changeId);
+  const slow = await claimAndFreeze(changeId, booking.id);
   await expireLease(emailId);
   const second = await claimFor(changeId);
   assert.equal(second.attempt, 2);
@@ -847,22 +739,23 @@ test("a tentativa que respondeu depois do prazo e deu certo encerra o e-mail: ni
   let [row] = await emails(booking.id);
   assert.equal(row.status, "SENT");
   assert.equal(row.locked_until, null);
+  assert.equal(row.frozen_message, null, "concluído: a mensagem guardada é apagada");
 
-  // A segunda falha (o provedor recusou a duplicata, por exemplo): o e-mail continua enviado.
-  assert.equal(await fail(emailId, second.claimToken, "HTTP_409"), true);
+  // A segunda falha (o provedor ainda processava a primeira, por exemplo): o e-mail continua enviado.
+  assert.equal(await fail(emailId, second.claimToken, "HTTP_409", "KEY_REFUSED"), true);
   [row] = await emails(booking.id);
   assert.equal(row.status, "SENT");
   assert.equal(row.last_error_code, null);
   assert.equal(await claimFor(changeId), null);
   assert.deepEqual(await claimPending(), []);
-  assert.deepEqual((await attempts(emailId)).map((item) => [item.attempt, item.outcome]), [[1, "SENT"], [2, "FAILED"]]);
+  assert.deepEqual((await attempts(emailId)).map((item) => [item.attempt, item.outcome]), [[1, "SENT"], [2, "KEY_REFUSED"]]);
 });
 
 test("prazo vencido na última tentativa vira erro visível, e não um envio preso para sempre", async () => {
   const { booking, emailId, changeId } = await rescheduled();
   for (let index = 0; index < MAX_ATTEMPTS - 1; index += 1) {
     const claim = await claimFor(changeId);
-    await fail(emailId, claim.claimToken, "HTTP_500");
+    await fail(emailId, claim.claimToken, "HTTP_403", "REJECTED");
   }
   const last = await claimFor(changeId);
   assert.equal(last.attempt, MAX_ATTEMPTS);
@@ -876,30 +769,36 @@ test("prazo vencido na última tentativa vira erro visível, e não um envio pre
   assert.equal((await attempts(emailId)).at(-1)!.outcome, "LEASE_EXPIRED");
 
   // O erro real, quando chega atrasado, substitui o "prazo vencido".
-  assert.equal(await fail(emailId, last.claimToken, "NETWORK_ERROR"), true);
+  assert.equal(await fail(emailId, last.claimToken, "NETWORK_ERROR", "UNKNOWN"), true);
   [row] = await emails(booking.id);
   assert.equal(row.status, "FAILED");
   assert.equal(row.last_error_code, "NETWORK_ERROR");
 });
 
-test("a rotina pega o que nunca foi tentado, o que falhou e o que venceu — respeitando o limite e a ordem", async () => {
+test("a rotina pega o que nunca foi tentado, o que falhou e o que venceu — respeitando limite, ordem e espera", async () => {
   const never = await rescheduled();
   const failed = await rescheduled();
   const stale = await rescheduled();
   const inFlight = await rescheduled();
+  const waiting = await rescheduled();
 
   const failedClaim = await claimFor(failed.changeId);
-  await fail(failed.emailId, failedClaim.claimToken, "HTTP_500");
+  await fail(failed.emailId, failedClaim.claimToken, "HTTP_500", "UNKNOWN");
   await claimFor(stale.changeId);
   await expireLease(stale.emailId);
   await claimFor(inFlight.changeId);
+  const waitingClaim = await claimFor(waiting.changeId);
+  await fail(waiting.emailId, waitingClaim.claimToken, "HTTP_429", "REJECTED", 300);
 
   const firstBatch = await claimPending(2);
   assert.deepEqual(firstBatch.map((claim: Row) => claim.emailId), [never.emailId, failed.emailId], "a mais antiga primeiro");
   const secondBatch = await claimPending(10);
   assert.deepEqual(secondBatch.map((claim: Row) => claim.emailId), [stale.emailId]);
-  assert.deepEqual(await claimPending(10), [], "o envio em curso não é atropelado");
+  assert.deepEqual(await claimPending(10), [], "o envio em curso e o que ainda espera não são atropelados");
   assert.deepEqual(await claimPending(0), []);
+
+  await skipBackoff(waiting.emailId);
+  assert.deepEqual((await claimPending(10)).map((claim: Row) => claim.emailId), [waiting.emailId]);
 });
 
 // =============================================================================
@@ -940,35 +839,36 @@ test("reserva que voltou ao Stand-by, foi reagendada de novo ou trocou de turma:
 
 test("reserva cancelada depois do reagendamento não recebe o e-mail em uma tentativa posterior", async () => {
   const { booking, emailId, changeId } = await rescheduled();
-  const first = await claimFor(changeId);
-  await fail(emailId, first.claimToken, "HTTP_500");
+  const first = await claimAndFreeze(changeId, booking.id);
+  await fail(emailId, first.claimToken, "HTTP_500", "UNKNOWN");
 
   assert.equal(await call(`public.admin_cancel_reservation($1::uuid, $2::uuid, 'Cliente desistiu')`, [ADMIN, booking.id]), true);
 
   const { runtime, provider } = createRuntime();
   assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "PROCESSED", processed: 0, sent: 0 });
   assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "SKIPPED" });
-  assert.equal(provider.sent.length, 0);
+  assert.equal(provider.requests.length, 0);
   const [row] = await emails(booking.id);
   assert.deepEqual([row.status, row.last_error_code, row.attempts], ["SKIPPED", "RESERVATION_NOT_CONFIRMED", 1]);
+  assert.equal(row.frozen_message, null, "descartado: a mensagem guardada é apagada");
 });
 
 test("turma que já começou: o e-mail atrasado não sai", async () => {
   const { booking, destination, emailId, changeId } = await rescheduled();
   const first = await claimFor(changeId);
-  await fail(emailId, first.claimToken, "TIMEOUT");
+  await fail(emailId, first.claimToken, "TIMEOUT", "UNKNOWN");
 
   // A rotina só roda depois de a turma ter acontecido.
-  await db.query(`update public.sessions set starts_at = now() - interval '2 hours' where id = $1::uuid`, [destination]);
+  await rows(`update public.sessions set starts_at = now() - interval '2 hours' where id = $1::uuid`, [destination]);
 
   const { runtime, provider } = createRuntime();
   assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "PROCESSED", processed: 0, sent: 0 });
-  assert.equal(provider.sent.length, 0);
+  assert.equal(provider.requests.length, 0);
   const [row] = await emails(booking.id);
   assert.deepEqual([row.status, row.last_error_code], ["SKIPPED", "SESSION_STARTED"]);
   // SKIPPED é definitivo: nem a rotina nem o painel o reabrem.
   assert.deepEqual(await claimPending(), []);
-  assert.equal(await call(`public.admin_claim_reservation_reschedule_email($1::uuid, $2::uuid, 15)`, [ADMIN, booking.id]), null);
+  assert.equal(await adminClaim(booking.id), null);
 });
 
 // =============================================================================
@@ -981,11 +881,11 @@ test("reagendamento confirmado no banco envia um e-mail, com a turma nova e a ch
 
   assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "SENT" });
 
-  assert.equal(provider.sent.length, 1);
-  const [message] = provider.sent;
+  assert.equal(provider.delivered.length, 1);
+  const [message] = provider.delivered;
   assert.equal(message.to, booking.email);
   assert.equal(message.subject, `Reagendamento confirmado — ${booking.code}`);
-  assert.equal(message.idempotencyKey, `reschedule-confirmation/${emailId}`);
+  assert.equal(message.idempotencyKey, `reschedule-confirmation/${emailId}/1`);
 
   const target = await one(`select starts_at from public.sessions where id = $1::uuid`, [destination]);
   const expected = buildReservationRescheduleEmail(parseReservationConfirmationData({
@@ -1000,6 +900,7 @@ test("reagendamento confirmado no banco envia um e-mail, com a turma nova e a ch
   const [row] = await emails(booking.id);
   assert.equal(row.status, "SENT");
   assert.equal(row.attempts, 1);
+  assert.equal(row.frozen_message, null);
   assert.deepEqual((await attempts(emailId)).map((item) => [item.source, item.outcome]), [["RESCHEDULE", "SENT"]]);
 
   // O log não leva destinatário, nome, código nem corpo.
@@ -1029,7 +930,8 @@ test("requisição repetida, clique duplo e rotina no mesmo instante: um e-mail"
     submit(), submit(), retryPendingRescheduleEmails(runtime), submit(), resendRescheduleEmail(runtime, ADMIN, booking.id),
   ]);
 
-  assert.equal(provider.sent.length, 1, "um único e-mail");
+  assert.equal(provider.requests.length, 1, "um único pedido ao provedor");
+  assert.equal(provider.delivered.length, 1, "um único e-mail");
   const senders = [first, second, third, panel].filter((result) => result.outcome === "SENT").length + routine.sent;
   assert.equal(senders, 1, "um único chamador enviou");
 
@@ -1037,7 +939,7 @@ test("requisição repetida, clique duplo e rotina no mesmo instante: um e-mail"
   for (let index = 0; index < 10; index += 1) assert.deepEqual(await submit(), { outcome: "SKIPPED" });
   assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "SKIPPED" });
   assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "SKIPPED" });
-  assert.equal(provider.sent.length, 1);
+  assert.equal(provider.requests.length, 1);
   assert.equal((await emails(booking.id)).length, 1);
 });
 
@@ -1045,39 +947,36 @@ test("provedor fora do ar: o reagendamento continua valendo, o envio fica penden
   const { booking, destination, emailId, changeId } = await rescheduled();
   const { runtime, provider, logs } = createRuntime();
 
-  provider.failWith(new EmailProviderError("HTTP_503", true));
-  assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "PENDING", errorCode: "HTTP_503" });
-  assert.equal(provider.sent.length, 0);
+  provider.next(new EmailProviderError("HTTP_429", true, "NOT_SENT"));
+  assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "PENDING", errorCode: "HTTP_429", retryable: true });
+  assert.equal(provider.delivered.length, 0);
 
   const stored = await reservation(booking.id);
   assert.equal(stored.status, "CONFIRMED", "a falha do e-mail não desfaz o reagendamento");
   assert.equal(stored.session_id, destination);
   let [row] = await emails(booking.id);
-  assert.deepEqual([row.status, row.attempts, row.last_error_code], ["FAILED", 1, "HTTP_503"]);
+  assert.deepEqual([row.status, row.attempts, row.last_error_code], ["FAILED", 1, "HTTP_429"]);
 
-  // Segunda tentativa, pela rotina: timeout.
-  const timeout = new Error("aborted");
-  timeout.name = "TimeoutError";
-  provider.failWith(timeout);
+  // Segunda tentativa, pela rotina: o pedido nem chega.
+  provider.next("lost");
   assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "PROCESSED", processed: 1, sent: 0 });
   [row] = await emails(booking.id);
-  assert.deepEqual([row.status, row.attempts, row.last_error_code], ["FAILED", 2, "TIMEOUT"]);
+  assert.deepEqual([row.status, row.attempts, row.last_error_code], ["FAILED", 2, "NETWORK_ERROR"]);
 
   // Terceira: o provedor voltou.
   assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "PROCESSED", processed: 1, sent: 1 });
-  assert.equal(provider.sent.length, 1);
-  assert.equal(provider.sent[0].idempotencyKey, `reschedule-confirmation/${emailId}`, "a mesma chave em toda tentativa");
+  assert.equal(provider.delivered.length, 1);
   [row] = await emails(booking.id);
   assert.deepEqual([row.status, row.attempts, row.last_error_code], ["SENT", 3, null]);
   assert.deepEqual(
     (await attempts(emailId)).map((item) => [item.attempt, item.source, item.outcome, item.error_code]),
-    [[1, "RESCHEDULE", "FAILED", "HTTP_503"], [2, "RETRY", "FAILED", "TIMEOUT"], [3, "RETRY", "SENT", null]],
+    [[1, "RESCHEDULE", "REJECTED", "HTTP_429"], [2, "RETRY", "UNKNOWN", "NETWORK_ERROR"], [3, "RETRY", "SENT", null]],
   );
-  assert.ok(logs.some((entry) => entry.outcome === "pending" && entry.errorCode === "HTTP_503"));
+  assert.ok(logs.some((entry) => entry.outcome === "pending" && entry.errorCode === "HTTP_429"));
 
   // Nada mais a recuperar.
   assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "PROCESSED", processed: 0, sent: 0 });
-  assert.equal(provider.sent.length, 1);
+  assert.equal(provider.delivered.length, 1);
 });
 
 test("um envio bem-sucedido leva de carona até dois pendentes; com o provedor fora, não insiste", async () => {
@@ -1086,65 +985,35 @@ test("um envio bem-sucedido leva de carona até dois pendentes; com o provedor f
   const { runtime, provider } = createRuntime();
 
   // Provedor fora: o envio principal falha e nenhuma carona é tentada.
-  provider.failWith(new EmailProviderError("HTTP_500", true));
-  assert.equal((await sendRescheduleEmailForChange(runtime, fresh.changeId)).outcome, "PENDING");
-  assert.equal(provider.sent.length, 0);
+  provider.next(new EmailProviderError("HTTP_403", false, "NOT_SENT"));
+  assert.deepEqual(await sendRescheduleEmailForChange(runtime, fresh.changeId), { outcome: "PENDING", errorCode: "HTTP_403", retryable: false });
+  assert.equal(provider.requests.length, 1);
   for (const item of old) assert.equal((await emails(item.booking.id))[0].status, "QUEUED");
 
   // Provedor de volta: o próximo reagendamento envia o dele e recupera dois.
   const next = await rescheduled();
   assert.deepEqual(await sendRescheduleEmailForChange(runtime, next.changeId), { outcome: "SENT" });
-  assert.equal(provider.sent.length, 3);
+  assert.equal(provider.delivered.length, 3);
   assert.deepEqual(
     await Promise.all([...old, fresh, next].map(async (item) => (await emails(item.booking.id))[0].status)),
     ["SENT", "SENT", "QUEUED", "FAILED", "SENT"],
   );
 });
 
-test("enviado mas não registrado: nunca vira FAILED, e a nova tentativa reusa a chave que o provedor deduplica", async () => {
-  const { booking, emailId, changeId } = await rescheduled();
-  const { runtime, provider, admin, logs } = createRuntime();
-
-  // O provedor aceita; o banco fica indisponível na hora de registrar.
-  admin.failRpc("complete_reservation_reschedule_email", { message: "connection reset" }, 3);
-  assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "SENT", errorCode: "SENT_NOT_RECORDED" });
-  assert.equal(provider.sent.length, 1);
-  assert.equal(admin.calls.rpc.filter((name) => name === "complete_reservation_reschedule_email").length, 3, "o registro é repetido");
-  assert.ok(!admin.calls.rpc.includes("fail_reservation_reschedule_email"), "um envio aceito nunca é devolvido à fila como falha");
-  assert.ok(logs.some((entry) => entry.errorCode === "SENT_NOT_RECORDED" && entry.outcome === "failed"), "o estado ambíguo é registrado em log de erro");
-
-  let [row] = await emails(booking.id);
-  assert.equal(row.status, "SENDING", "fica reivindicado até o prazo vencer");
-  assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "PROCESSED", processed: 0, sent: 0 });
-  assert.equal(provider.sent.length, 1);
-
-  // Prazo vencido: a rotina tenta de novo com a MESMA chave. No Resend, a mesma
-  // chave com o mesmo corpo devolve a resposta do primeiro envio em vez de
-  // entregar outra vez — é a última linha de defesa deste caso.
-  await expireLease(emailId);
-  assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "PROCESSED", processed: 1, sent: 1 });
-  assert.equal(provider.sent.length, 2);
-  assert.equal(provider.sent[1].idempotencyKey, provider.sent[0].idempotencyKey);
-  assert.equal(provider.sent[1].html, provider.sent[0].html, "mesmo corpo: é o que faz o provedor reconhecer a repetição");
-  assert.equal(provider.sent[1].text, provider.sent[0].text);
-  [row] = await emails(booking.id);
-  assert.equal(row.status, "SENT");
-});
-
 test("reserva sem e-mail utilizável: nada é enviado e o erro fica visível", async () => {
   const { booking, changeId } = await rescheduled();
-  await db.query(`update public.reservations set email = 'sem-arroba' where id = $1::uuid`, [booking.id]);
+  await rows(`update public.reservations set email = 'sem-arroba' where id = $1::uuid`, [booking.id]);
   const { runtime, provider } = createRuntime();
 
-  assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "PENDING", errorCode: "PAYLOAD_EMPTY" });
-  assert.equal(provider.sent.length, 0);
+  assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "PENDING", errorCode: "PAYLOAD_EMPTY", retryable: false });
+  assert.equal(provider.requests.length, 0);
   const [row] = await emails(booking.id);
   assert.deepEqual([row.status, row.last_error_code], ["FAILED", "PAYLOAD_EMPTY"]);
 
   // Cadastro corrigido: o reenvio pelo painel resolve.
-  await db.query(`update public.reservations set email = $2 where id = $1::uuid`, [booking.id, booking.email]);
+  await rows(`update public.reservations set email = $2 where id = $1::uuid`, [booking.id, booking.email]);
   assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "SENT" });
-  assert.equal(provider.sent[0].to, booking.email);
+  assert.equal(provider.delivered[0].to, booking.email);
 });
 
 test("banco indisponível: o envio não lança, não envia e continua na fila", async () => {
@@ -1152,14 +1021,33 @@ test("banco indisponível: o envio não lança, não envia e continua na fila", 
   const { runtime, provider, admin } = createRuntime();
 
   admin.failRpc("claim_reservation_reschedule_email", { code: "PGRST202", message: "function not found" });
-  assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "PENDING", errorCode: "CLAIM_UNAVAILABLE" });
+  assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "PENDING", errorCode: "CLAIM_UNAVAILABLE", retryable: true });
   admin.failRpc("claim_pending_reservation_reschedule_emails", { message: "timeout" });
   assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "FAILED", processed: 0, sent: 0, errorCode: "CLAIM_UNAVAILABLE" });
   admin.failRpc("admin_claim_reservation_reschedule_email", { message: "timeout" });
-  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "PENDING", errorCode: "CLAIM_UNAVAILABLE" });
+  assert.deepEqual(await resendRescheduleEmail(runtime, ADMIN, booking.id), { outcome: "PENDING", errorCode: "CLAIM_UNAVAILABLE", retryable: true });
 
-  assert.equal(provider.sent.length, 0);
+  assert.equal(provider.requests.length, 0);
   assert.equal((await emails(booking.id))[0].status, "QUEUED", "nada foi consumido");
+});
+
+test("se a mensagem não puder ser guardada antes do envio, nada é enviado", async () => {
+  const { booking, emailId, changeId } = await rescheduled();
+  const { runtime, provider, admin } = createRuntime();
+
+  admin.failRpc("freeze_reservation_reschedule_email", { message: "connection reset" });
+  assert.deepEqual(await sendRescheduleEmailForChange(runtime, changeId), { outcome: "PENDING", errorCode: "FREEZE_FAILED", retryable: true });
+  assert.equal(provider.requests.length, 0, "sem a mensagem gravada não há como repetir o envio com segurança");
+
+  let [row] = await emails(booking.id);
+  assert.deepEqual([row.status, row.last_error_code, row.generation_uncertain], ["FAILED", "FREEZE_FAILED", false]);
+  assert.deepEqual((await attempts(emailId)).map((item) => item.outcome), ["REJECTED"], "comprovadamente não enviado");
+
+  // Na tentativa seguinte, com o banco de volta, sai normalmente.
+  assert.deepEqual(await retryPendingRescheduleEmails(runtime), { outcome: "PROCESSED", processed: 1, sent: 1 });
+  assert.equal(provider.delivered.length, 1);
+  [row] = await emails(booking.id);
+  assert.equal(row.status, "SENT");
 });
 
 test("o QR do e-mail é o da reserva e vale na turma nova", async () => {
@@ -1168,8 +1056,8 @@ test("o QR do e-mail é o da reserva e vale na turma nova", async () => {
   await sendRescheduleEmailForChange(runtime, changeId);
 
   const token = (await reservation(booking.id)).checkin_token as string;
-  assert.ok(provider.sent[0].html.includes(`/api/checkin/qr/${token}`));
-  assert.ok(provider.sent[0].text.includes(`/checkin/${token}`));
+  assert.ok(provider.delivered[0].html.includes(`/api/checkin/qr/${token}`));
+  assert.ok(provider.delivered[0].text.includes(`/checkin/${token}`));
 
   const ticket = await call(`public.public_checkin_ticket($1::uuid)`, [token]);
   const target = await one(`select starts_at from public.sessions where id = $1::uuid`, [destination]);
@@ -1178,6 +1066,76 @@ test("o QR do e-mail é o da reserva e vale na turma nova", async () => {
   // E o check-in com esse QR registra na turma nova.
   const checked = await call(`public.admin_register_checkin($1::uuid, $2::uuid, 2, 'MANUAL', $3::uuid, false)`, [ADMIN, booking.id, destination]);
   assert.ok(checked);
+});
+
+test("do Lago Norte para o Cápsula Bar — e o caminho de volta: o e-mail é inteiro da base nova", async () => {
+  const { formatSessionDate, formatSessionTime } = await import("../lib/sessions/date-time.ts");
+  const startsAt = async (sessionId: string) => new Date((await one(`select starts_at from public.sessions where id = $1::uuid`, [sessionId])).starts_at).toISOString();
+  assert.notEqual(IMERSAO.base_id, SUNSET_CONCHA.base_id);
+  assert.equal(IMERSAO.base_slug, "lago-norte");
+  assert.equal(IMERSAO.maps_url, null, "o Lago Norte não tem link de mapa cadastrado");
+  assert.ok(SUNSET_CONCHA.maps_url && SUNSET_CONCHA.meeting_point && SUNSET_CONCHA.address);
+
+  // --- Lago Norte → Cápsula Bar ------------------------------------------------
+  const toConcha = await rescheduled({ quantity: 2, startsIn: "14 days 5 hours" });
+  const first = createRuntime();
+  assert.deepEqual(await sendRescheduleEmailForChange(first.runtime, toConcha.changeId), { outcome: "SENT" });
+  const [arrival] = first.provider.delivered;
+  const oldStart = await startsAt(toConcha.origin);
+  const newStart = await startsAt(toConcha.destination);
+  assert.notEqual(formatSessionDate(oldStart), formatSessionDate(newStart), "o cenário precisa de datas diferentes");
+
+  for (const body of [arrival.html, arrival.text]) {
+    // Tudo da turma nova…
+    assert.ok(body.includes(SUNSET_CONCHA.title), "nova experiência");
+    assert.ok(body.includes(formatSessionDate(newStart)), "nova data");
+    assert.ok(body.includes(formatSessionTime(newStart)), "novo horário");
+    assert.ok(body.includes(SUNSET_CONCHA.base_name), "nova base");
+    assert.ok(body.includes(SUNSET_CONCHA.meeting_point), "ponto de encontro da nova base");
+    assert.ok(body.includes(SUNSET_CONCHA.address), "endereço da nova base");
+    assert.ok(body.includes(SUNSET_CONCHA.maps_url), "link do mapa da nova base");
+    assert.ok(body.includes(toConcha.booking.code), "o mesmo código");
+    // …e nada da turma de onde a reserva saiu.
+    assert.ok(!body.includes(IMERSAO.title), "a experiência anterior não aparece");
+    assert.ok(!body.includes(IMERSAO.address), "o endereço do Lago Norte não aparece");
+    assert.ok(!body.includes("Lago Norte"), "a base anterior não aparece");
+    assert.ok(!body.includes(formatSessionDate(oldStart)), "a data anterior não aparece");
+  }
+  assert.match(arrival.text, new RegExp(`Base: ${SUNSET_CONCHA.base_name}`));
+  assert.match(arrival.html, new RegExp(`<a href="${SUNSET_CONCHA.maps_url.replace(/[.?]/g, "\\$&")}"`), "o botão do mapa aponta para a base nova");
+
+  // --- Cápsula Bar → Lago Norte ------------------------------------------------
+  const price = uniquePrice();
+  const origin = await makeSession(SUNSET_CONCHA.id, { price, startsIn: "9 days" });
+  const destination = await makeSession(IMERSAO.id, { price, startsIn: "16 days 3 hours" });
+  const booking = await reserve(origin, 4);
+  await setStandby(booking.id);
+  const back = await reschedule(booking.id, destination);
+  const second = createRuntime();
+  assert.deepEqual(await sendRescheduleEmailForChange(second.runtime, back.changeId), { outcome: "SENT" });
+  const [returning] = second.provider.delivered;
+  const lagoStart = await startsAt(destination);
+
+  for (const body of [returning.html, returning.text]) {
+    assert.ok(body.includes(IMERSAO.title));
+    assert.ok(body.includes(formatSessionDate(lagoStart)));
+    assert.ok(body.includes(formatSessionTime(lagoStart)));
+    assert.ok(body.includes(IMERSAO.address), "endereço do Lago Norte");
+    assert.ok(!body.includes(SUNSET_CONCHA.title));
+    assert.ok(!body.includes(SUNSET_CONCHA.address), "o endereço do Cápsula Bar não aparece");
+    assert.ok(!body.includes(SUNSET_CONCHA.meeting_point));
+    assert.ok(!body.includes("Cápsula"), "a base anterior não aparece");
+    assert.ok(!/maps\.|google\.com\/maps/.test(body), "sem link de mapa: o Lago Norte não tem um cadastrado");
+  }
+  assert.match(returning.text, /Base: Lago Norte/);
+  assert.match(returning.text, /Participantes: 4/);
+
+  // O QR é o mesmo nas duas direções: é o da reserva, não o da turma.
+  for (const [message, reservationId] of [[arrival, toConcha.booking.id], [returning, booking.id]] as const) {
+    const token = (await reservation(reservationId)).checkin_token as string;
+    assert.ok(message.html.includes(`/api/checkin/qr/${token}`));
+    assert.ok(message.text.includes(`/checkin/${token}`));
+  }
 });
 
 // =============================================================================
@@ -1312,7 +1270,7 @@ test("o e-mail de reagendamento só existe com STANDBY_RESCHEDULE_EMAIL_ENABLED=
   const gate = service.slice(service.indexOf("function runtime()"), service.indexOf("export function isRescheduleEmailActive"));
   assert.ok(gate.indexOf("!isRescheduleEmailEnabled()") < gate.indexOf("getEmailProvider()"));
   assert.ok(gate.indexOf("!isRescheduleEmailEnabled()") < gate.indexOf("getSupabaseAdminClient()"));
-  for (const fn of ["sendRescheduleConfirmationEmail", "retryPendingRescheduleConfirmationEmails", "resendRescheduleConfirmationEmail", "getRescheduleEmailStates"]) {
+  for (const fn of ["sendRescheduleConfirmationEmail", "followUpRescheduleConfirmationEmail", "retryPendingRescheduleConfirmationEmails", "resendRescheduleConfirmationEmail", "getRescheduleEmailStates", "getUndeliveredRescheduleEmails"]) {
     const body = service.slice(service.indexOf(`export async function ${fn}`));
     assert.match(body.slice(0, body.indexOf("\n}\n")), /try \{[\s\S]*runtime\(\)[\s\S]*\} catch/, `${fn} nunca lança`);
   }
@@ -1324,21 +1282,34 @@ test("só o reagendamento envia: nenhuma outra ação de Stand-by alcança o ser
   const importers = application.filter((path) => /reschedule-email-service/.test(source(path))).sort();
   assert.deepEqual(importers, [
     "app/admin/reservas/[reservationId]/page.tsx",
+    "app/admin/stand-by/page.tsx",
     "app/api/admin/reservations/[reservationId]/standby/reschedule-email/route.ts",
     "app/api/admin/reservations/[reservationId]/standby/reschedule/route.ts",
     "app/api/admin/reservations/[reservationId]/standby/route.ts",
     "app/api/cron/confirmation-emails/route.ts",
+    "app/api/cron/reschedule-emails/route.ts",
   ]);
 
   // Quem chama cada operação do serviço.
-  const callers = (fn: string) => application.filter((path) => path !== "lib/reservations/reschedule-email-service.ts" && new RegExp(`\\b${fn}\\(`).test(source(path)));
-  assert.deepEqual(callers("sendRescheduleConfirmationEmail"), ["app/api/admin/reservations/[reservationId]/standby/reschedule/route.ts"]);
+  const callers = (fn: string) => application.filter((path) => path !== "lib/reservations/reschedule-email-service.ts" && new RegExp(`\\b${fn}\\(`).test(source(path))).sort();
+  const reschedule = "app/api/admin/reservations/[reservationId]/standby/reschedule/route.ts";
+  assert.deepEqual(callers("sendRescheduleConfirmationEmail"), [reschedule]);
+  assert.deepEqual(callers("followUpRescheduleConfirmationEmail"), [reschedule]);
   assert.deepEqual(callers("resendRescheduleConfirmationEmail"), ["app/api/admin/reservations/[reservationId]/standby/reschedule-email/route.ts"]);
-  assert.deepEqual(callers("retryPendingRescheduleConfirmationEmails"), ["app/api/cron/confirmation-emails/route.ts"]);
-  // A tela e a rota de leitura só perguntam o estado: nunca enviam.
-  for (const path of ["app/admin/reservas/[reservationId]/page.tsx", "app/api/admin/reservations/[reservationId]/standby/route.ts"]) {
-    assert.doesNotMatch(source(path), /\b(sendRescheduleConfirmationEmail|resendRescheduleConfirmationEmail|retryPendingRescheduleConfirmationEmails)\b/, path);
+  // A recuperação de pendências: as duas rotas de rotina e as duas páginas do
+  // painel de Stand-by, que só a acionam depois de responder.
+  assert.deepEqual(callers("retryPendingRescheduleConfirmationEmails"), [
+    "app/admin/reservas/[reservationId]/page.tsx",
+    "app/admin/stand-by/page.tsx",
+    "app/api/cron/confirmation-emails/route.ts",
+    "app/api/cron/reschedule-emails/route.ts",
+  ]);
+  for (const page of ["app/admin/reservas/[reservationId]/page.tsx", "app/admin/stand-by/page.tsx"]) {
+    assert.match(source(page), /after\(\(\) => retryPendingRescheduleConfirmationEmails\(\)\)/, `${page}: a fila é acionada depois da resposta`);
+    assert.doesNotMatch(source(page), /await retryPendingRescheduleConfirmationEmails/, `${page}: nunca segura a página`);
   }
+  // A rota de leitura só pergunta se o e-mail está ativado: nunca envia.
+  assert.doesNotMatch(source("app/api/admin/reservations/[reservationId]/standby/route.ts"), /\b(sendRescheduleConfirmationEmail|followUpRescheduleConfirmationEmail|resendRescheduleConfirmationEmail|retryPendingRescheduleConfirmationEmails)\b/);
   for (const path of ["app/api/admin/reservations/[reservationId]/standby/undo/route.ts", "app/api/admin/reservations/[reservationId]/standby/link/route.ts", "lib/admin/standby-data.ts"]) {
     assert.doesNotMatch(source(path), /reschedule-email|RescheduleEmail|sendReservationConfirmationEmail/, `${path} não envia e-mail`);
   }
@@ -1349,6 +1320,10 @@ test("só o reagendamento envia: nenhuma outra ação de Stand-by alcança o ser
   const route = source("app/api/admin/reservations/[reservationId]/standby/reschedule/route.ts");
   assert.ok(route.indexOf("await rescheduleReservationFromStandby(") < route.indexOf("sendRescheduleConfirmationEmail(resolution.changeId)"));
   assert.ok(route.indexOf("if (!resolution) return") < route.indexOf("sendRescheduleConfirmationEmail("));
+  // As novas tentativas só acontecem depois da resposta, só quando a primeira
+  // não deu certo, e só quando repetir pode resolver.
+  assert.match(route, /if \(email\.outcome === "PENDING" && email\.retryable !== false\) \{\s+after\(\(\) => followUpRescheduleConfirmationEmail\(resolution\.changeId\)\);/);
+  assert.match(route, /export const maxDuration = 60;/);
   // E o reagendamento tradicional continua como estava: sem e-mail.
   assert.doesNotMatch(source("app/api/admin/reservations/[reservationId]/change-session/route.ts"), /reschedule-email|RescheduleEmail|sendReservationConfirmationEmail/);
 });
@@ -1369,20 +1344,32 @@ test("o e-mail de pagamento continua exatamente como era", () => {
   const cron = source("app/api/cron/confirmation-emails/route.ts");
   assert.ok(cron.indexOf("await retryPendingConfirmationEmails()") < cron.indexOf("await retryPendingRescheduleConfirmationEmails()"));
   assert.match(cron, /outcome: report\.outcome,\s+processed: report\.processed,\s+sent: report\.sent,\s+errorCode: report\.errorCode,/);
-  // Nenhuma rotina agendada nova.
-  assert.deepEqual(JSON.parse(source("vercel.json")).crons.map((cron: { path: string }) => cron.path), ["/api/cron/payment-reconciliation", "/api/cron/confirmation-emails"]);
+  // Nenhuma rotina agendada nova, e nenhum horário alterado: mudar o agendamento
+  // depende de aprovação. A rota dedicada existe, mas ninguém a agenda.
+  assert.deepEqual(JSON.parse(source("vercel.json")).crons, [
+    { path: "/api/cron/payment-reconciliation", schedule: "20 12 * * *" },
+    { path: "/api/cron/confirmation-emails", schedule: "0 12 * * *" },
+  ]);
+  const dedicated = source("app/api/cron/reschedule-emails/route.ts");
+  assert.match(dedicated, /isAuthorizedCronRequest\(request, secret\)/);
+  assert.match(dedicated, /status: 503/);
+  assert.doesNotMatch(dedicated, /retryPendingConfirmationEmails/, "a rota dedicada não toca o e-mail de pagamento");
 });
 
 test("textos do painel: o que o admin lê sobre o e-mail de cada reagendamento", () => {
   assert.match(rescheduleEmailNotice("SENT"), /foi enviado ao cliente/);
-  assert.match(rescheduleEmailNotice("PENDING"), /será tentado de novo/);
+  assert.match(rescheduleEmailNotice("PENDING"), /AINDA NÃO recebeu/);
   assert.match(rescheduleEmailNotice("SKIPPED"), /já foi enviado ou está em andamento/);
   for (const unknown of ["DISABLED", "", undefined, null, "QUALQUER"]) assert.equal(rescheduleEmailNotice(unknown), "Nenhum e-mail foi enviado: avise o cliente.");
+  // Só o envio que não saiu vira alerta; os demais continuam como aviso comum.
+  assert.equal(rescheduleEmailNeedsAttention("PENDING"), true);
+  for (const calm of ["SENT", "SKIPPED", "DISABLED", undefined, null]) assert.equal(rescheduleEmailNeedsAttention(calm), false);
 
-  const base = { emailId: "e", standbyId: "s", inFlight: false, attempts: 2, lastErrorCode: null, lastAttemptAt: null, sentAt: null, createdAt: "2026-10-13T12:00:00Z" };
+  const base = { emailId: "e", standbyId: "s", inFlight: false, attempts: 2, lastErrorCode: null, lastAttemptAt: null, nextAttemptAt: null, sentAt: null, createdAt: "2026-10-13T12:00:00Z" };
   const format = (value: string | null) => `<${value}>`;
   assert.equal(rescheduleEmailSummary({ ...base, status: "SENT", sentAt: "2026-10-13T12:01:00Z" }, format), "E-mail de confirmação enviado em <2026-10-13T12:01:00Z>.");
   assert.match(rescheduleEmailSummary({ ...base, status: "FAILED", lastErrorCode: "HTTP_422" }, format), /com erro \(HTTP_422\), após 2 tentativa\(s\)/);
+  assert.match(rescheduleEmailSummary({ ...base, status: "UNCERTAIN" }, format), /não confirmada/);
   assert.match(rescheduleEmailSummary({ ...base, status: "SKIPPED", lastErrorCode: "SESSION_STARTED" }, format), /a turma começou antes do envio/);
   assert.match(rescheduleEmailSummary({ ...base, status: "SKIPPED", lastErrorCode: "SUPERSEDED" }, format), /mudou de turma de novo/);
   assert.match(rescheduleEmailSummary({ ...base, status: "SENDING", inFlight: true }, format), /em envio/);
@@ -1391,71 +1378,111 @@ test("textos do painel: o que o admin lê sobre o e-mail de cada reagendamento",
   // O botão de reenvio só aparece quando há o que reenviar.
   assert.equal(canResendRescheduleEmail({ status: "QUEUED", inFlight: false }), true);
   assert.equal(canResendRescheduleEmail({ status: "FAILED", inFlight: false }), true);
+  assert.equal(canResendRescheduleEmail({ status: "UNCERTAIN", inFlight: false }), true);
   assert.equal(canResendRescheduleEmail({ status: "SENDING", inFlight: false }), true);
   assert.equal(canResendRescheduleEmail({ status: "SENDING", inFlight: true }), false);
   assert.equal(canResendRescheduleEmail({ status: "SENT", inFlight: false }), false);
   assert.equal(canResendRescheduleEmail({ status: "SKIPPED", inFlight: false }), false);
 
   assert.equal(parseRescheduleEmailClaim(null), null);
-  assert.equal(parseRescheduleEmailClaim({ emailId: "x" }), null, "sem token não há direito de enviar");
-  assert.equal(rescheduleEmailIdempotencyKey("abc"), "reschedule-confirmation/abc");
+  assert.equal(parseRescheduleEmailClaim({ emailId: "x", generation: 1 }), null, "sem token não há direito de enviar");
+  assert.equal(parseRescheduleEmailClaim({ emailId: "x", claimToken: "t" }), null, "sem geração não há chave de idempotência");
+  assert.equal(rescheduleEmailIdempotencyKey("abc", 2), "reschedule-confirmation/abc/2");
 });
 
 // =============================================================================
-// 8. Provedor: a chave de idempotência
+// 8. Provedor: a chave de idempotência e o que cada falha diz sobre a entrega
 // =============================================================================
 
-test("Resend: a chave só vai quando informada, muda com o conteúdo e nunca aparece no e-mail de pagamento", async () => {
+async function withFetch<T>(respond: (url: string, init: RequestInit | undefined) => Response | Promise<Response>, run: (requests: Array<{ url: string; headers: Record<string, string>; body: string }>) => Promise<T>) {
   const requests: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     requests.push({ url: String(url), headers: init?.headers as Record<string, string>, body: String(init?.body) });
-    return new Response(JSON.stringify({ id: "fake" }), { status: 200 });
+    return respond(String(url), init);
   }) as typeof fetch;
-
   try {
-    const provider = new ResendProvider({ apiKey: "re_test_fake", from: "Alma Azul <teste@exemplo.com>", replyTo: null });
+    return await run(requests);
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+const RESEND = () => new ResendProvider({ apiKey: "re_test_fake", from: "Alma Azul <teste@exemplo.com>", replyTo: null });
+
+test("Resend: a chave vai exatamente como veio — nunca derivada do conteúdo — e o e-mail de pagamento segue sem ela", async () => {
+  await withFetch(() => new Response(JSON.stringify({ id: "fake" }), { status: 200 }), async (requests) => {
+    const provider = RESEND();
     const reschedule = buildReservationRescheduleEmail(CONCHA);
 
     await provider.send(buildReservationConfirmationEmail(CONCHA));
-    await provider.send({ ...reschedule, idempotencyKey: "reschedule-confirmation/abc" });
-    await provider.send({ ...reschedule, idempotencyKey: "reschedule-confirmation/abc" });
-    await provider.send({ ...reschedule, text: `${reschedule.text}\ncorrigido`, idempotencyKey: "reschedule-confirmation/abc" });
-  } finally {
-    globalThis.fetch = original;
-  }
+    await provider.send({ ...reschedule, idempotencyKey: "reschedule-confirmation/abc/1" });
+    await provider.send({ ...reschedule, text: `${reschedule.text}\ncorrigido`, to: "outro@exemplo.com", idempotencyKey: "reschedule-confirmation/abc/1" });
 
-  assert.equal(requests.length, 4);
-  for (const request of requests) assert.equal(request.url, "https://api.resend.com/emails");
+    assert.equal(requests.length, 3);
+    for (const request of requests) assert.equal(request.url, "https://api.resend.com/emails");
 
-  // E-mail de pagamento: requisição igual à de sempre, sem o cabeçalho.
-  assert.deepEqual(Object.keys(requests[0].headers).sort(), ["authorization", "content-type"]);
-  assert.deepEqual(Object.keys(JSON.parse(requests[0].body)).sort(), ["from", "html", "subject", "text", "to"]);
+    // E-mail de pagamento: requisição igual à de sempre, sem o cabeçalho.
+    assert.deepEqual(Object.keys(requests[0].headers).sort(), ["authorization", "content-type"]);
+    assert.deepEqual(Object.keys(JSON.parse(requests[0].body)).sort(), ["from", "html", "subject", "text", "to"]);
 
-  // Reagendamento: a mesma mensagem leva a mesma chave; a mensagem corrigida, outra.
-  const key = (index: number) => requests[index].headers["idempotency-key"];
-  assert.match(key(1), /^reschedule-confirmation\/abc\/[0-9a-f]{32}$/);
-  assert.equal(key(2), key(1));
-  assert.notEqual(key(3), key(1));
-  assert.equal(key(1), resendIdempotencyKey("reschedule-confirmation/abc", requests[1].body));
-  assert.ok(key(1).length <= 256, "limite do Resend");
-  // A chave não vai no corpo, e o corpo não muda por causa dela.
-  assert.ok(!requests[1].body.includes("idempotency"));
-  assert.deepEqual(Object.keys(JSON.parse(requests[1].body)).sort(), ["from", "html", "subject", "text", "to"]);
+    // Reagendamento: a mesma chave em qualquer corpo. Se a chave mudasse com o
+    // conteúdo, o provedor trataria a segunda mensagem como um e-mail novo e a
+    // entregaria — que é exatamente o que a chave existe para impedir.
+    assert.equal(requests[1].headers["idempotency-key"], "reschedule-confirmation/abc/1");
+    assert.equal(requests[2].headers["idempotency-key"], "reschedule-confirmation/abc/1");
+    assert.notEqual(requests[2].body, requests[1].body);
+    // A chave não vai no corpo, e o corpo não muda por causa dela.
+    assert.ok(!requests[1].body.includes("idempotency"));
+    assert.deepEqual(Object.keys(JSON.parse(requests[1].body)).sort(), ["from", "html", "subject", "text", "to"]);
+  });
+  assert.doesNotMatch(source("lib/email/resend.ts"), /createHash|sha256/, "nenhum resumo do conteúdo entra na chave");
 });
 
-test("Resend: 409 da chave de idempotência é falha que vale repetir", async () => {
-  const original = globalThis.fetch;
-  globalThis.fetch = (async () => new Response("{}", { status: 409 })) as typeof fetch;
-  try {
-    const provider = new ResendProvider({ apiKey: "re_test_fake", from: "Alma Azul <teste@exemplo.com>", replyTo: null });
-    await assert.rejects(
-      provider.send({ ...buildReservationRescheduleEmail(CONCHA), idempotencyKey: "k" }),
-      (error: unknown) => error instanceof EmailProviderError && error.causeCode === "HTTP_409" && error.retryable === true,
-    );
-  } finally {
-    globalThis.fetch = original;
+test("Resend: recusa comprovada, resultado desconhecido e conflito de chave são coisas diferentes", async () => {
+  const failure = async (respond: () => Response | Promise<Response>) => withFetch(respond, async () => {
+    try {
+      await RESEND().send({ ...buildReservationRescheduleEmail(CONCHA), idempotencyKey: "k" });
+    } catch (error) {
+      assert.ok(error instanceof EmailProviderError);
+      return { code: error.causeCode, delivery: error.delivery, retryable: error.retryable };
+    }
+    return assert.fail("o envio precisava falhar");
+  });
+  const status = (code: number, body = "{}") => () => new Response(body, { status: code });
+
+  // O provedor respondeu recusando: a mensagem não saiu.
+  for (const code of [400, 401, 403, 404, 422]) {
+    assert.deepEqual(await failure(status(code)), { code: `HTTP_${code}`, delivery: "NOT_SENT", retryable: false }, String(code));
   }
+  assert.deepEqual(await failure(status(429)), { code: "HTTP_429", delivery: "NOT_SENT", retryable: true }, "limite de taxa: não saiu, e vale repetir");
+
+  // Sem resposta conclusiva: pode ter saído.
+  for (const code of [408, 500, 502, 503, 504]) {
+    assert.deepEqual(await failure(status(code)), { code: `HTTP_${code}`, delivery: "UNKNOWN", retryable: true }, String(code));
+  }
+  assert.deepEqual(await failure(() => { throw new TypeError("fetch failed"); }), { code: "NETWORK_ERROR", delivery: "UNKNOWN", retryable: true });
+  assert.deepEqual(
+    await failure(() => { const timeout = new Error("aborted"); timeout.name = "TimeoutError"; throw timeout; }),
+    { code: "TIMEOUT", delivery: "UNKNOWN", retryable: true },
+  );
+
+  // 409 é o provedor recusando a chave. Os dois casos documentados só se
+  // distinguem pelo corpo da resposta, que pode citar o destinatário e por isso
+  // não é lido: o resultado é o mesmo para os dois, e nunca "não enviado".
+  for (const body of [
+    JSON.stringify({ statusCode: 409, name: "invalid_idempotent_request", message: "used with a different payload: cliente@exemplo.com" }),
+    JSON.stringify({ name: "concurrent_idempotent_requests" }),
+    "<html>bad gateway</html>",
+  ]) {
+    assert.deepEqual(await failure(status(409, body)), { code: "HTTP_409", delivery: "KEY_REFUSED", retryable: true }, body);
+  }
+  assert.doesNotMatch(source("lib/email/resend.ts"), /response\.text\(\)|response\.json\(\)|console\./, "o corpo do erro do provedor nunca é lido nem registrado");
+
+  // Um erro que não veio do provedor também é desconhecido.
+  assert.equal(emailDeliveryOf(new Error("qualquer coisa")), "UNKNOWN");
+  assert.equal(emailDeliveryOf("texto solto"), "UNKNOWN");
+  assert.equal(emailDeliveryOf(new EmailProviderError("X", false)), "UNKNOWN", "sem informação, vale o mais prudente");
 });
 
 test("nenhum teste envia e-mail de verdade nem toca o banco de produção", () => {
@@ -1467,7 +1494,7 @@ test("nenhum teste envia e-mail de verdade nem toca o banco de produção", () =
   }
   assert.doesNotMatch(code, /re_[a-zA-Z0-9]{20,}/, "nenhuma chave real do Resend");
   assert.match(code, /const db = await fullDatabase\(\);/);
-  assert.match(code, /const provider = fakeProvider\(\);/);
+  assert.match(code, /const provider = fakeResend\(\);/);
 });
 
 // =============================================================================
@@ -1515,31 +1542,19 @@ async function redefine(database: typeof db, name: string, transform: (definitio
 /** Só formatação: CRLF, tabulação e recuo diferentes. Nenhuma palavra muda. */
 const reformat = (definition: string) => definition.replace(/\n/g, "\r\n\t   ");
 
-/**
- * Um reagendamento de Stand-by completo em outro banco, pelas mesmas RPCs:
- * reserva paga → Stand-by → reagendada pelo painel.
- */
-async function seedRescheduled(database: typeof db, tag: number) {
-  const query = async (sql: string, params: unknown[] = []) => ((await database.query(sql, params)).rows[0] as Row).value;
-  const actor = `d0000000-0000-4000-8000-00000000000${tag}`;
-  await database.query(`insert into auth.users (id, email) values ($1::uuid, $2)`, [actor, `seed${tag}@teste.local`]);
-  await database.query(`insert into public.admin_users (user_id, display_name, role, is_active) values ($1::uuid, 'Seed', 'ADMIN', true)`, [actor]);
-  const experienceId = await query(`select id as value from public.experiences where slug = 'imersao-paranoa'`);
-  const session = (days: number) => query(
-    `insert into public.sessions (experience_id, starts_at, duration_minutes, price_cents, capacity, status)
-     values ($1::uuid, now() + make_interval(days => $2), 90, $3, 6, 'OPEN') returning id as value`,
-    [experienceId, days, 51_000 + tag],
-  );
-  const origin = await session(10 + tag);
-  const destination = await session(20 + tag);
-  const created = await query(
-    `select public.create_pre_reservation($1::uuid, 'Cliente Seed', $2, $3, $4, 2, null, gen_random_uuid()) as value`,
-    [origin, String(40_000_000_000 + tag), `+5561930000${String(100 + tag)}`, `seed-cliente${tag}@teste.local`],
-  );
-  await query(`select public.confirm_reservation_payment($1::uuid, 'INFINITEPAY', $2, $3, 'https://recibo.teste/1', '{}'::jsonb) as value`, [created.reservationId, `tx-seed-${tag}`, created.totalCents]);
-  await query(`select public.admin_set_reservation_standby($1::uuid, $2::uuid, 'Turma cancelada') as value`, [actor, created.reservationId]);
-  const resolution = await query(`select public.admin_reschedule_standby_same_price($1::uuid, $2::uuid, $3::uuid, null) as value`, [actor, created.reservationId, destination]);
-  return { actor, reservationId: created.reservationId as string, origin, destination, resolution };
+/** As mesmas fábricas, ligadas a outro banco. */
+function fixturesOf(database: typeof db) {
+  return rescheduleFixtures(async (sql, params = []) => (await database.query(sql, params)).rows as Row[]);
+}
+
+/** Reserva paga → Stand-by → reagendada pelo painel, sem olhar para a fila. */
+async function rescheduleOn(fx: Awaited<ReturnType<typeof fixturesOf>>) {
+  const price = fx.uniquePrice();
+  const origin = await fx.makeSession(fx.IMERSAO.id, { price });
+  const destination = await fx.makeSession(fx.IMERSAO.id, { price, startsIn: "20 days" });
+  const booking = await fx.reserve(origin);
+  await fx.setStandby(booking.id);
+  return { booking, resolution: await fx.reschedule(booking.id, destination) };
 }
 
 test("preflight: aprovado antes da migration e reprovado depois dela", async () => {
@@ -1553,9 +1568,15 @@ test("preflight: aprovado antes da migration e reprovado depois dela", async () 
   assert.match(resultOf(approved, "FUNCAO_QUE_GRAVA_O_REAGENDAMENTO"), /^reservation_standby_resolve=IDENTICA$/);
   for (const row of approved) assert.ok(["OK", "ATENCAO", "FALHOU"].includes(row.status), `${row.check_name}: ${row.status}`);
 
-  const after = failing(await diagnostic(db, PREFLIGHT));
+  const after = await diagnostic(db, PREFLIGHT);
   for (const expected of ["OBJETOS_DA_FILA_AINDA_NAO_EXISTEM=FALHOU", "STANDBY_EMAIL_PREFLIGHT_OK=FALHOU"]) {
-    assert.ok(after.includes(expected), `${expected} precisa acusar que a migration já foi aplicada`);
+    assert.ok(failing(after).includes(expected), `${expected} precisa acusar que a migration já foi aplicada`);
+  }
+  // Todo objeto que a migration cria é reconhecido pelo preflight.
+  const existing = resultOf(after, "OBJETOS_DA_FILA_AINDA_NAO_EXISTEM");
+  for (const fn of [...QUEUE_FUNCTIONS, ...INTERNAL_FUNCTIONS]) assert.ok(existing.includes(`função ${fn}`), fn);
+  for (const other of ["tabela reservation_reschedule_emails", "tabela reservation_reschedule_email_attempts", "trigger reservation_session_changes_reschedule_email"]) {
+    assert.ok(existing.includes(other), other);
   }
 
   // Sem a etapa 3, a migration não deve ser aplicada.
@@ -1596,14 +1617,15 @@ test("preflight: formatação não bloqueia; conteúdo diferente bloqueia onde i
 
 test("reagendamento anterior à migration não vira e-mail retroativo — e os dois diagnósticos dizem isso", async () => {
   const database = await fullDatabase({ until: PANEL_MIGRATION });
-  await seedRescheduled(database, 1);
+  const fx = await fixturesOf(database);
+  await rescheduleOn(fx);
 
   const before = await diagnostic(database, PREFLIGHT);
   assert.deepEqual(failing(before), ["REAGENDAMENTOS_DE_STANDBY_JA_FEITOS=ATENCAO"]);
   assert.equal(resultOf(before, "REAGENDAMENTOS_DE_STANDBY_JA_FEITOS"), "1");
 
   await applyMigration(database, EMAIL_MIGRATION);
-  assert.equal(((await database.query(`select count(*)::int as n from public.reservation_reschedule_emails`)).rows[0] as Row).n, 0, "a migration não enfileira nada");
+  assert.equal(await fx.queueSize(), 0, "a migration não enfileira nada");
 
   const after = await diagnostic(database, POSTCHECK);
   assert.deepEqual(failing(after), ["REAGENDAMENTOS_SEM_LINHA_NA_FILA=ATENCAO"]);
@@ -1614,20 +1636,32 @@ test("reagendamento anterior à migration não vira e-mail retroativo — e os d
   }
 
   // O próximo reagendamento, já com a migration, entra na fila.
-  await seedRescheduled(database, 2);
-  assert.equal(((await database.query(`select count(*)::int as n from public.reservation_reschedule_emails`)).rows[0] as Row).n, 1);
+  await rescheduleOn(fx);
+  assert.equal(await fx.queueSize(), 1);
 });
 
 test("postcheck: aprovado depois da migration, com a fila em uso; antes dela, nem roda", async () => {
+  // Um envio em curso com a mensagem guardada: estado legítimo, que o postcheck aceita.
+  const inFlight = await rescheduled();
+  await claimAndFreeze(inFlight.changeId, inFlight.booking.id);
+
   const approved = await diagnostic(db, POSTCHECK);
   assert.deepEqual(failing(approved), [], JSON.stringify(approved, null, 2));
   assert.equal(approved.at(-1)?.check_name, "STANDBY_EMAIL_POSTCHECK_OK");
   assert.equal(approved.at(-1)?.result, "0 falha(s), 0 ponto(s) de atenção");
-  assert.equal(resultOf(approved, "FUNCOES_DA_FILA_COM_A_DEFINICAO_DO_REPOSITORIO"), "todas as 10 idênticas");
-  assert.equal(resultOf(approved, "OPERACOES_EXECUTAVEIS_PELA_SERVICE_ROLE"), "6 de 6");
+  assert.equal(resultOf(approved, "FUNCOES_DA_FILA_COM_A_DEFINICAO_DO_REPOSITORIO"), "todas as 13 idênticas");
+  assert.equal(resultOf(approved, "OPERACOES_EXECUTAVEIS_PELA_SERVICE_ROLE"), "8 de 8");
+  assert.equal(resultOf(approved, "PECAS_INTERNAS_FORA_DO_ALCANCE"), "nenhuma executável pela service_role");
+  assert.equal(resultOf(approved, "REIVINDICACAO_COM_ESPERA_LIMITADA"), "lock_timeout=3s");
   assert.equal(resultOf(approved, "TRIGGER_DO_EVENTO_ATIVA"), "estado=O, depois de inserir=true, só reagendamento de Stand-by=true");
   assert.equal(resultOf(approved, "FILA_SO_TEM_REAGENDAMENTO_DE_STANDBY"), "0 linha(s) fora da regra");
+  assert.equal(resultOf(approved, "MENSAGEM_GUARDADA_SO_ENQUANTO_PRECISA"), "0 fora da regra, 1 em uso");
   assert.match(resultOf(approved, "FILA_DE_REAGENDAMENTO_POR_STATUS"), /SENT=\d+/);
+
+  // O postcheck confere exatamente as funções que a migration cria.
+  const sql = operationsFile(POSTCHECK);
+  for (const fn of QUEUE_FUNCTIONS) assert.match(sql, new RegExp(`\\('${fn}', 'OPERACAO', '[0-9a-f]{32}', '[0-9a-f]{32}'\\)`), fn);
+  for (const fn of INTERNAL_FUNCTIONS) assert.match(sql, new RegExp(`\\('${fn}', 'INTERNA', '[0-9a-f]{32}', '[0-9a-f]{32}'\\)`), fn);
 
   // Os postchecks das etapas anteriores continuam valendo com esta migration
   // aplicada. O da etapa 2 exige banco sem Stand-by em uso; o do painel, não.
@@ -1638,7 +1672,7 @@ test("postcheck: aprovado depois da migration, com a fila em uso; antes dela, ne
   await rejects(diagnostic(await fullDatabase({ until: PANEL_MIGRATION }), POSTCHECK), /reservation_reschedule_email/);
 });
 
-test("postcheck: sensível a privilégio, conteúdo, trigger e unicidade — e tolerante a formatação", async () => {
+test("postcheck: sensível a privilégio, conteúdo, trigger, espera e unicidade — e tolerante a formatação", async () => {
   const database = await fullDatabase();
   const expectFailure = async (label: string, breakIt: string, fixIt: string, expected: string) => {
     await database.exec(breakIt);
@@ -1649,23 +1683,19 @@ test("postcheck: sensível a privilégio, conteúdo, trigger e unicidade — e t
     }
     assert.deepEqual(failing(await diagnostic(database, POSTCHECK)), [], `${label}: desfeito`);
   };
+  const take = "public.reservation_reschedule_email_take(uuid, integer, integer, integer, text, uuid)";
 
-  await expectFailure(
-    "peça interna ao alcance do servidor",
-    `grant execute on function public.reservation_reschedule_email_take(uuid, integer, integer, text, uuid) to service_role;`,
-    `revoke execute on function public.reservation_reschedule_email_take(uuid, integer, integer, text, uuid) from service_role;`,
-    "PECAS_INTERNAS_FORA_DO_ALCANCE",
-  );
+  await expectFailure("peça interna ao alcance do servidor", `grant execute on function ${take} to service_role;`, `revoke execute on function ${take} from service_role;`, "PECAS_INTERNAS_FORA_DO_ALCANCE");
   await expectFailure(
     "operação executável pela API pública",
-    `grant execute on function public.claim_reservation_reschedule_email(uuid, integer, integer) to anon;`,
-    `revoke execute on function public.claim_reservation_reschedule_email(uuid, integer, integer) from anon;`,
+    `grant execute on function public.claim_reservation_reschedule_email(uuid, integer, integer, integer) to anon;`,
+    `revoke execute on function public.claim_reservation_reschedule_email(uuid, integer, integer, integer) from anon;`,
     "NENHUMA_FUNCAO_EXECUTAVEL_PELA_API_PUBLICA",
   );
   await expectFailure(
     "service role sem a operação",
-    `revoke execute on function public.complete_reservation_reschedule_email(uuid, uuid) from service_role;`,
-    `grant execute on function public.complete_reservation_reschedule_email(uuid, uuid) to service_role;`,
+    `revoke execute on function public.freeze_reservation_reschedule_email(uuid, uuid, jsonb) from service_role;`,
+    `grant execute on function public.freeze_reservation_reschedule_email(uuid, uuid, jsonb) to service_role;`,
     "OPERACOES_EXECUTAVEIS_PELA_SERVICE_ROLE",
   );
   await expectFailure(
@@ -1692,6 +1722,7 @@ test("postcheck: sensível a privilégio, conteúdo, trigger e unicidade — e t
     `create unique index reservation_reschedule_emails_change_key on public.reservation_reschedule_emails (change_id);`,
     "UM_EMAIL_POR_REAGENDAMENTO",
   );
+  await expectFailure("reivindicação sem limite de espera", `alter function ${take} reset lock_timeout;`, `alter function ${take} set lock_timeout = '3s';`, "REIVINDICACAO_COM_ESPERA_LIMITADA");
 
   // Conteúdo: um operador trocado na função central da fila reprova.
   await redefine(database, "reservation_reschedule_email_take", (definition) => definition.replace("queued.locked_until > now()", "queued.locked_until >= now()"));
@@ -1704,13 +1735,20 @@ test("postcheck: sensível a privilégio, conteúdo, trigger e unicidade — e t
   const formatted = await diagnostic(database, POSTCHECK);
   assert.deepEqual(failing(formatted), []);
   assert.equal(resultOf(formatted, "FUNCOES_DA_FILA_COM_A_DEFINICAO_DO_REPOSITORIO"), "reservation_reschedule_email_take=IDENTICA_SO_FORMATACAO");
+  assert.equal(resultOf(formatted, "REIVINDICACAO_COM_ESPERA_LIMITADA"), "lock_timeout=3s", "recriar a função preserva o limite de espera");
 });
 
 test("relatório da fila: só leitura, só contagens e ids técnicos", async () => {
   const pending = await rescheduled();
   const broken = await rescheduled();
   const claim = await claimFor(broken.changeId);
-  await fail(broken.emailId, claim.claimToken, "HTTP_422");
+  await fail(broken.emailId, claim.claimToken, "HTTP_422", "REJECTED");
+  // A chave recusada duas vezes pelo provedor: entrega não confirmada.
+  const unsure = await rescheduled();
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const refused = await claimAndFreeze(unsure.changeId, unsure.booking.id);
+    await fail(unsure.emailId, refused.claimToken, "HTTP_409", "KEY_REFUSED");
+  }
 
   const sql = operationsFile(REPORT);
   assert.ok(!/\b(insert|update|delete|alter|create|drop|grant|revoke|truncate)\b/i.test(sql.replace(/--.*$/gm, "").replace(/'[^']*'/g, "''")), "somente leitura");
@@ -1721,26 +1759,39 @@ test("relatório da fila: só leitura, só contagens e ids técnicos", async () 
   assert.equal(value("COM_ERRO"), "1");
   assert.equal(value("ULTIMOS_ERROS"), "HTTP_422 ×1");
   assert.equal(value("ESGOTADOS_AGUARDANDO_REENVIO_MANUAL"), "0");
-  assert.match(value("TENTATIVAS_REGISTRADAS") ?? "", /FAILED=\d+/);
+  assert.equal(value("ENTREGA_NAO_CONFIRMADA"), "1");
+  assert.match(value("TENTATIVAS_REGISTRADAS") ?? "", /REJECTED=\d+/);
+  assert.match(value("TENTATIVAS_REGISTRADAS") ?? "", /KEY_REFUSED=\d+/);
   assert.match(value("ABERTO_1") ?? "", new RegExp(`^reserva ${pending.booking.id} \\| QUEUED \\| tentativas=0 \\| erro=- \\|`));
   assert.match(value("ABERTO_2") ?? "", new RegExp(`^reserva ${broken.booking.id} \\| FAILED \\| tentativas=1 \\| erro=HTTP_422 \\|`));
+  assert.match(value("ABERTO_3") ?? "", new RegExp(`^reserva ${unsure.booking.id} \\| UNCERTAIN \\| tentativas=2 \\| erro=IDEMPOTENCY_CONFLICT \\|`));
   assert.ok(report.length <= 90, "cabe no limite de linhas do SQL Editor");
+  // A ordem das linhas é a do relatório, não a do banco.
+  assert.deepEqual(report.slice(0, 3).map((row) => row.check_name), ["NA_FILA", "EM_ENVIO", "PRESOS_ALEM_DO_PRAZO"]);
 
   const dump = JSON.stringify(report);
-  for (const booking of [pending.booking, broken.booking]) {
+  for (const booking of [pending.booking, broken.booking, unsure.booking]) {
     for (const secret of [booking.email, booking.name, booking.code, booking.cpf]) assert.ok(!dump.includes(secret), "nenhum dado do cliente");
   }
 });
 
 test("rollback: remove a trigger e as funções, mantém o registro, e o reagendamento volta a ser o da etapa 3", async () => {
   const database = await fullDatabase();
-  const first = await seedRescheduled(database, 1);
-  const count = async (sql: string) => ((await database.query(sql)).rows[0] as Row).n as number;
-  assert.equal(await count(`select count(*)::int as n from public.reservation_reschedule_emails`), 1);
+  const fx = await fixturesOf(database);
+  const first = await fx.rescheduled();
+  // Dois envios a meio caminho quando o rollback acontece: um com resultado
+  // desconhecido, outro recusado pelo provedor.
+  const unsure = await fx.rescheduled();
+  const unsureClaim = await fx.claimAndFreeze(unsure.changeId, unsure.booking.id);
+  await fx.fail(unsure.emailId, unsureClaim.claimToken, "TIMEOUT", "UNKNOWN");
+  const refused = await fx.rescheduled();
+  const refusedClaim = await fx.claimAndFreeze(refused.changeId, refused.booking.id);
+  await fx.fail(refused.emailId, refusedClaim.claimToken, "HTTP_403", "REJECTED");
+  assert.equal(await fx.queueSize(), 3);
   const before = await functionHashes(database);
 
   const rollback = operationsFile(ROLLBACK);
-  assert.doesNotMatch(rollback.replace(/--.*$/gm, ""), /drop table|delete from|truncate|integration_sync_jobs|public\.reservations\b/i, "o rollback não apaga dado");
+  assert.doesNotMatch(rollback.replace(/--.*$/gm, ""), /drop table|delete from|truncate|integration_sync_jobs|public\.reservations\b/i, "o rollback não apaga registro nem toca reserva");
   await database.exec(rollback);
 
   // Sobram exatamente as funções que existiam antes da migration.
@@ -1748,17 +1799,22 @@ test("rollback: remove a trigger e as funções, mantém o registro, e o reagend
   const removed = [...before.keys()].filter((fn) => !after.has(fn)).map((fn) => fn.replace(/\(.*$/, "")).sort();
   assert.deepEqual(removed, [...QUEUE_FUNCTIONS, ...INTERNAL_FUNCTIONS].sort());
   for (const [fn, hash] of after) assert.equal(before.get(fn), hash, `${fn} não pode mudar`);
-  assert.equal(await count(`select count(*)::int as n from pg_trigger where tgname = 'reservation_session_changes_reschedule_email'`), 0);
+  assert.equal((await fx.one(`select count(*)::int as n from pg_trigger where tgname = 'reservation_session_changes_reschedule_email'`)).n, 0);
 
-  // O registro do que já tinha sido enfileirado continua lá.
-  assert.equal(await count(`select count(*)::int as n from public.reservation_reschedule_emails`), 1);
+  // O registro continua lá; as mensagens guardadas, não. E o envio de resultado
+  // desconhecido passa à decisão de uma pessoa — nunca volta como "não enviado".
+  assert.equal(await fx.queueSize(), 3);
+  assert.equal((await fx.one(`select count(*)::int as n from public.reservation_reschedule_emails where frozen_message is not null`)).n, 0);
+  assert.deepEqual([(await fx.email(unsure.emailId)).status, (await fx.email(unsure.emailId)).last_error_code], ["UNCERTAIN", "ROLLED_BACK"]);
+  assert.deepEqual([(await fx.email(refused.emailId)).status, (await fx.email(refused.emailId)).last_error_code], ["FAILED", "HTTP_403"]);
+  assert.equal((await fx.email(first.emailId)).status, "QUEUED");
 
   // A etapa anterior segue inteira, e reagendar funciona — sem enfileirar.
   assert.deepEqual(failing(await diagnostic(database, "diagnostics/reservation_standby_admin_panel_postcheck.sql")), []);
-  const second = await seedRescheduled(database, 2);
+  const second = await rescheduleOn(fx);
   assert.equal(second.resolution.resolution, "RESCHEDULED");
-  assert.equal(await count(`select count(*)::int as n from public.reservation_reschedule_emails`), 1);
-  assert.equal(((await database.query(`select status from public.reservations where id = $1::uuid`, [first.reservationId])).rows[0] as Row).status, "CONFIRMED");
+  assert.equal(await fx.queueSize(), 3);
+  assert.equal((await fx.reservation(first.booking.id)).status, "CONFIRMED");
 
   // Refazer o rollback não quebra; reaplicar a migration devolve tudo.
   await database.exec(rollback);
@@ -1766,6 +1822,12 @@ test("rollback: remove a trigger e as funções, mantém o registro, e o reagend
   const restored = await diagnostic(database, POSTCHECK);
   assert.deepEqual(failing(restored), ["REAGENDAMENTOS_SEM_LINHA_NA_FILA=ATENCAO"], "o reagendamento feito sem a trigger fica sem e-mail, e o postcheck avisa");
   assert.deepEqual([...(await functionHashes(database))], [...before]);
-  await seedRescheduled(database, 3);
-  assert.equal(await count(`select count(*)::int as n from public.reservation_reschedule_emails`), 2);
+  await rescheduleOn(fx);
+  assert.equal(await fx.queueSize(), 4);
+
+  // Com a fila de volta: o recusado e o nunca tentado saem; o incerto continua esperando uma pessoa.
+  const claimed = (await fx.claimPending(25)).map((item: Row) => item.emailId).sort();
+  assert.ok(claimed.includes(first.emailId) && claimed.includes(refused.emailId));
+  assert.ok(!claimed.includes(unsure.emailId), "resultado desconhecido não volta à fila sozinho");
+  assert.equal((await fx.adminClaim(unsure.booking.id)).generation, 2, "uma pessoa reenvia, com chave nova");
 });

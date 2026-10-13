@@ -11,8 +11,10 @@
 --   EM_ENVIO (SENDING)    reivindicado. PRESOS conta os que passaram do prazo.
 --   ENVIADOS (SENT)       o provedor aceitou a mensagem.
 --   COM_ERRO (FAILED)     a última tentativa falhou; ULTIMOS_ERROS diz o motivo.
---                         ESGOTADOS já gastaram as 3 tentativas automáticas e
+--                         ESGOTADOS já gastaram as 6 tentativas automáticas e
 --                         esperam o botão "Reenviar e-mail de reagendamento".
+--   ENTREGA_NAO_CONFIRMADA (UNCERTAIN) não se sabe se o e-mail saiu e nada é
+--                         reenviado sozinho: só uma pessoa decide.
 --   NAO_ENVIADOS (SKIPPED) descartados de propósito; MOTIVOS diz por quê.
 --   ABERTO_<n>            um por e-mail ainda não resolvido, o mais antigo primeiro.
 
@@ -32,7 +34,9 @@ report as (
   union all
   select 6, 'COM_ERRO', (select count(*)::text from queue where status = 'FAILED')
   union all
-  select 7, 'ESGOTADOS_AGUARDANDO_REENVIO_MANUAL', (select count(*)::text from queue where status = 'FAILED' and attempts >= 3)
+  select 7, 'ESGOTADOS_AGUARDANDO_REENVIO_MANUAL', (select count(*)::text from queue where status = 'FAILED' and attempts >= 6)
+  union all
+  select 7.5, 'ENTREGA_NAO_CONFIRMADA', (select count(*)::text from queue where status = 'UNCERTAIN')
   union all
   select 8, 'ULTIMOS_ERROS', (select coalesce(string_agg(code || ' ×' || total, ', ' order by total desc, code), 'nenhum')
                                from (select coalesce(last_error_code, 'sem código') as code, count(*) as total from queue where status = 'FAILED' group by 1) errors)
@@ -55,7 +59,7 @@ report as (
            || ' | turma em ' || to_char(s.starts_at at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI')
   from queue q
   join public.sessions s on s.id = q.target_session_id
-  where q.status in ('QUEUED', 'SENDING', 'FAILED')
+  where q.status in ('QUEUED', 'SENDING', 'FAILED', 'UNCERTAIN')
 )
 select check_name, result from report order by position
 limit 90;

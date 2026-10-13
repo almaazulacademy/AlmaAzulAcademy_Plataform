@@ -57,12 +57,15 @@ functions as (
 ),
 new_functions(fn) as (values
     ('admin_claim_reservation_reschedule_email'),
+    ('admin_list_undelivered_reschedule_emails'),
     ('admin_reservation_reschedule_emails'),
     ('claim_pending_reservation_reschedule_emails'),
     ('claim_reservation_reschedule_email'),
     ('complete_reservation_reschedule_email'),
     ('enqueue_reservation_reschedule_email'),
     ('fail_reservation_reschedule_email'),
+    ('freeze_reservation_reschedule_email'),
+    ('reservation_reschedule_email_fingerprint'),
     ('reservation_reschedule_email_payload'),
     ('reservation_reschedule_email_rejection'),
     ('reservation_reschedule_email_take')

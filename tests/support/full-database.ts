@@ -38,7 +38,11 @@ export function migrationFiles() {
   return readdirSync(MIGRATIONS).filter((file) => file.endsWith(".sql")).sort();
 }
 
+/** O SQL de uma migration, sem a extensão que só o Supabase fornece. */
+export function migrationSql(file: string) {
+  return readFileSync(new URL(file, MIGRATIONS), "utf8").replace(/create extension if not exists pg_cron;/g, "");
+}
+
 export async function applyMigration(db: PGlite, file: string) {
-  const sql = readFileSync(new URL(file, MIGRATIONS), "utf8").replace(/create extension if not exists pg_cron;/g, "");
-  await db.exec(sql);
+  await db.exec(migrationSql(file));
 }
