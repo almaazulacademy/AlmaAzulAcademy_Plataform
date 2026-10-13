@@ -106,6 +106,7 @@ O fluxo atual usa `NEXT_PUBLIC_SUPABASE_ANON_KEY` no helper de navegador. Se a m
 | `PAYMENT_PROVIDER` | Seleção do provedor; o único valor suportado atualmente é `INFINITEPAY` |
 | `INFINITEPAY_HANDLE` | InfiniteTag da conta recebedora, sem `$` |
 | `STANDBY_ADMIN_ENABLED` | Opcional. Só o valor exato `true` liga o painel de Stand-by (menu, botões e rotas). Ausente ou com qualquer outro valor, o painel não existe. Ver [reservation-standby.md](reservation-standby.md#ativação) |
+| `STANDBY_RESCHEDULE_EMAIL_ENABLED` | Opcional. Só o valor exato `true` faz o cliente receber o e-mail de confirmação quando uma reserva em Stand-by é reagendada. Exige a migration `202610150001` e o provedor de e-mail configurado. Ausente, o reagendamento funciona igual e o e-mail fica na fila. Ver [reservation-standby.md](reservation-standby.md#ativação-do-e-mail) |
 
 Embora `INFINITEPAY_HANDLE` não seja uma chave de API no contrato atual, ela permanece server-side no código.
 

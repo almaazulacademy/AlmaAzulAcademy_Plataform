@@ -15,6 +15,8 @@ import { getStandbyHistory } from "@/lib/admin/standby-data";
 import { isUuid } from "@/lib/admin/validation";
 import { getSheetSyncState, isSheetSyncEnabled } from "@/lib/integrations/google-sheets/service";
 import { getConfirmationEmailState, isConfirmationEmailEnabled } from "@/lib/reservations/confirmation-email-service";
+import { canResendRescheduleEmail, rescheduleEmailSummary } from "@/lib/reservations/reschedule-email";
+import { getRescheduleEmailStates } from "@/lib/reservations/reschedule-email-service";
 import { formatSessionDateShort, formatSessionDateTime, formatSessionTime } from "@/lib/sessions/date-time";
 
 export const metadata = { title: "Detalhe da reserva" };
@@ -61,6 +63,10 @@ export default async function AdminReservationDetailPage({ params }: { params: P
     ? await getStandbyHistory(context.profile.userId, reservation.id).catch(() => null)
     : null;
   const openStandby = standbyHistory?.cycles.find((cycle) => cycle.open) ?? null;
+  // E-mail de confirmação de cada reagendamento, o mais recente primeiro. Vazio
+  // com o e-mail de reagendamento desligado ou sem a migration aplicada.
+  const rescheduleEmails = standbyEnabled ? await getRescheduleEmailStates(context.profile.userId, reservation.id) : [];
+  const rescheduleEmailByStandby = new Map(rescheduleEmails.map((email) => [email.standbyId, email]));
   const awaitingReschedule = reservation.status === "AWAITING_RESCHEDULE";
 
   const fields = [
@@ -197,6 +203,9 @@ export default async function AdminReservationDetailPage({ params }: { params: P
                     {cycle.resolvedReason ? ` · ${cycle.resolvedReason}` : ""}
                   </p>
                 ) : null}
+                {rescheduleEmailByStandby.has(cycle.standbyId) ? (
+                  <p className="mt-2 text-xs text-ink/50">{rescheduleEmailSummary(rescheduleEmailByStandby.get(cycle.standbyId)!, formatAdminDateTime)}</p>
+                ) : null}
                 {cycle.linkCreatedAt || cycle.linkRevokedAt ? (
                   <p className="mt-2 text-xs text-ink/50">
                     {cycle.hasActiveLink
@@ -244,6 +253,7 @@ export default async function AdminReservationDetailPage({ params }: { params: P
           ? { experienceTitle: reservation.experienceTitle, startsAt: reservation.startsAt, quantity: reservation.quantity, totalCents: reservation.totalCents, checkinBlocked: (checkin?.checkedInCount ?? 0) > 0 }
           : undefined,
         hasActiveLink: openStandby?.hasActiveLink ?? false,
+        rescheduleEmailResend: rescheduleEmails.length > 0 && canResendRescheduleEmail(rescheduleEmails[0]),
       } : undefined} /></div></section>
     </div>
   );

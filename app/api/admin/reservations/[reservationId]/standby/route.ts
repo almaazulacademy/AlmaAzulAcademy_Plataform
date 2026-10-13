@@ -4,6 +4,7 @@ import { authorizeStandbyApi, isSameOriginRequest, standbyMutationError } from "
 import { validateStandbyEntry } from "@/lib/admin/standby";
 import { getStandbyOptions, setReservationStandby } from "@/lib/admin/standby-data";
 import { isUuid } from "@/lib/admin/validation";
+import { isRescheduleEmailActive } from "@/lib/reservations/reschedule-email-service";
 
 type RouteContext = { params: Promise<{ reservationId: string }> };
 
@@ -25,7 +26,8 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const options = await getStandbyOptions(authorization.context.profile.userId, reservationId);
     if (!options) return NextResponse.json({ message: "Reserva não encontrada." }, { status: 404 });
-    return NextResponse.json(options, { headers: { "cache-control": "no-store" } });
+    // O modal diz ao admin, antes de confirmar, se o cliente será avisado por e-mail.
+    return NextResponse.json({ ...options, rescheduleEmailEnabled: isRescheduleEmailActive() }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const failure = standbyMutationError(error);
     return NextResponse.json({ message: failure.message }, { status: failure.status });

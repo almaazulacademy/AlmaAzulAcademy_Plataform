@@ -103,6 +103,8 @@ export type StandbyOptions = {
   linkCreatedAt: string | null;
   hiddenForCapacity: number;
   options: StandbyOption[];
+  /** Acrescentado pela rota: true quando reagendar envia o e-mail de confirmação. */
+  rescheduleEmailEnabled?: boolean;
 };
 
 export type StandbyEntry = {
@@ -115,6 +117,8 @@ export type StandbyEntry = {
 /** Resultado de desfazer ou reagendar. Sem dado pessoal. */
 export type StandbyResolution = {
   standbyId: string;
+  /** Linha do histórico de trocas. No reagendamento, é o que identifica o e-mail de confirmação. */
+  changeId: string;
   reservationId: string;
   publicCode: string;
   resolution: "RESCHEDULED" | "RESTORED";
@@ -296,6 +300,7 @@ export function parseStandbyResolution(value: unknown): StandbyResolution | null
   if (!row || !resolution || !asString(row.standbyId)) return null;
   return {
     standbyId: asString(row.standbyId),
+    changeId: asString(row.changeId),
     reservationId: asString(row.reservationId),
     publicCode: asString(row.publicCode),
     resolution,
@@ -474,6 +479,21 @@ const RESTORE_REJECTIONS: Record<string, string> = {
 export function restoreRejectionMessage(rejection: string | null) {
   if (!rejection) return "";
   return RESTORE_REJECTIONS[rejection] ?? "A turma original não pode receber esta reserva agora.";
+}
+
+const RESCHEDULE_EMAIL_NOTICES: Record<string, string> = {
+  SENT: "O e-mail de confirmação da nova data foi enviado ao cliente.",
+  SKIPPED: "O e-mail de confirmação deste reagendamento já foi enviado ou está em andamento.",
+  PENDING: "O e-mail de confirmação não saiu agora e será tentado de novo; acompanhe no detalhe da reserva.",
+};
+
+/**
+ * O que dizer ao admin sobre o e-mail logo depois de reagendar. Sem resultado
+ * conhecido — e-mail de reagendamento desligado, por exemplo — o aviso é o de
+ * sempre: ninguém foi avisado.
+ */
+export function rescheduleEmailNotice(outcome: string | null | undefined) {
+  return RESCHEDULE_EMAIL_NOTICES[outcome ?? ""] ?? "Nenhum e-mail foi enviado: avise o cliente.";
 }
 
 const EVENT_LABELS: Record<string, string> = {

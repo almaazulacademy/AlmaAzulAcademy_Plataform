@@ -1,5 +1,18 @@
 # Changelog
 
+## Stand-by de reservas — e-mail de confirmação do reagendamento (etapa 4 de 6, desligado por padrão)
+
+- **Nada muda em produção ao publicar este código.** O e-mail só sai com a migration `202610150001` aplicada **e** `STANDBY_RESCHEDULE_EMAIL_ENABLED=true`. Sem a variável, o serviço responde "desligado" antes de tocar no banco ou no provedor. Detalhes em [docs/reservation-standby.md](docs/reservation-standby.md#e-mail-de-reagendamento).
+- **Quando uma reserva em Stand-by é reagendada, o cliente recebe um e-mail de confirmação** com a turma nova: nome, código original, experiência, data e horário, base, endereço e link do mapa, participantes, o mesmo QR Code e o aviso de que o pagamento continua válido. Vale para o reagendamento pelo painel e, na etapa 5, pelo cliente.
+- **Não enviam e-mail:** colocar em Stand-by, gerar ou revogar link, desfazer o Stand-by e o reagendamento tradicional ("Alterar turma"). O e-mail de confirmação de pagamento não é reenviado em nenhum caso.
+- **O envio nasce no banco.** Uma trigger grava a linha da fila na mesma transação que reagenda a reserva: um evento por reagendamento efetivo, nenhum quando a transação falha, nenhum na requisição repetida.
+- **Fila própria** (`reservation_reschedule_emails`), separada da do e-mail de pagamento: reivindicação exclusiva com prazo, três tentativas automáticas, registro de cada tentativa com o código do erro, e descarte do e-mail que já não descreve a reserva (cancelada, de volta ao Stand-by, em outra turma, ou turma já iniciada).
+- **Recuperação de falhas:** carona no próximo envio bem-sucedido, a rotina diária que já existe (`/api/cron/confirmation-emails`, sem rotina nova) e o botão **Reenviar e-mail de reagendamento** no detalhe da reserva. Uma falha de envio nunca desfaz o reagendamento.
+- **Chave de idempotência no Resend** para o e-mail de reagendamento: a mesma mensagem não é entregue duas vezes em 24 horas, mesmo que o registro do envio falhe. O e-mail de pagamento continua sendo enviado sem o cabeçalho, como antes.
+- **Painel:** o modal de reagendamento e o aviso depois da ação dizem se o cliente foi notificado; o detalhe da reserva mostra o estado do e-mail de cada reagendamento.
+- Migration `202610150001_reservation_reschedule_email.sql`, **não aplicada**: duas tabelas, uma trigger em `reservation_session_changes` e dez funções. Não substitui o corpo de nenhuma função existente, não toca nenhuma linha e não mexe em `integration_sync_jobs`. Preflight, postcheck, relatório da fila e rollback em `supabase/diagnostics/reservation_reschedule_email_*.sql` e `supabase/rollback/`.
+- Fluxo de reservas, pagamento, QR, check-in, histórico de reagendamento, planilha e métricas **não foram alterados**.
+
 ## Stand-by de reservas — painel administrativo (etapa 3 de 6, desligado por padrão)
 
 - **Nada muda em produção ao publicar este código.** O painel de Stand-by só existe com `STANDBY_ADMIN_ENABLED=true` no ambiente; sem a variável não há menu, botão, página nem rota. Detalhes em [docs/reservation-standby.md](docs/reservation-standby.md#painel-administrativo).

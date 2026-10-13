@@ -15,6 +15,7 @@ import { LAGO_NORTE_LOCATION, type BaseLocation } from "../../lib/bases/location
 import {
   buildCheckinReminderEmail,
   buildReservationConfirmationEmail,
+  buildReservationRescheduleEmail,
   type ReservationConfirmationData,
 } from "../../lib/reservations/confirmation-email.ts";
 
@@ -77,8 +78,14 @@ for (const { file, data } of samples) {
     writeFileSync(`.preview/lembrete-qr-${file}.txt`, reminder.text, "utf8");
   }
 
+  // Reagendamento vindo de Stand-by: a mesma reserva, na turma nova.
+  const reschedule = buildReservationRescheduleEmail(data);
+  writeFileSync(`.preview/reagendamento-${file}.html`, reschedule.html, "utf8");
+  writeFileSync(`.preview/reagendamento-${file}.txt`, reschedule.text, "utf8");
+
   console.info(`${data.location?.baseName}`);
   console.info(`  Assunto: ${email.subject}`);
   console.info(`  HTML   : .preview/confirmacao-${file}.html`);
   console.info(`  Texto  : .preview/confirmacao-${file}.txt`);
+  console.info(`  Reagendamento: .preview/reagendamento-${file}.html (${reschedule.subject})`);
 }

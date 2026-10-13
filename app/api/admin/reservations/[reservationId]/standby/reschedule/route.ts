@@ -4,6 +4,7 @@ import { authorizeStandbyApi, isSameOriginRequest, standbyMutationError } from "
 import { validateStandbyReschedule } from "@/lib/admin/standby";
 import { rescheduleReservationFromStandby } from "@/lib/admin/standby-data";
 import { isUuid } from "@/lib/admin/validation";
+import { sendRescheduleConfirmationEmail } from "@/lib/reservations/reschedule-email-service";
 
 type RouteContext = { params: Promise<{ reservationId: string }> };
 
@@ -15,6 +16,12 @@ type RouteContext = { params: Promise<{ reservationId: string }> };
  * estar aberta, no futuro, publicada, com vagas para o grupo e custar por
  * participante exatamente o valor pago — a régua é de
  * `admin_reschedule_standby_same_price`, não deste handler.
+ *
+ * É a única ação de Stand-by que envia e-mail: depois de o reagendamento ser
+ * gravado, o cliente recebe a confirmação da nova turma. O envio parte da linha
+ * que o banco enfileirou na mesma transação — se o reagendamento falhar, não há
+ * o que enviar; se a requisição se repetir, a fila não envia de novo. Uma falha
+ * do provedor não desfaz o reagendamento: o e-mail fica pendente.
  */
 export async function POST(request: Request, context: RouteContext) {
   if (!isSameOriginRequest(request)) {
@@ -39,9 +46,10 @@ export async function POST(request: Request, context: RouteContext) {
       validation.data.targetSessionId,
       validation.data.reason,
     );
-    return resolution
-      ? NextResponse.json({ success: true, resolution })
-      : NextResponse.json({ message: "Reserva não encontrada." }, { status: 404 });
+    if (!resolution) return NextResponse.json({ message: "Reserva não encontrada." }, { status: 404 });
+
+    const email = await sendRescheduleConfirmationEmail(resolution.changeId);
+    return NextResponse.json({ success: true, resolution, email: { outcome: email.outcome } });
   } catch (error) {
     const failure = standbyMutationError(error);
     return NextResponse.json({ message: failure.message }, { status: failure.status });

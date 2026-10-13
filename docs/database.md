@@ -242,6 +242,7 @@ Não há policy pública de leitura para `reservations` ou `payment_events`; pri
 | `202610130001_reservation_status_awaiting_reschedule.sql` | Somente o valor `AWAITING_RESCHEDULE` no enum `reservation_status` |
 | `202610130002_reservation_standby.sql` | Tabela `reservation_standby`, colunas de ator e origem em `reservation_session_changes`, trigger `reservations_standby_guard`, travas nas funções de pagamento, receita com Stand-by e RPCs de Stand-by. Detalhes em [reservation-standby.md](reservation-standby.md) |
 | `202610140001_reservation_standby_admin_panel.sql` | Painel de Stand-by: cria `admin_list_standby_reservations_page`, `admin_standby_reschedule_options`, `admin_reschedule_standby_same_price` e `admin_reservation_standby_history`, e retira da service role a execução de `admin_reschedule_reservation_from_standby`. Não toca tabela, linha nem o corpo de função existente |
+| `202610150001_reservation_reschedule_email.sql` | E-mail de reagendamento vindo de Stand-by: tabelas `reservation_reschedule_emails` (fila, uma linha por reagendamento) e `reservation_reschedule_email_attempts` (registro das tentativas), trigger `reservation_session_changes_reschedule_email` e dez funções de fila. Não substitui função existente nem toca `integration_sync_jobs`. Detalhes em [reservation-standby.md](reservation-standby.md#e-mail-de-reagendamento) |
 
 ## RPCs administrativas
 

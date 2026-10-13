@@ -11,6 +11,11 @@ export type EmailMessage = {
   subject: string;
   html: string;
   text: string;
+  /**
+   * Identifica o envio para o provedor não entregar duas vezes a mesma
+   * mensagem. Opcional: sem ela, o envio é feito como sempre foi.
+   */
+  idempotencyKey?: string;
 };
 
 export interface EmailProvider {

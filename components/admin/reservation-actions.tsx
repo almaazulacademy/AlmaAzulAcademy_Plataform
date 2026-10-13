@@ -31,6 +31,8 @@ type SyncPayload = { success?: boolean; outcome?: string; errorCode?: string; me
 export type ReservationStandbyControls = {
   entry?: StandbyEntrySummary;
   hasActiveLink?: boolean;
+  /** true quando o e-mail do reagendamento mais recente ainda não saiu. */
+  rescheduleEmailResend?: boolean;
 };
 
 export function ReservationActions({ reservationId, status, fullName, phone, email, publicCode, checkoutUrl, showMessageButton = false, showSheetSync = false, showEmailResend = false, showQrResend = false, standby }: {
@@ -54,6 +56,7 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
   const [verifying, setVerifying] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [resending, setResending] = useState(false);
+  const [resendingReschedule, setResendingReschedule] = useState(false);
   const [changingSession, setChangingSession] = useState(false);
   const [settingStandby, setSettingStandby] = useState(false);
 
@@ -117,6 +120,26 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
       notify({ title: "Falha no envio", description: "Não foi possível falar com o provedor de e-mail.", variant: "error" });
     } finally {
       setResending(false);
+    }
+  };
+
+  // Reenvia a confirmação do reagendamento mais recente. Outra fila, mesma
+  // regra: quem decide é o banco, e o que já saiu não sai de novo.
+  const resendRescheduleEmail = async () => {
+    setResendingReschedule(true);
+    try {
+      const response = await fetch(`/api/admin/reservations/${reservationId}/standby/reschedule-email`, { method: "POST" });
+      const payload = await response.json().catch(() => ({})) as SyncPayload;
+      notify({
+        title: payload.success ? "E-mail enviado" : "E-mail não enviado",
+        description: withErrorCode(payload.message ?? "Não foi possível falar com o provedor de e-mail.", payload.errorCode),
+        variant: payload.success ? undefined : "error",
+      });
+      router.refresh();
+    } catch {
+      notify({ title: "Falha no envio", description: "Não foi possível falar com o provedor de e-mail.", variant: "error" });
+    } finally {
+      setResendingReschedule(false);
     }
   };
 
@@ -222,6 +245,11 @@ export function ReservationActions({ reservationId, status, fullName, phone, ema
         {showEmailResend ? (
           <Button type="button" size="sm" variant="ghost" disabled={resending} onClick={resendEmail}>
             <MailCheck className="size-4" /> {resending ? "Enviando…" : "Reenviar e-mail"}
+          </Button>
+        ) : null}
+        {standby?.rescheduleEmailResend ? (
+          <Button type="button" size="sm" variant="ghost" disabled={resendingReschedule} onClick={resendRescheduleEmail}>
+            <MailCheck className="size-4" /> {resendingReschedule ? "Enviando…" : "Reenviar e-mail de reagendamento"}
           </Button>
         ) : null}
         <Button type="button" size="sm" variant="ghost" onClick={() => copy(phone, "WhatsApp")}><MessageCircle className="size-4" /> Copiar WhatsApp</Button>
