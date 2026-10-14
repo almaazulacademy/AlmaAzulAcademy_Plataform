@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { ArrowRight, ChevronLeft, ChevronRight, Filter, Search, Users, X } from "lucide-react";
 
 import { inputClass, labelClass } from "@/components/admin/form-styles";
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { StandbyActions } from "@/components/admin/standby/standby-actions";
+import { UndeliveredRescheduleEmails } from "@/components/admin/standby/undelivered-reschedule-emails";
 import { AdminEmptyState, AdminErrorState } from "@/components/admin/states";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
@@ -12,6 +14,7 @@ import { listAdminBases } from "@/lib/admin/data";
 import { formatAdminDateTime, formatAdminPhone, formatCurrency } from "@/lib/admin/format";
 import { isStandbyAdminEnabled, parseStandbyListFilters, standbyListHref, standbyPageCount, STANDBY_PAGE_SIZE } from "@/lib/admin/standby";
 import { listStandbyReservations } from "@/lib/admin/standby-data";
+import { getUndeliveredRescheduleEmails, retryPendingRescheduleConfirmationEmails } from "@/lib/reservations/reschedule-email-service";
 import { formatSessionDateTime } from "@/lib/sessions/date-time";
 
 export const metadata = { title: "Stand-by" };
@@ -33,6 +36,13 @@ export default async function AdminStandbyPage({ searchParams }: { searchParams:
   if (!isStandbyAdminEnabled()) notFound();
   const params = await searchParams;
 
+  // Reservas já reagendadas cujo e-mail de confirmação ainda não saiu. Vazio com
+  // o e-mail de reagendamento desligado. Abrir esta página também aciona a fila,
+  // depois da resposta: o que estiver liberado para nova tentativa é enviado sem
+  // esperar a rotina do dia seguinte.
+  const undelivered = await getUndeliveredRescheduleEmails(context.profile.userId);
+  after(() => retryPendingRescheduleConfirmationEmails());
+
   try {
     const { bases } = await listAdminBases();
     const filters = parseStandbyListFilters(params, bases);
@@ -51,6 +61,8 @@ export default async function AdminStandbyPage({ searchParams }: { searchParams:
     return (
       <div>
         <AdminPageHeader eyebrow="Atendimento" title="Stand-by" description={DESCRIPTION} />
+
+        <UndeliveredRescheduleEmails pending={undelivered} />
 
         <form method="get" className="mt-8 rounded-3xl border border-ink/10 bg-white p-5 sm:p-6" aria-label="Filtros de Stand-by">
           <div className="flex items-center gap-2"><Filter className="size-4 text-lake" /><h2 className="text-sm font-semibold">Filtros</h2></div>

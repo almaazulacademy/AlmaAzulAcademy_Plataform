@@ -1,7 +1,10 @@
 name: CI
 
-# Verificação de qualidade. Não aplica migrations, não fala com o Supabase,
-# não chama a InfinitePay e não faz deploy — só instala, verifica e compila.
+# Verificação de qualidade. Não fala com o Supabase, não chama a InfinitePay e
+# não faz deploy — só instala, verifica e compila. As migrations do repositório
+# são aplicadas apenas em bancos de teste descartáveis: o Postgres em memória dos
+# testes e o contêiner `postgres` deste job, usado pelos testes de concorrência,
+# que precisam de sessões independentes. Nenhum dos dois sobrevive ao job.
 on:
   push:
     branches: [main]
@@ -24,6 +27,21 @@ jobs:
     name: Lint, tipos, testes e build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    # Postgres efêmero, só deste job. Não tem dado nenhum: cada execução dos
+    # testes cria um banco de nome aleatório nele e o apaga no fim.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
 
     steps:
       - name: Checkout
@@ -67,8 +85,13 @@ jobs:
       - name: Checagem de tipos
         run: pnpm exec tsc --noEmit
 
+      # TEST_DATABASE_URL aponta para o contêiner acima. Com ela, os testes de
+      # concorrência rodam de verdade; sem ela, no CI, eles falham em vez de serem
+      # pulados.
       - name: Testes
         run: pnpm test
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
 
       # O build não precisa de credenciais: sem Supabase configurado a aplicação
       # cai nos estados de "configuração ausente" e compila normalmente.

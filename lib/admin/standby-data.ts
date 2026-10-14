@@ -11,7 +11,9 @@
  * nenhuma destas sincronizações cria a turma original na planilha — ver
  * `lib/integrations/google-sheets/standby-guard.ts`.
  *
- * Nenhum e-mail é disparado por estas ações.
+ * Nenhum e-mail é disparado por este módulo. A confirmação do reagendamento é
+ * enviada pela rota de reagendar, depois de `rescheduleReservationFromStandby`
+ * devolver o resultado que o banco gravou.
  */
 
 import {

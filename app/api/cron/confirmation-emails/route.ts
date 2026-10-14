@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isAuthorizedCronRequest } from "@/lib/cron/authorization";
 import { retryPendingConfirmationEmails } from "@/lib/reservations/confirmation-email-service";
+import { retryPendingRescheduleConfirmationEmails } from "@/lib/reservations/reschedule-email-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,10 @@ export const dynamic = "force-dynamic";
  * ser perdida ou repetida. Nada aqui depende de execução única: a reivindicação
  * no banco é que decide quem envia, então rodar duas vezes não duplica e-mail
  * nenhum.
+ *
+ * A mesma execução recupera, em seguida, os e-mails de reagendamento vindos de
+ * Stand-by. São filas separadas: uma não lê nem escreve a outra, e a segunda
+ * nunca lança. Fica na mesma rota para não criar mais uma rotina agendada.
  */
 async function run(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();
@@ -37,11 +42,18 @@ async function run(request: Request) {
   }
 
   const report = await retryPendingConfirmationEmails();
-  const status = report.outcome === "FAILED" ? 503 : 200;
+  const reschedule = await retryPendingRescheduleConfirmationEmails();
+  const status = report.outcome === "FAILED" || reschedule.outcome === "FAILED" ? 503 : 200;
 
   // Só contadores. Nenhum e-mail, nome ou código de reserva na resposta.
   return NextResponse.json(
-    { outcome: report.outcome, processed: report.processed, sent: report.sent, errorCode: report.errorCode },
+    {
+      outcome: report.outcome,
+      processed: report.processed,
+      sent: report.sent,
+      errorCode: report.errorCode,
+      reschedule: { outcome: reschedule.outcome, processed: reschedule.processed, sent: reschedule.sent, errorCode: reschedule.errorCode },
+    },
     { status },
   );
 }

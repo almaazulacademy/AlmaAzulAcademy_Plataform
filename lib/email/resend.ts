@@ -38,6 +38,11 @@ export class ResendProvider implements EmailProvider {
         headers: {
           authorization: `Bearer ${this.configuration.apiKey}`,
           "content-type": "application/json",
+          // Só quando a mensagem traz chave. O Resend guarda a chave por 24 horas:
+          // a mesma chave com o mesmo corpo devolve a resposta do primeiro envio,
+          // sem entregar de novo. Por isso ela vai exatamente como veio — qualquer
+          // derivação do conteúdo aqui desfaria a proteção.
+          ...(message.idempotencyKey ? { "idempotency-key": message.idempotencyKey } : {}),
         },
         body: JSON.stringify({
           from: this.configuration.from,
@@ -50,17 +55,30 @@ export class ResendProvider implements EmailProvider {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (error) {
+      // Sem resposta, o pedido pode ter chegado ao provedor: resultado desconhecido.
       if (error instanceof Error && error.name === "TimeoutError") {
-        throw new EmailProviderError("TIMEOUT", true);
+        throw new EmailProviderError("TIMEOUT", true, "UNKNOWN");
       }
-      throw new EmailProviderError("NETWORK_ERROR", true);
+      throw new EmailProviderError("NETWORK_ERROR", true, "UNKNOWN");
     }
 
     if (response.ok) return;
 
     // 401/403 é chave inválida, 422 é remetente ou destinatário recusado:
     // nenhum melhora com repetição imediata. 429 e 5xx melhoram.
-    const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
-    throw new EmailProviderError(`HTTP_${response.status}`, retryable);
+    //
+    // Um 4xx é o provedor recusando o pedido: a mensagem não saiu. 408 e 5xx não
+    // dizem isso — o provedor pode ter aceitado antes de falhar.
+    //
+    // 409 só acontece com chave de idempotência, e são dois casos: outro pedido
+    // com a mesma chave ainda em curso, ou a chave já usada com outro conteúdo.
+    // Só o corpo da resposta os distingue, e ele não é lido — pode citar o
+    // destinatário. Quem enviou recebe "a chave foi recusada" e decide pelo
+    // histórico das próprias tentativas.
+    if (response.status === 409) throw new EmailProviderError("HTTP_409", true, "KEY_REFUSED");
+
+    const unknown = response.status === 408 || response.status >= 500;
+    const retryable = unknown || response.status === 429;
+    throw new EmailProviderError(`HTTP_${response.status}`, retryable, unknown ? "UNKNOWN" : "NOT_SENT");
   }
 }

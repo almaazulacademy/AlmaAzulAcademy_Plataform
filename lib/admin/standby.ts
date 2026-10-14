@@ -103,6 +103,8 @@ export type StandbyOptions = {
   linkCreatedAt: string | null;
   hiddenForCapacity: number;
   options: StandbyOption[];
+  /** Acrescentado pela rota: true quando reagendar envia o e-mail de confirmação. */
+  rescheduleEmailEnabled?: boolean;
 };
 
 export type StandbyEntry = {
@@ -115,6 +117,8 @@ export type StandbyEntry = {
 /** Resultado de desfazer ou reagendar. Sem dado pessoal. */
 export type StandbyResolution = {
   standbyId: string;
+  /** Linha do histórico de trocas. No reagendamento, é o que identifica o e-mail de confirmação. */
+  changeId: string;
   reservationId: string;
   publicCode: string;
   resolution: "RESCHEDULED" | "RESTORED";
@@ -296,6 +300,7 @@ export function parseStandbyResolution(value: unknown): StandbyResolution | null
   if (!row || !resolution || !asString(row.standbyId)) return null;
   return {
     standbyId: asString(row.standbyId),
+    changeId: asString(row.changeId),
     reservationId: asString(row.reservationId),
     publicCode: asString(row.publicCode),
     resolution,
@@ -474,6 +479,31 @@ const RESTORE_REJECTIONS: Record<string, string> = {
 export function restoreRejectionMessage(rejection: string | null) {
   if (!rejection) return "";
   return RESTORE_REJECTIONS[rejection] ?? "A turma original não pode receber esta reserva agora.";
+}
+
+const RESCHEDULE_EMAIL_NOTICES: Record<string, { text: string; delivered: boolean }> = {
+  SENT: { text: "O e-mail de confirmação da nova data foi enviado ao cliente.", delivered: true },
+  SKIPPED: { text: "O e-mail de confirmação deste reagendamento já foi enviado ou está em andamento.", delivered: true },
+  PENDING: {
+    text: "O cliente AINDA NÃO recebeu o e-mail de confirmação: o envio falhou e está sendo tentado de novo. Acompanhe no detalhe da reserva e, se a experiência for em breve, avise o cliente por outro canal.",
+    delivered: false,
+  },
+};
+
+const NO_RESCHEDULE_EMAIL = { text: "Nenhum e-mail foi enviado: avise o cliente.", delivered: false };
+
+/**
+ * O que dizer ao admin sobre o e-mail logo depois de reagendar. Sem resultado
+ * conhecido — e-mail de reagendamento desligado, por exemplo — o aviso é o de
+ * sempre: ninguém foi avisado.
+ */
+export function rescheduleEmailNotice(outcome: string | null | undefined) {
+  return (RESCHEDULE_EMAIL_NOTICES[outcome ?? ""] ?? NO_RESCHEDULE_EMAIL).text;
+}
+
+/** true quando o aviso precisa de destaque: a reserva foi reagendada e o e-mail não saiu. */
+export function rescheduleEmailNeedsAttention(outcome: string | null | undefined) {
+  return outcome === "PENDING";
 }
 
 const EVENT_LABELS: Record<string, string> = {

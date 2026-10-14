@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { after } from "next/server";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
 
 import { ReservationActions } from "@/components/admin/reservation-actions";
 import { StatusBadge } from "@/components/admin/status-badge";
@@ -15,6 +16,8 @@ import { getStandbyHistory } from "@/lib/admin/standby-data";
 import { isUuid } from "@/lib/admin/validation";
 import { getSheetSyncState, isSheetSyncEnabled } from "@/lib/integrations/google-sheets/service";
 import { getConfirmationEmailState, isConfirmationEmailEnabled } from "@/lib/reservations/confirmation-email-service";
+import { canResendRescheduleEmail, rescheduleEmailAlert, rescheduleEmailSummary } from "@/lib/reservations/reschedule-email";
+import { getRescheduleEmailStates, retryPendingRescheduleConfirmationEmails } from "@/lib/reservations/reschedule-email-service";
 import { formatSessionDateShort, formatSessionDateTime, formatSessionTime } from "@/lib/sessions/date-time";
 
 export const metadata = { title: "Detalhe da reserva" };
@@ -61,6 +64,17 @@ export default async function AdminReservationDetailPage({ params }: { params: P
     ? await getStandbyHistory(context.profile.userId, reservation.id).catch(() => null)
     : null;
   const openStandby = standbyHistory?.cycles.find((cycle) => cycle.open) ?? null;
+  // E-mail de confirmação de cada reagendamento, o mais recente primeiro. Vazio
+  // com o e-mail de reagendamento desligado ou sem a migration aplicada.
+  const rescheduleEmails = standbyEnabled ? await getRescheduleEmailStates(context.profile.userId, reservation.id) : [];
+  const rescheduleEmailByStandby = new Map(rescheduleEmails.map((email) => [email.standbyId, email]));
+  // Só o reagendamento mais recente importa para o aviso: é ele que descreve a
+  // turma em que a reserva está. E só enquanto a reserva está confirmada.
+  const latestRescheduleEmail = reservation.status === "CONFIRMED" ? rescheduleEmails[0] ?? null : null;
+  const rescheduleEmailWarning = latestRescheduleEmail ? rescheduleEmailAlert(latestRescheduleEmail, formatAdminDateTime) : null;
+  // Abrir o detalhe aciona a fila depois da resposta: uma tentativa já liberada
+  // não espera a rotina do dia seguinte.
+  if (standbyEnabled && rescheduleEmailWarning) after(() => retryPendingRescheduleConfirmationEmails());
   const awaitingReschedule = reservation.status === "AWAITING_RESCHEDULE";
 
   const fields = [
@@ -96,6 +110,15 @@ export default async function AdminReservationDetailPage({ params }: { params: P
         <h1 className="mt-4 text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">{reservation.fullName}</h1>
         <p className="mt-3 font-mono text-sm tracking-wide text-lake">{reservation.publicCode}</p>
       </header>
+      {rescheduleEmailWarning ? (
+        <section role="alert" className="mt-6 flex items-start gap-3 rounded-3xl border border-amber-300 bg-amber-50 p-5">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-700" aria-hidden />
+          <div>
+            <h2 className="text-sm font-semibold text-amber-950">{rescheduleEmailWarning.title}</h2>
+            <p className="mt-1 text-sm leading-6 text-amber-900/80">{rescheduleEmailWarning.description}</p>
+          </div>
+        </section>
+      ) : null}
       <dl className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Dados da reserva">
         {fields.map(([label, value]) => <div key={label} className="rounded-3xl border border-ink/10 bg-white p-5"><dt className="text-xs font-medium text-ink/45">{label}</dt><dd className="mt-2 break-words text-sm font-semibold leading-6 text-ink">{value}</dd></div>)}
       </dl>
@@ -197,6 +220,9 @@ export default async function AdminReservationDetailPage({ params }: { params: P
                     {cycle.resolvedReason ? ` · ${cycle.resolvedReason}` : ""}
                   </p>
                 ) : null}
+                {rescheduleEmailByStandby.has(cycle.standbyId) ? (
+                  <p className="mt-2 text-xs text-ink/50">{rescheduleEmailSummary(rescheduleEmailByStandby.get(cycle.standbyId)!, formatAdminDateTime)}</p>
+                ) : null}
                 {cycle.linkCreatedAt || cycle.linkRevokedAt ? (
                   <p className="mt-2 text-xs text-ink/50">
                     {cycle.hasActiveLink
@@ -244,6 +270,9 @@ export default async function AdminReservationDetailPage({ params }: { params: P
           ? { experienceTitle: reservation.experienceTitle, startsAt: reservation.startsAt, quantity: reservation.quantity, totalCents: reservation.totalCents, checkinBlocked: (checkin?.checkedInCount ?? 0) > 0 }
           : undefined,
         hasActiveLink: openStandby?.hasActiveLink ?? false,
+        rescheduleEmailResend: latestRescheduleEmail && canResendRescheduleEmail(latestRescheduleEmail)
+          ? (latestRescheduleEmail.status === "UNCERTAIN" ? "CONFIRM" : "DIRECT")
+          : undefined,
       } : undefined} /></div></section>
     </div>
   );

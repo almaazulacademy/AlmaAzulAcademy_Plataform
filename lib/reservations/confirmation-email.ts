@@ -603,6 +603,145 @@ ${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETIN
   return { to: data.email, subject: checkinReminderSubject(data.experienceTitle), html, text };
 }
 
+// --- Confirmação de reagendamento (Stand-by) --------------------------------
+
+/** O código é o da reserva original: reagendar não cria reserva nova. */
+export function rescheduleConfirmationSubject(publicCode: string) {
+  return `Reagendamento confirmado — ${publicCode}`;
+}
+
+export const RESCHEDULE_HEADING = "Reagendamento confirmado";
+
+export const RESCHEDULE_INTRO =
+  "Sua reserva foi reagendada e está confirmada. Confira os novos detalhes da sua experiência:";
+
+/** O que mais gera dúvida depois de um reagendamento: se é preciso pagar de novo. */
+export const RESCHEDULE_PAYMENT_LABEL = "Pagamento";
+
+export const RESCHEDULE_PAYMENT_HEADLINE = "Seu pagamento continua válido";
+
+export const RESCHEDULE_PAYMENT_NOTE =
+  "Esta é a mesma reserva, com o mesmo código. Não há nova cobrança e você não precisa pagar novamente.";
+
+export const RESCHEDULE_QR_NOTE = "O QR Code da sua reserva continua o mesmo e vale para a nova data.";
+
+const RESCHEDULE_SIGNOFF = "Nos vemos na água!";
+
+const RESCHEDULE_CLOSING = [
+  "O código da sua reserva não mudou: é por ele que identificamos o seu agendamento.",
+  CLOSING_PARAGRAPHS[1],
+] as const;
+
+/** Os dados da turma nova, iguais para todas as bases. */
+function rescheduleRows(data: ReservationConfirmationData): Array<[string, string]> {
+  return [
+    ["Código da reserva", data.publicCode],
+    ["Experiência", data.experienceTitle],
+    ["Data", formatSessionDate(data.startsAt)],
+    ["Horário", formatSessionTime(data.startsAt)],
+    ["Base", locationOf(data).baseName],
+    ["Participantes", `${data.quantity}`],
+  ];
+}
+
+/**
+ * Enviado quando uma reserva em Stand-by é reagendada. Não é o e-mail de
+ * pagamento de novo: é outra mensagem, com a turma nova, o mesmo código, o
+ * mesmo QR e o aviso de que nada precisa ser pago outra vez.
+ *
+ * A política de cancelamento fica de fora de propósito: o que vale para uma
+ * reserva reagendada é decisão da operação, e este e-mail não a antecipa.
+ */
+export function buildReservationRescheduleEmail(data: ReservationConfirmationData): ConfirmationEmail {
+  const subject = rescheduleConfirmationSubject(data.publicCode);
+  const greeting = `Olá, ${firstName(data.fullName)}!`;
+  const rows = rescheduleRows(data);
+
+  const text = [
+    greeting,
+    "",
+    RESCHEDULE_INTRO,
+    "",
+    ...rows.map(([label, value]) => `${label}: ${value}`),
+    "",
+    RESCHEDULE_PAYMENT_HEADLINE.toUpperCase(),
+    RESCHEDULE_PAYMENT_NOTE,
+    "",
+    ...checkinText(data),
+    ...(data.checkinToken ? [RESCHEDULE_QR_NOTE, ""] : []),
+    locationLabel(data),
+    ...locationText(data),
+    "",
+    "Horário de encontro",
+    formatSessionTime(data.startsAt),
+    MEETING_TOLERANCE_NOTE,
+    "",
+    PREPARATION_TITLE,
+    ...PREPARATION_ITEMS.map((item) => `- ${item}`),
+    "",
+    GROUP_TITLE,
+    GROUP_NOTE,
+    "",
+    ...RESCHEDULE_CLOSING.flatMap((line) => [line, ""]),
+    RESCHEDULE_SIGNOFF,
+    `Equipe ${SITE_NAME}`,
+    "",
+    "—",
+    `WhatsApp: ${formatWhatsappNumber()}`,
+    `E-mail: ${CONTACT_EMAIL}`,
+    `Instagram: ${INSTAGRAM_HANDLE}`,
+    SITE_URL,
+  ].join("\n");
+
+  const detailRowsHtml = rows
+    .map(([label, value]) => `
+                      <tr>
+                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:14px;color:${BRAND.ink};opacity:0.6;">${escapeHtml(label)}</td>
+                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:15px;font-weight:600;color:${BRAND.ink};text-align:right;">${escapeHtml(value)}</td>
+                      </tr>`)
+    .join("");
+
+  const closing = RESCHEDULE_CLOSING
+    .map((line) => `
+              <p style="margin:0 0 14px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(line)}</p>`)
+    .join("");
+
+  const qrNote = data.checkinToken
+    ? `
+              <p style="margin:0 0 16px;font-size:14px;line-height:22px;color:${BRAND.ink};opacity:0.75;text-align:center;">${escapeHtml(RESCHEDULE_QR_NOTE)}</p>`
+    : "";
+
+  const html = emailLayout({
+    title: subject,
+    preheader: `Sua reserva ${data.publicCode} tem nova data. O pagamento continua válido.`,
+    heading: RESCHEDULE_HEADING,
+    body: `
+              <p style="margin:0 0 16px;font-size:17px;line-height:26px;font-weight:600;color:${BRAND.ink};">${escapeHtml(greeting)}</p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(RESCHEDULE_INTRO)}</p>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;margin:0 0 20px;">
+                <tr><td style="padding:4px 0;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${detailRowsHtml}
+                  </table>
+                </td></tr>
+              </table>
+${highlightCard(RESCHEDULE_PAYMENT_LABEL, RESCHEDULE_PAYMENT_HEADLINE, RESCHEDULE_PAYMENT_NOTE)}
+${checkinHtml(data)}${qrNote}
+${locationCard(data)}
+${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
+              <div style="height:12px;line-height:12px;">&nbsp;</div>
+${infoSection(PREPARATION_TITLE, bulletList(PREPARATION_ITEMS))}
+${infoSection(GROUP_TITLE, paragraph(GROUP_NOTE))}
+              <div style="height:24px;line-height:24px;">&nbsp;</div>
+${closing}
+              <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">${escapeHtml(RESCHEDULE_SIGNOFF)}</p>
+              <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">Equipe ${escapeHtml(SITE_NAME)}</p>
+`,
+  });
+
+  return { to: data.email, subject, html, text };
+}
+
 // --- Leitura defensiva do que vem do banco ----------------------------------
 
 function asString(value: unknown) {

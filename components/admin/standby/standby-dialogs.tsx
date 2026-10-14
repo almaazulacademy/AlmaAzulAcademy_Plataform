@@ -18,11 +18,11 @@ import { fieldErrorClass, inputClass, labelClass, textareaClass } from "@/compon
 import { useToast } from "@/components/admin/toast-provider";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/admin/format";
-import { restoreRejectionMessage, type StandbyOption, type StandbyOptions } from "@/lib/admin/standby";
+import { rescheduleEmailNeedsAttention, rescheduleEmailNotice, restoreRejectionMessage, type StandbyOption, type StandbyOptions } from "@/lib/admin/standby";
 import { groupSessionsByDay } from "@/lib/sessions/choice";
 import { formatSessionDateShort, formatSessionTime } from "@/lib/sessions/date-time";
 
-type ApiPayload = { message?: string };
+type ApiPayload = { message?: string; email?: { outcome?: string } };
 
 function turmaLabel(startsAt: string) {
   return `${formatSessionDateShort(startsAt)} · ${formatSessionTime(startsAt)}`;
@@ -324,9 +324,13 @@ export function RescheduleStandbyDialog({ open, reservationId, onClose }: {
       });
       const payload = await response.json().catch(() => ({})) as ApiPayload;
       if (!response.ok) throw new Error(payload.message ?? "Não foi possível reagendar a reserva.");
+      // A reserva foi reagendada nos dois casos. O que muda é o destaque: quando
+      // o e-mail não saiu, o aviso vem como alerta, não como sucesso.
+      const attention = rescheduleEmailNeedsAttention(payload.email?.outcome);
       notify({
-        title: "Reserva reagendada",
-        description: `A reserva passou para ${selected.experienceTitle} · ${turmaLabel(selected.startsAt)}. Nenhum e-mail foi enviado: avise o cliente.`,
+        title: attention ? "Reagendada — cliente ainda não avisado" : "Reserva reagendada",
+        description: `A reserva passou para ${selected.experienceTitle} · ${turmaLabel(selected.startsAt)}. ${rescheduleEmailNotice(payload.email?.outcome)}`,
+        variant: attention ? "error" : undefined,
       });
       onClose();
       router.refresh();
@@ -459,7 +463,9 @@ export function RescheduleStandbyDialog({ open, reservationId, onClose }: {
             <li className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-lake" /> A reserva volta a ficar confirmada, na nova turma.</li>
             <li className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-lake" /> O pagamento não muda: {formatCurrency(data.totalCents)} permanecem como pagos e nenhuma cobrança é gerada.</li>
             <li className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-lake" /> O código {data.publicCode} e o QR Code são os mesmos.</li>
-            <li className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-lake" /> Nenhum e-mail é enviado por esta ação: avise o cliente.</li>
+            <li className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-lake" /> {data.rescheduleEmailEnabled
+              ? "O cliente recebe um e-mail de confirmação com a nova data, o mesmo código e o mesmo QR Code."
+              : "Nenhum e-mail é enviado por esta ação: avise o cliente."}</li>
           </ul>
           {reason.trim() ? <p className="text-sm text-ink/60"><span className="font-semibold text-ink">Motivo:</span> {reason.trim()}</p> : null}
         </div>

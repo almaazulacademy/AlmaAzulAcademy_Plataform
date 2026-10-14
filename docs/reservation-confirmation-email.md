@@ -29,7 +29,7 @@ Existem exatamente **dois** pontos de chamada, os mesmos da sincronização com 
 | Botão "Verificar pagamento" | `confirmPayment()` |
 | Confirmação manual do admin | `confirmAdminReservation()` |
 
-Cancelamento **não** dispara nada.
+Cancelamento **não** dispara nada. Reagendar uma reserva em Stand-by também não reenvia este e-mail: o cliente recebe outro, de outra fila — ver [reservation-standby.md](reservation-standby.md#e-mail-de-reagendamento).
 
 ```text
 Supabase confirma a reserva          ← decidido aqui, e só aqui

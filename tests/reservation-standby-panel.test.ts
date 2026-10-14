@@ -114,9 +114,10 @@ test("com o painel desligado: sem menu, sem página, sem botões e sem rota", ()
 // 2. Rotas: quem pode chamar, e de onde
 // =============================================================================
 
-test("as quatro rotas de Stand-by existem", () => {
+test("as cinco rotas de Stand-by existem", () => {
   assert.deepEqual(STANDBY_ROUTES.map((path) => path.replace("app/api/admin/reservations/[reservationId]/", "")).sort(), [
     "standby/link/route.ts",
+    "standby/reschedule-email/route.ts",
     "standby/reschedule/route.ts",
     "standby/route.ts",
     "standby/undo/route.ts",
