@@ -1,15 +1,17 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, CheckCircle2, MessageCircle, Search, XCircle } from "lucide-react";
 
 import { BaseLocationCard } from "@/components/bases/base-location";
 import { ReservationHold } from "@/components/reservation/reservation-hold";
 import { ReservationSummary } from "@/components/reservation/reservation-summary";
+import { StandbyReschedule } from "@/components/reservation/standby-reschedule";
 import { Button } from "@/components/ui/button";
 import { WHATSAPP_LINK, WHATSAPP_RESERVATION_CODE_LINK } from "@/lib/contact";
+import { standbyTokenFromHash, type SelfServiceCredential } from "@/lib/reservations/standby-self-service";
 import type { ReservationDetails } from "@/lib/reservations/types";
 import { formatCpf, validateLookupInput } from "@/lib/reservations/validation";
 
@@ -22,11 +24,10 @@ const inputClass = "mt-2 h-12 w-full rounded-2xl border border-ink/15 bg-white p
 /**
  * Reserva em Stand-by: paga, sem turma. Não é confirmada, cancelada nem
  * expirada, e a turma anterior não aparece — mostrar o horário antigo sugeriria
- * que a participação continua garantida naquela data. A escolha da nova data
- * pelo próprio cliente chega em uma etapa posterior; por enquanto o caminho é
- * a equipe.
+ * que a participação continua garantida naquela data. Com o autoatendimento
+ * ligado, o próprio cliente escolhe a nova data; sem ele, o caminho é a equipe.
  */
-function AwaitingReschedule({ reservation }: { reservation: ReservationDetails }) {
+function AwaitingReschedule({ reservation, onChooseDate }: { reservation: ReservationDetails; onChooseDate?: () => void }) {
   return (
     <div className="mx-auto max-w-2xl rounded-4xl bg-white p-7 sm:p-10">
       <CalendarClock className="size-10 text-lake" />
@@ -38,13 +39,18 @@ function AwaitingReschedule({ reservation }: { reservation: ReservationDetails }
       <p className="mt-4 leading-7 text-ink/60">
         {reservation.quantity === 1 ? "1 participante" : `${reservation.quantity} participantes`} · nenhum pagamento adicional.
       </p>
+      {onChooseDate ? (
+        <Button type="button" size="lg" className="mt-7 w-full sm:w-auto" onClick={onChooseDate}>
+          <CalendarClock className="size-4" /> Escolher nova data
+        </Button>
+      ) : null}
       <a
         href={WHATSAPP_LINK}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-7 inline-flex items-center gap-2 font-semibold text-forest"
+        className={`${onChooseDate ? "mt-5 flex" : "mt-7 inline-flex"} items-center gap-2 font-semibold text-forest`}
       >
-        <MessageCircle className="size-4" /> Falar com a equipe para reagendar
+        <MessageCircle className="size-4" /> {onChooseDate ? "Prefere ajuda? Fale com a equipe" : "Falar com a equipe para reagendar"}
       </a>
     </div>
   );
@@ -67,11 +73,32 @@ function FinalReservation({ reservation }: { reservation: ReservationDetails }) 
   );
 }
 
-export function ReservationLookup() {
+/**
+ * `selfService` vem do servidor (`STANDBY_SELF_SERVICE_ENABLED`). Desligado, a
+ * página é a de sempre: o link individual abre a consulta comum e a reserva em
+ * Stand-by aponta para a equipe.
+ */
+export function ReservationLookup({ selfService = false }: { selfService?: boolean }) {
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [reservation, setReservation] = useState<ReservationDetails | null>(null);
+  const [lookupCredential, setLookupCredential] = useState<{ cpf: string; publicCode: string } | null>(null);
+  const [standbyCredential, setStandbyCredential] = useState<SelfServiceCredential | null>(null);
+
+  // O token do link individual fica no fragmento (`#r=`), que o navegador não
+  // envia ao servidor: só esta tela o lê, e só com o autoatendimento ligado.
+  useEffect(() => {
+    if (!selfService) return;
+    const token = standbyTokenFromHash(window.location.hash);
+    if (token) setStandbyCredential({ kind: "LINK", token });
+  }, [selfService]);
+
+  const switchToLookup = () => {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    setStandbyCredential(null);
+    setReservation(null);
+  };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -88,6 +115,7 @@ export function ReservationLookup() {
         return;
       }
       setReservation(payload.reservation as ReservationDetails);
+      setLookupCredential(validation.data);
     } catch {
       setMessage("Não foi possível conectar ao sistema de reservas.");
     } finally {
@@ -96,7 +124,13 @@ export function ReservationLookup() {
   }
 
   if (reservation?.status === "PRE_RESERVED") return <ReservationHold publicCode={reservation.publicCode} expiresAt={reservation.expiresAt} checkoutUrl={reservation.checkoutUrl} title="Sua vaga continua reservada." session={reservation.session} location={reservation.location} />;
-  if (reservation?.status === "AWAITING_RESCHEDULE") return <AwaitingReschedule reservation={reservation} />;
+  if (standbyCredential) return <StandbyReschedule credential={standbyCredential} onUseLookup={switchToLookup} />;
+  if (reservation?.status === "AWAITING_RESCHEDULE") {
+    const chooseDate = selfService && lookupCredential
+      ? () => setStandbyCredential({ kind: "CPF_CODE", ...lookupCredential })
+      : undefined;
+    return <AwaitingReschedule reservation={reservation} onChooseDate={chooseDate} />;
+  }
   if (reservation) return <FinalReservation reservation={reservation} />;
 
   return (

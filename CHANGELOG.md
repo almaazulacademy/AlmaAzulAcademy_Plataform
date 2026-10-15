@@ -1,5 +1,17 @@
 # Changelog
 
+## Stand-by de reservas — autoatendimento do cliente (etapa 5 de 6, desligado por padrão)
+
+- **Nada muda em produção ao publicar este código.** O autoatendimento só existe com a migration `202610160001` aplicada **e** `STANDBY_SELF_SERVICE_ENABLED=true`. Sem a variável, as rotas respondem 404 e `/acompanhar-reserva` continua mandando o cliente em Stand-by para a equipe. Detalhes em [docs/reservation-standby.md](docs/reservation-standby.md#autoatendimento-do-cliente).
+- **O cliente escolhe a nova data pelo site**, com CPF + código (botão **Escolher nova data** na consulta) ou pelo link individual (`/acompanhar-reserva#r=<token>`), entre turmas futuras, abertas e publicadas de qualquer base, com vagas para o grupo inteiro e o **mesmo valor por participante** pago. Sem prazo e sem antecedência mínima além de a turma não ter começado. Código, QR, quantidade e pagamento continuam os mesmos.
+- **A decisão é do banco**, pelas RPCs da etapa 2 (`customer_reschedule_options` e `customer_reschedule_reservation`, inalteradas): a reserva, a autorização e a turma são travadas, a última vaga não é ocupada duas vezes, a autorização vale uma vez, o histórico e a auditoria registram o cliente e a forma de acesso, e a trigger da etapa 4 enfileira o e-mail na mesma transação. A rota chama o mesmo envio e a mesma sincronização da planilha da rota do painel.
+- **Mensagens próprias** para nenhuma turma disponível, vagas que acabaram durante a escolha, turma indisponível, reserva já reagendada (com a turma atual), cancelada e link substituído. Credencial errada recebe uma mensagem genérica, sem confirmar que a reserva existe.
+- **Limite de tentativas no banco**, compartilhado entre as instâncias: 30 por origem e 10 por código de reserva (ou token) a cada 15 minutos, contando toda tentativa. Baldes guardados como HMAC com segredo próprio, em tabelas sem acesso nem da service role. Sem o limite funcionando, a rota responde "indisponível" — nunca libera.
+- **Rotas** `POST /api/reservations/standby` e `POST /api/reservations/standby/reschedule`: recurso ligado, origem do próprio site, formato e limite antes de qualquer consulta; credencial só no corpo; respostas sem cache e sem CPF, telefone, e-mail, sobrenome, token ou id da reserva.
+- Migration `202610160001_reservation_standby_self_service.sql`, **não aplicada**: duas tabelas novas (limite e segredo) e duas funções (`customer_reschedule_throttle`, `customer_reschedule_overview`). Não substitui o corpo de nenhuma função, não trava tabela existente e não toca nenhuma linha. Preflight, postcheck e rollback em `supabase/diagnostics/reservation_standby_self_service_*.sql` e `supabase/rollback/`.
+- Painel: o modal do link e a mensagem preparada para o WhatsApp dizem "escolher a nova data" quando o autoatendimento está ligado.
+- Pagamento, check-in, QR, consulta pública, reagendamento tradicional, planilha e métricas **não foram alterados**. A consulta pública (`/api/reservations/lookup`) continua sem limite de tentativas, como antes.
+
 ## Stand-by de reservas — e-mail de confirmação do reagendamento (etapa 4 de 6, desligado por padrão)
 
 - **Nada muda em produção ao publicar este código.** O e-mail só sai com a migration `202610150001` aplicada **e** `STANDBY_RESCHEDULE_EMAIL_ENABLED=true`. Sem a variável, o serviço responde "desligado" antes de tocar no banco ou no provedor. Detalhes em [docs/reservation-standby.md](docs/reservation-standby.md#e-mail-de-reagendamento).

@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Pagamentos](payments.md) · [Painel](admin.md)
 
-**Estado: e-mail de reagendamento (etapa 4 de 6), desligado por padrão.** As migrations `202610130001`, `202610130002` e `202610140001` estão aplicadas em produção. O painel só existe com `STANDBY_ADMIN_ENABLED=true`. O e-mail desta etapa só sai com a migration `202610150001` aplicada **e** `STANDBY_RESCHEDULE_EMAIL_ENABLED=true`. Mergear o PR não aplica migration, não liga o painel e não envia e-mail.
+**Estado: autoatendimento do cliente (etapa 5 de 6), desligado por padrão.** As migrations `202610130001`, `202610130002`, `202610140001` e `202610150001` estão aplicadas em produção. O painel só existe com `STANDBY_ADMIN_ENABLED=true`. O e-mail de reagendamento só sai com `STANDBY_RESCHEDULE_EMAIL_ENABLED=true`. O cliente só escolhe a nova data pelo site com a migration `202610160001` aplicada **e** `STANDBY_SELF_SERVICE_ENABLED=true`. Mergear o PR não aplica migration, não liga nada e não envia e-mail.
 
 ## O que é
 
@@ -81,7 +81,7 @@ Qualquer falha desfaz tudo.
 
 **Link.** Token de 32 bytes do gerador criptográfico do `pgcrypto`, em hexadecimal. O banco guarda só o SHA-256; o texto do token existe uma vez, na resposta da geração, e não vai para auditoria. Gerar de novo invalida o anterior; revogar apaga o hash; resolver o Stand-by encerra a autorização. O formato previsto para a URL é `/acompanhar-reserva#r=<token>`: o fragmento não chega ao servidor, então não aparece em logs nem em pré-visualização de link.
 
-**Limite de tentativas e checagem de origem** ficam na rota do servidor, na etapa 5, junto com a interface pública.
+**Limite de tentativas e checagem de origem** ficam na rota do servidor e no banco — ver [Autoatendimento do cliente](#autoatendimento-do-cliente).
 
 ## Proteção financeira
 
@@ -137,7 +137,7 @@ A paginação é do banco (`admin_list_standby_reservations_page`, 25 por págin
 
 `admin_reschedule_standby_same_price` trava a reserva, depois a sessão de destino — a ordem do núcleo —, confere a régua `CUSTOMER` de `reservation_standby_target_rejection` e entrega a `reservation_standby_resolve`. É a mesma régua que monta a lista de turmas do modal (`admin_standby_reschedule_options`), então a tela e a decisão não divergem.
 
-O link é devolvido uma única vez, já como endereço `/acompanhar-reserva#r=<token>`, para o admin copiar ou abrir um rascunho no WhatsApp. Ele não vai para log, auditoria, histórico, URL do painel nem armazenamento do navegador; a resposta sai com `cache-control: no-store`. **A página pública ainda não lê o fragmento:** até a etapa 5 o link abre a página de acompanhamento comum, e o modal avisa isso.
+O link é devolvido uma única vez, já como endereço `/acompanhar-reserva#r=<token>`, para o admin copiar ou abrir um rascunho no WhatsApp. Ele não vai para log, auditoria, histórico, URL do painel nem armazenamento do navegador; a resposta sai com `cache-control: no-store`. Com o [autoatendimento](#autoatendimento-do-cliente) ligado, o link abre a escolha da nova data e o texto preparado para o WhatsApp diz isso; desligado, abre a página de acompanhamento comum, e o modal avisa.
 
 Só **Reagendar** envia e-mail, e só com o [e-mail de reagendamento](#e-mail-de-reagendamento) ativado. Desfazer, gerar e revogar link — e colocar em Stand-by — nunca enviam.
 
@@ -155,7 +155,7 @@ As rotas ficam em `/api/admin/reservations/[reservationId]/standby` (`GET` e `PO
 
 ## E-mail de reagendamento
 
-Etapa 4. Quando uma reserva em Stand-by é reagendada — pelo painel, e pelo cliente quando o autoatendimento existir (etapa 5) — o cliente recebe um e-mail de confirmação com a turma nova.
+Etapa 4. Quando uma reserva em Stand-by é reagendada — pelo painel ou pelo próprio cliente, no [autoatendimento](#autoatendimento-do-cliente) — o cliente recebe um e-mail de confirmação com a turma nova.
 
 | Ação | E-mail |
 | --- | --- |
@@ -304,6 +304,69 @@ Desligado, o reagendamento funciona igual e a linha fica `QUEUED`. **Ao ligar, a
 
 Desligar a variável é o botão de emergência do e-mail e não afeta o painel.
 
+## Autoatendimento do cliente
+
+Etapa 5. Tudo abaixo só existe com `STANDBY_SELF_SERVICE_ENABLED=true` e a migration `202610160001` aplicada.
+
+### Para o cliente
+
+Dois caminhos, os dois em `/acompanhar-reserva`:
+
+- **CPF + código.** A consulta de sempre. Se a reserva está "Aguardando reagendamento", aparece **Escolher nova data**, além do contato da equipe.
+- **Link individual** (`/acompanhar-reserva#r=<token>`), gerado no painel. A página lê o token do fragmento — que o navegador não envia ao servidor — e abre direto a escolha. Link revogado, substituído ou inválido mostra "Link indisponível" e oferece a consulta com CPF e código.
+
+A tela mostra a data anterior ("não vale mais") e as turmas elegíveis agrupadas por dia, com filtro por base: horário, experiência, base e vagas restantes. Ao escolher, o cliente revisa — nova turma, participantes, pagamento mantido, mesmo código e QR, escolha de uso único — e confirma. A confirmação mostra a nova turma e diz se o e-mail saiu; se não saiu, aponta para a própria consulta, sem prometer e-mail.
+
+| Situação | O que o cliente vê |
+| --- | --- |
+| Turmas disponíveis | A lista, para escolher |
+| Nenhuma turma elegível | "Nenhuma turma disponível agora", quantas do mesmo valor estão sem vaga para o grupo, e o contato da equipe. A reserva continua paga e em Stand-by |
+| As vagas acabaram enquanto escolhia | "As vagas desta turma acabaram…", e a lista é lida de novo |
+| Turma fechou, começou ou mudou de valor | "Esta turma não está mais disponível…", e a lista é lida de novo |
+| Já reagendada (pelo cliente ou pela equipe) | "Esta reserva já tem nova data", com a turma em que a reserva está agora |
+| Cancelada | "Reserva cancelada" |
+| Link de um Stand-by anterior | "Este link não vale mais": não dá acesso ao Stand-by atual |
+| Credencial errada ou reserva que nunca esteve em Stand-by | Uma única mensagem genérica — sem confirmar que a reserva existe |
+| Muitas tentativas | "Aguarde alguns minutos" |
+
+### Regras
+
+As mesmas do painel e do núcleo, sem exceção: só reserva em `AWAITING_RESCHEDULE` com autorização aberta; qualquer experiência e base com turma futura, aberta, publicada, base em operação, vagas para o grupo inteiro e **preço por participante exatamente igual ao valor unitário pago**; sem prazo para reagendar e sem antecedência mínima além de a turma não ter começado. Código, QR, quantidade e pagamento não mudam. A escolha passa por `customer_reschedule_reservation` → `reservation_standby_resolve`, que trava reserva, autorização e turma, grava histórico (`actor_type = CUSTOMER`, acesso `CPF_CODE` ou `LINK`) e auditoria, e — pela trigger da etapa 4 — enfileira o e-mail na mesma transação.
+
+Depois de gravado, a rota faz exatamente o que a do painel faz: chama `sendRescheduleConfirmationEmail(changeId)` (que não faz nada com o e-mail desligado) e, em segundo plano, sincroniza a planilha e repete o e-mail se a falha foi passageira. A repetição da mesma requisição (`replayed`) não sincroniza nem gera segundo e-mail. Colocar em Stand-by nunca envia mensagem.
+
+### Rotas
+
+| Rota | Faz |
+| --- | --- |
+| `POST /api/reservations/standby` | A tela: `customer_reschedule_overview` — turmas elegíveis, ou o estado da autorização encerrada |
+| `POST /api/reservations/standby/reschedule` | A escolha: `customer_reschedule_reservation` |
+
+Só POST: a credencial viaja no corpo, nunca na URL. Ordem das barreiras: recurso ligado (senão 404), origem do próprio site (senão 403), banco configurado (senão 503), formato da credencial (senão 400, sem tocar no banco), **limite de tentativas** (senão 429 com `Retry-After`) e só então a RPC. Respostas com `cache-control: no-store`. Nada da credencial vai para log.
+
+O corpo traz só a credencial (`{cpf, publicCode}` ou `{token}`), a autorização que o cliente viu e a turma escolhida. Id da reserva, quantidade e valor nunca são parâmetros. As respostas não trazem CPF, telefone, e-mail, sobrenome, token, id da reserva nem valor por participante de outra reserva.
+
+### Limite de tentativas
+
+No banco, porque na Vercel cada requisição pode cair em uma instância diferente e um contador em memória não limita nada. `customer_reschedule_throttle` registra **toda** tentativa — certa ou errada — em dois baldes, numa única instrução atômica:
+
+| Balde | Limite |
+| --- | --- |
+| Origem (`x-real-ip` / `x-forwarded-for`, gravados pela Vercel) | 30 a cada 15 minutos |
+| Credencial: o código da reserva (sem o CPF) ou o token do link | 10 a cada 15 minutos |
+
+O balde da credencial usa o código **sem** o CPF: quem conhece um código e tenta adivinhar o CPF para em 10 tentativas por janela, de quantos endereços vier. O efeito colateral aceito é que alguém insistindo com o código de outra pessoa trava esse código por 15 minutos; o dono ainda tem o link e a equipe. Sem endereço conhecido, todos dividem um balde — mais apertado, nunca mais frouxo.
+
+Os baldes são guardados como HMAC-SHA256 com um segredo de 32 bytes gerado na migration (`customer_access_throttle_secret`): nem endereço, nem código, nem token ficam legíveis. As duas tabelas têm RLS e nenhum acesso — nem da service role. Baldes parados há mais de um dia são apagados aos poucos pela própria função.
+
+**Sem o limite, sem autoatendimento:** se a função não responder (migration ausente, banco fora), a rota responde 503 e a credencial nem é consultada.
+
+### O que a etapa 5 não muda
+
+`customer_reschedule_options` e `customer_reschedule_reservation`, da etapa 2, continuam com o mesmo corpo. Pagamento, check-in, QR, a consulta pública da reserva e o reagendamento tradicional não foram alterados. O painel só ganhou o texto do link ("escolher a nova data") quando o autoatendimento está ligado.
+
+**A consulta pública (`/api/reservations/lookup`) continua sem limite de tentativas**, como antes desta etapa. Ela também confirma CPF + código e mostra a reserva; ver [Pendências](#pendências).
+
 ## Planilha
 
 Duas proteções, as duas no serviço central de sincronização (`runSheetSyncJob`), por onde passa todo job — o enviado na hora e o retomado da fila.
@@ -315,6 +378,20 @@ Colocar em Stand-by uma reserva de uma dessas sessões funciona normalmente no b
 **Modo "somente atualizar".** Uma reserva em Stand-by ainda aponta para a turma original. Para ela não criar a turma na planilha, a sincronização que parte dessa turma atualiza se a turma já estiver em `Sessões` e não escreve nada se não estiver. Vale para turmas comuns; cobre a entrada em Stand-by, o reagendamento, o cancelamento de reserva em Stand-by, os dois botões manuais e jobs pendentes. A confirmação de pagamento não consulta `reservation_standby`: o banco só é lido para reserva cancelada e para reconstrução de sessão. Detalhes em [google-sheets-integration.md](google-sheets-integration.md#stand-by-modo-somente-atualizar).
 
 ## Publicação
+
+### Etapa 5 (autoatendimento)
+
+Cada passo depende de autorização própria. Nenhum deles liga o autoatendimento sozinho, exceto o último.
+
+1. **Merge e deploy do código.** Sem a variável, as rotas respondem 404 e a página de acompanhamento é a de sempre. Nada muda.
+2. `supabase/diagnostics/reservation_standby_self_service_preflight.sql` → `STANDBY_AUTOATENDIMENTO_PREFLIGHT_OK | OK`. Guarde as contagens.
+3. Migration `202610160001_reservation_standby_self_service.sql`, com `begin;` + `set local lock_timeout = '5s';` no topo e `commit;` no fim. Cria duas tabelas novas e duas funções; não trava tabela existente, não substitui função e não toca linha.
+4. `supabase/diagnostics/reservation_standby_self_service_postcheck.sql` → `STANDBY_AUTOATENDIMENTO_POSTCHECK_OK | OK`, com as mesmas contagens do preflight.
+5. **Ativação:** `STANDBY_SELF_SERVICE_ENABLED=true` na Vercel, **só em Production**, seguido de um novo deploy (a página de acompanhamento lê a variável no build). Recomendado ligar junto ou depois do e-mail (`STANDBY_RESCHEDULE_EMAIL_ENABLED`); sem ele, o cliente reagenda e vê a confirmação na tela, e o e-mail fica na fila.
+
+Não testar no Preview: ele usa o banco de produção. A verificação de ponta a ponta antes da ativação precisa de um ambiente com banco próprio.
+
+**Rollback da etapa 5.** Desligar a variável e publicar de novo tira o autoatendimento do ar; reagendamentos já feitos continuam válidos. Do banco: `supabase/rollback/202610160001_reservation_standby_self_service.rollback.sql` remove as duas funções e as duas tabelas do limite (só contadores e o segredo). Com a variável ligada e sem as funções, as rotas respondem 503 — nunca liberam acesso sem limite.
 
 ### Etapa 4 (e-mail de reagendamento)
 
@@ -375,6 +452,11 @@ Depois do passo 5 o comportamento do sistema continua o mesmo: o status só pode
 
 ## Testes
 
+A etapa 5 tem dois arquivos:
+
+- `tests/reservation-standby-self-service.test.ts` — o fluxo do servidor (`handleSelfServiceOverview` e `handleSelfServiceReschedule`) contra o Postgres em memória com todas as migrations, pelas RPCs de verdade: credencial, limite de tentativas (janelas, baldes, HMAC, faxina), a tela e cada estado, a régua (valor, vagas, turma fechada ou iniciada, experiência despublicada, base fora de operação, qualquer base), uso único e repetição, o que não pode vazar, o que não pode mudar (código, QR, quantidade, pagamento, check-in), auditoria, a linha da fila do e-mail, preflight, postcheck e rollback.
+- `tests/reservation-standby-self-service-concurrency.test.ts` — **sessões independentes do Postgres**, no CI: duas pessoas na última vaga, cliente e compra nova pela mesma vaga (nas duas ordens), a mesma autorização em duas abas (mesma turma e turmas diferentes, CPF e link), cliente e equipe ao mesmo tempo, transação desfeita e o limite sob rajada de 6 sessões.
+
 A etapa 4 tem três arquivos:
 
 - `tests/reservation-reschedule-email.test.ts` — o evento (um por reagendamento, nenhum nas outras ações, nenhum quando a transação falha), a reivindicação, a régua do "ainda vale", o fluxo completo, o conteúdo (inclusive Lago Norte ↔ Cápsula Bar), a ativação, o provedor, preflight, postcheck, relatório e rollback.
@@ -393,7 +475,8 @@ Limite conhecido: o banco de teste tem uma única conexão. A ordem de chegada d
 
 - **Teste de concorrência com duas conexões para as etapas 2 e 3:** o Postgres em memória tem uma conexão só. A fila do e-mail já é testada com sessões independentes no CI, e esses testes passam pelo núcleo do Stand-by (reagendamento simultâneo, repetição), mas as demais operações de Stand-by ainda não têm os seus.
 - **Agendamento mais frequente da recuperação de e-mails:** quatro opções descritas em [Recuperação de falhas](#recuperação-de-falhas), nenhuma aplicada.
-- **Etapa 5 — autoatendimento**, com limite de tentativas e checagem de origem. É quando a página pública passa a ler o link individual. A rota do cliente precisa chamar `sendRescheduleConfirmationEmail(changeId)` depois do reagendamento, como a do painel faz; a linha da fila já é gravada pelo banco nos dois caminhos, então sem a chamada o e-mail sai na rotina do dia seguinte, não some.
+- **Limite de tentativas na consulta pública** (`/api/reservations/lookup`): ela confirma CPF + código e mostra a reserva, sem limite — existia antes desta etapa e não foi alterada. O mesmo `customer_reschedule_throttle` (ou uma função irmã) cobriria a consulta, mas muda um fluxo existente e precisa de decisão própria.
+- **Teste de ponta a ponta do autoatendimento em navegador**, num ambiente com banco próprio.
 - **Política de cancelamento de reserva reagendada:** definir, e então decidir se entra no e-mail.
 - **Link do mapa do Lago Norte:** preencher `bases.maps_url` faz o botão aparecer em todos os e-mails.
 - **Ambiente de teste de ponta a ponta:** o Preview da Vercel usa o banco de produção e não pode ser usado para operações de escrita.

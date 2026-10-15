@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { standbyLinkMessage } from "@/lib/admin/standby";
 
 type Open = "reschedule" | "undo" | "generate" | "revoke" | null;
-type LinkPayload = { url?: string; message?: string };
+type LinkPayload = { url?: string; message?: string; selfServiceEnabled?: boolean };
 
 export function StandbyActions({ reservationId, fullName, phone, publicCode, hasActiveLink }: {
   reservationId: string;
@@ -33,12 +33,14 @@ export function StandbyActions({ reservationId, fullName, phone, publicCode, has
   const { notify } = useToast();
   const [open, setOpen] = useState<Open>(null);
   const [linkUrl, setLinkUrl] = useState("");
+  const [selfServiceEnabled, setSelfServiceEnabled] = useState(false);
 
   const generateLink = async () => {
     const response = await fetch(`/api/admin/reservations/${reservationId}/standby/link`, { method: "POST" });
     const payload = await response.json().catch(() => ({})) as LinkPayload;
     if (!response.ok || !payload.url) throw new Error(payload.message ?? "Não foi possível gerar o link.");
     setLinkUrl(payload.url);
+    setSelfServiceEnabled(payload.selfServiceEnabled === true);
     setOpen(null);
     router.refresh();
   };
@@ -63,7 +65,7 @@ export function StandbyActions({ reservationId, fullName, phone, publicCode, has
 
   const openWhatsapp = () => {
     const digits = phone.replace(/\D/g, "");
-    const message = standbyLinkMessage(fullName, publicCode, linkUrl);
+    const message = standbyLinkMessage(fullName, publicCode, linkUrl, selfServiceEnabled);
     window.open(`https://wa.me/${digits}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
     notify({ title: "Mensagem preparada", description: "Revise o texto no WhatsApp antes de enviar." });
   };
@@ -121,7 +123,9 @@ export function StandbyActions({ reservationId, fullName, phone, publicCode, has
             </p>
             <p className="mt-4 break-all rounded-2xl border border-ink/10 bg-mist/50 p-4 font-mono text-xs leading-5 text-ink">{linkUrl}</p>
             <p className="mt-3 text-xs leading-5 text-ink/50">
-              A escolha da nova data pelo próprio cliente ainda não está disponível no site: por enquanto o link abre a página de acompanhamento da reserva.
+              {selfServiceEnabled
+                ? "Com este link o cliente escolhe a nova data pelo site, entre as turmas com o mesmo valor por participante. A escolha vale uma vez."
+                : "A escolha da nova data pelo próprio cliente não está ligada no site: por enquanto o link abre a página de acompanhamento da reserva."}
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
               <Button type="button" variant="ghost" onClick={() => setLinkUrl("")}>Fechar</Button>
