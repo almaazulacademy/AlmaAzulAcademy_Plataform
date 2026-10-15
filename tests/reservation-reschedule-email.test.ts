@@ -1288,6 +1288,8 @@ test("só o reagendamento envia: nenhuma outra ação de Stand-by alcança o ser
     "app/api/admin/reservations/[reservationId]/standby/route.ts",
     "app/api/cron/confirmation-emails/route.ts",
     "app/api/cron/reschedule-emails/route.ts",
+    // Etapa 5: o reagendamento feito pelo próprio cliente. Ver o fim deste teste.
+    "lib/reservations/standby-self-service-http.ts",
   ]);
 
   // Quem chama cada operação do serviço.
@@ -1313,6 +1315,18 @@ test("só o reagendamento envia: nenhuma outra ação de Stand-by alcança o ser
   for (const path of ["app/api/admin/reservations/[reservationId]/standby/undo/route.ts", "app/api/admin/reservations/[reservationId]/standby/link/route.ts", "lib/admin/standby-data.ts"]) {
     assert.doesNotMatch(source(path), /reschedule-email|RescheduleEmail|sendReservationConfirmationEmail/, `${path} não envia e-mail`);
   }
+  // Autoatendimento (etapa 5): a ligação só entrega o envio e a nova tentativa ao
+  // fluxo, e só a escolha confirmada pelo banco os chama — a tela nunca.
+  const selfServiceHttp = source("lib/reservations/standby-self-service-http.ts");
+  assert.match(selfServiceHttp, /sendConfirmationEmail: sendRescheduleConfirmationEmail,/);
+  assert.match(selfServiceHttp, /followUpConfirmationEmail: followUpRescheduleConfirmationEmail,/);
+  assert.doesNotMatch(selfServiceHttp, /\b(resendRescheduleConfirmationEmail|retryPendingRescheduleConfirmationEmails)\b/);
+  const selfService = source("lib/reservations/standby-self-service.ts");
+  const sendCalls = [...selfService.matchAll(/deps\.sendConfirmationEmail\(/g)].map((match) => match.index ?? 0);
+  assert.equal(sendCalls.length, 1);
+  assert.ok(sendCalls[0] > selfService.indexOf("export async function handleSelfServiceReschedule"), "só a escolha confirmada envia");
+  assert.ok(sendCalls[0] > selfService.indexOf("parseStandbyResolution(result.data)"), "e só depois de o banco devolver o reagendamento");
+
   // O reagendamento tradicional e as demais ações do painel não conhecem esta fila.
   assert.doesNotMatch(source("lib/admin/data.ts"), /reschedule-email|RescheduleEmail|reservation_reschedule_email/);
 

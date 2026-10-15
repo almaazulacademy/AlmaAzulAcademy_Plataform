@@ -459,9 +459,10 @@ export function standbyLinkUrl(origin: string, token: string) {
 }
 
 /** Texto preparado para o admin revisar e enviar pelo WhatsApp. */
-export function standbyLinkMessage(fullName: string, publicCode: string, url: string) {
+export function standbyLinkMessage(fullName: string, publicCode: string, url: string, selfService = false) {
   const firstName = fullName.trim().split(/\s+/)[0] || "Olá";
-  return `Olá, ${firstName}! Sua reserva ${publicCode} na Alma Azul Academy está paga e aguardando uma nova data. Use este link pessoal para acompanhar: ${url}`;
+  const action = selfService ? "escolher a nova data" : "acompanhar";
+  return `Olá, ${firstName}! Sua reserva ${publicCode} na Alma Azul Academy está paga e aguardando uma nova data. Use este link pessoal para ${action}: ${url}`;
 }
 
 // --- Textos -------------------------------------------------------------------

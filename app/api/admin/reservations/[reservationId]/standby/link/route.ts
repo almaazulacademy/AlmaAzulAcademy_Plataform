@@ -4,6 +4,7 @@ import { authorizeStandbyApi, isSameOriginRequest, standbyMutationError } from "
 import { standbyLinkUrl } from "@/lib/admin/standby";
 import { generateStandbyLink, revokeStandbyLink } from "@/lib/admin/standby-data";
 import { isUuid } from "@/lib/admin/validation";
+import { isStandbySelfServiceEnabled } from "@/lib/reservations/standby-self-service";
 import { SITE_URL } from "@/lib/site";
 
 type RouteContext = { params: Promise<{ reservationId: string }> };
@@ -31,7 +32,7 @@ export async function POST(request: Request, context: RouteContext) {
     const link = await generateStandbyLink(authorization.context.profile.userId, reservationId);
     if (!link) return NextResponse.json({ message: "Reserva não encontrada." }, { status: 404, headers: NO_STORE });
     return NextResponse.json(
-      { success: true, url: standbyLinkUrl(SITE_URL, link.token), createdAt: link.createdAt },
+      { success: true, url: standbyLinkUrl(SITE_URL, link.token), createdAt: link.createdAt, selfServiceEnabled: isStandbySelfServiceEnabled() },
       { headers: NO_STORE },
     );
   } catch (error) {
