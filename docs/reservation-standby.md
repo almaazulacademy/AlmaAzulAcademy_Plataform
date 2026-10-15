@@ -348,24 +348,41 @@ O corpo traz só a credencial (`{cpf, publicCode}` ou `{token}`), a autorizaçã
 
 ### Limite de tentativas
 
-No banco, porque na Vercel cada requisição pode cair em uma instância diferente e um contador em memória não limita nada. `customer_reschedule_throttle` registra **toda** tentativa — certa ou errada — em dois baldes, numa única instrução atômica:
+Vale para tudo que aceita CPF + código ou o token do link: **a consulta pública da reserva (`/api/reservations/lookup`)** e as duas rotas do autoatendimento. Fica no banco, porque na Vercel cada requisição pode cair em uma instância diferente e um contador em memória não limita nada. `register_customer_access_attempt` registra **toda** tentativa — certa ou errada — numa única instrução atômica, nos mesmos baldes para as três rotas (alternar entre elas não dá tentativa extra):
 
 | Balde | Limite |
 | --- | --- |
-| Origem (`x-real-ip` / `x-forwarded-for`, gravados pela Vercel) | 30 a cada 15 minutos |
-| Credencial: o código da reserva (sem o CPF) ou o token do link | 10 a cada 15 minutos |
+| Origem — só quando há endereço confiável (abaixo) | 30 a cada 15 minutos |
+| Credencial: o código da reserva (sem o CPF) ou o token do link | 10 a cada 15 minutos, sempre |
 
-O balde da credencial usa o código **sem** o CPF: quem conhece um código e tenta adivinhar o CPF para em 10 tentativas por janela, de quantos endereços vier. O efeito colateral aceito é que alguém insistindo com o código de outra pessoa trava esse código por 15 minutos; o dono ainda tem o link e a equipe. Sem endereço conhecido, todos dividem um balde — mais apertado, nunca mais frouxo.
+O balde da credencial usa o código **sem** o CPF: quem conhece um código e tenta adivinhar o CPF para em 10 tentativas por janela, de quantos endereços vier. O efeito colateral aceito é que alguém insistindo com o código de outra pessoa trava esse código por 15 minutos; o dono ainda tem o link e a equipe. O balde não depende de a reserva existir: código inventado e código verdadeiro contam e são barrados igual, então o limite não revela quais códigos existem.
+
+**De onde vem o endereço.** Cabeçalho é texto que o cliente escreve; só é confiável quando a plataforma o reescreve. A Vercel sobrescreve `x-forwarded-for` na borda "para evitar falsificação de IP", e `x-real-ip` e `x-vercel-forwarded-for` são idênticos a ele — o segundo continua correto mesmo com um proxy na frente ([documentação](https://vercel.com/docs/headers/request-headers)). Por isso `trustedClientAddress` (`lib/http/client-address.ts`):
+
+- só lê cabeçalho com `VERCEL=1` (variável de sistema da plataforma, a mesma família de `VERCEL_ENV`, que o check-in já usa);
+- lê `x-vercel-forwarded-for` e, na falta, `x-real-ip` — nunca `x-forwarded-for` direto, `forwarded` ou outro;
+- aceita só IP literal; IPv6 é agrupado no prefixo /64, para que trocar de endereço dentro do próprio bloco não renda tentativas.
+
+Fora da Vercel (`next dev`, `next start`, outro provedor) nenhum cabeçalho é lido. **Sem endereço confiável não existe balde de origem** — nunca um balde comum a todos, que deixaria um único abusador travar a consulta de todo mundo. O limite da credencial vale igual.
 
 Os baldes são guardados como HMAC-SHA256 com um segredo de 32 bytes gerado na migration (`customer_access_throttle_secret`): nem endereço, nem código, nem token ficam legíveis. As duas tabelas têm RLS e nenhum acesso — nem da service role. Baldes parados há mais de um dia são apagados aos poucos pela própria função.
 
-**Sem o limite, sem autoatendimento:** se a função não responder (migration ausente, banco fora), a rota responde 503 e a credencial nem é consultada.
+**Quando o limite não responde** (código publicado antes da migration, ou banco com problema):
+
+| Rota | Comportamento |
+| --- | --- |
+| Autoatendimento | 503 "indisponível": a credencial nem é consultada |
+| Consulta pública | Segue exatamente como antes desta etapa, sem limite. Função ausente não gera log; outra falha registra só o símbolo `ACCESS_THROTTLE_UNAVAILABLE` |
+
+A consulta já existia sem limite e é o caminho de todo cliente para acompanhar a reserva: ela não pode cair por causa de uma proteção nova.
+
+**Logs e respostas.** Nenhuma das três rotas registra CPF, código, token ou mensagem do banco: a consulta pública passou a registrar só um símbolo (`LOOKUP_FAILED`, ou o símbolo `[A-Z0-9_]` que o banco levantou) — antes ela registrava a mensagem de erro inteira. As respostas de erro são textos fixos. O segredo do HMAC não sai do banco: nenhuma função o devolve e o postcheck mostra só o tamanho.
 
 ### O que a etapa 5 não muda
 
-`customer_reschedule_options` e `customer_reschedule_reservation`, da etapa 2, continuam com o mesmo corpo. Pagamento, check-in, QR, a consulta pública da reserva e o reagendamento tradicional não foram alterados. O painel só ganhou o texto do link ("escolher a nova data") quando o autoatendimento está ligado.
+`customer_reschedule_options` e `customer_reschedule_reservation`, da etapa 2, continuam com o mesmo corpo. Pagamento, checkout, check-in, QR e o reagendamento tradicional não foram alterados. O painel só ganhou o texto do link ("escolher a nova data") quando o autoatendimento está ligado.
 
-**A consulta pública (`/api/reservations/lookup`) continua sem limite de tentativas**, como antes desta etapa. Ela também confirma CPF + código e mostra a reserva; ver [Pendências](#pendências).
+**A consulta pública muda em uma coisa:** com a migration aplicada, passa a contar tentativas e responde 429 (`Retry-After`, mensagem "Muitas tentativas…") a quem passar do limite. O resto do contrato é o mesmo — 400 com `errors`, 404, 200 com `reservation`, 500 — e a tela de acompanhamento já mostra a mensagem de qualquer erro. Quem consulta a própria reserva usa uma ou duas tentativas.
 
 ## Planilha
 
@@ -383,15 +400,15 @@ Colocar em Stand-by uma reserva de uma dessas sessões funciona normalmente no b
 
 Cada passo depende de autorização própria. Nenhum deles liga o autoatendimento sozinho, exceto o último.
 
-1. **Merge e deploy do código.** Sem a variável, as rotas respondem 404 e a página de acompanhamento é a de sempre. Nada muda.
+1. **Merge e deploy do código.** Sem a variável, as rotas do autoatendimento respondem 404 e a página de acompanhamento é a de sempre. A consulta pública chama o limite, não o encontra (a migration ainda não existe) e segue sem limite — uma chamada a mais ao banco por consulta, e nenhuma mudança de resposta.
 2. `supabase/diagnostics/reservation_standby_self_service_preflight.sql` → `STANDBY_AUTOATENDIMENTO_PREFLIGHT_OK | OK`. Guarde as contagens.
-3. Migration `202610160001_reservation_standby_self_service.sql`, com `begin;` + `set local lock_timeout = '5s';` no topo e `commit;` no fim. Cria duas tabelas novas e duas funções; não trava tabela existente, não substitui função e não toca linha.
+3. Migration `202610160001_reservation_standby_self_service.sql`, com `begin;` + `set local lock_timeout = '5s';` no topo e `commit;` no fim. Cria duas tabelas novas e duas funções; não trava tabela existente, não substitui função e não toca linha. **A partir daqui a consulta pública já conta tentativas** — independente da variável do autoatendimento. Entre o merge e este passo ela funciona como hoje, sem limite.
 4. `supabase/diagnostics/reservation_standby_self_service_postcheck.sql` → `STANDBY_AUTOATENDIMENTO_POSTCHECK_OK | OK`, com as mesmas contagens do preflight.
 5. **Ativação:** `STANDBY_SELF_SERVICE_ENABLED=true` na Vercel, **só em Production**, seguido de um novo deploy (a página de acompanhamento lê a variável no build). Recomendado ligar junto ou depois do e-mail (`STANDBY_RESCHEDULE_EMAIL_ENABLED`); sem ele, o cliente reagenda e vê a confirmação na tela, e o e-mail fica na fila.
 
 Não testar no Preview: ele usa o banco de produção. A verificação de ponta a ponta antes da ativação precisa de um ambiente com banco próprio.
 
-**Rollback da etapa 5.** Desligar a variável e publicar de novo tira o autoatendimento do ar; reagendamentos já feitos continuam válidos. Do banco: `supabase/rollback/202610160001_reservation_standby_self_service.rollback.sql` remove as duas funções e as duas tabelas do limite (só contadores e o segredo). Com a variável ligada e sem as funções, as rotas respondem 503 — nunca liberam acesso sem limite.
+**Rollback da etapa 5.** Desligar a variável e publicar de novo tira o autoatendimento do ar; reagendamentos já feitos continuam válidos. Do banco: `supabase/rollback/202610160001_reservation_standby_self_service.rollback.sql` remove as duas funções e as duas tabelas do limite (só contadores e o segredo). Com a variável ligada e sem as funções, as rotas do autoatendimento respondem 503 — nunca liberam acesso sem limite —, e a consulta pública volta a funcionar sem limite, como antes.
 
 ### Etapa 4 (e-mail de reagendamento)
 
@@ -452,10 +469,11 @@ Depois do passo 5 o comportamento do sistema continua o mesmo: o status só pode
 
 ## Testes
 
-A etapa 5 tem dois arquivos:
+A etapa 5 tem três arquivos:
 
 - `tests/reservation-standby-self-service.test.ts` — o fluxo do servidor (`handleSelfServiceOverview` e `handleSelfServiceReschedule`) contra o Postgres em memória com todas as migrations, pelas RPCs de verdade: credencial, limite de tentativas (janelas, baldes, HMAC, faxina), a tela e cada estado, a régua (valor, vagas, turma fechada ou iniciada, experiência despublicada, base fora de operação, qualquer base), uso único e repetição, o que não pode vazar, o que não pode mudar (código, QR, quantidade, pagamento, check-in), auditoria, a linha da fila do e-mail, preflight, postcheck e rollback.
-- `tests/reservation-standby-self-service-concurrency.test.ts` — **sessões independentes do Postgres**, no CI: duas pessoas na última vaga, cliente e compra nova pela mesma vaga (nas duas ordens), a mesma autorização em duas abas (mesma turma e turmas diferentes, CPF e link), cliente e equipe ao mesmo tempo, transação desfeita e o limite sob rajada de 6 sessões.
+- `tests/public-access-throttle.test.ts` — o limite compartilhado: endereço só da Vercel e só IP literal (cabeçalhos manipulados, lixo, IPv6 /64), a consulta pública com o contrato de sempre e o 429, o limite que não revela códigos, tentativas distribuídas entre os três endpoints, o link com balde próprio, o comportamento antes da migration e com o limite fora do ar, e o que vai para log e para as respostas.
+- `tests/reservation-standby-self-service-concurrency.test.ts` — **sessões independentes do Postgres**, no CI: duas pessoas na última vaga, cliente e compra nova pela mesma vaga (nas duas ordens), a mesma autorização em duas abas (mesma turma e turmas diferentes, CPF e link), cliente e equipe ao mesmo tempo, transação desfeita, o limite sob rajada de 6 sessões (mesmo código, mesmo endereço, e 30 tentativas divididas entre consulta, tela e escolha) e origens e credenciais cruzadas sem deadlock.
 
 A etapa 4 tem três arquivos:
 
@@ -475,7 +493,7 @@ Limite conhecido: o banco de teste tem uma única conexão. A ordem de chegada d
 
 - **Teste de concorrência com duas conexões para as etapas 2 e 3:** o Postgres em memória tem uma conexão só. A fila do e-mail já é testada com sessões independentes no CI, e esses testes passam pelo núcleo do Stand-by (reagendamento simultâneo, repetição), mas as demais operações de Stand-by ainda não têm os seus.
 - **Agendamento mais frequente da recuperação de e-mails:** quatro opções descritas em [Recuperação de falhas](#recuperação-de-falhas), nenhuma aplicada.
-- **Limite de tentativas na consulta pública** (`/api/reservations/lookup`): ela confirma CPF + código e mostra a reserva, sem limite — existia antes desta etapa e não foi alterada. O mesmo `customer_reschedule_throttle` (ou uma função irmã) cobriria a consulta, mas muda um fluxo existente e precisa de decisão própria.
+- **Abuso distribuído:** quem tem muitos endereços ainda pode tentar códigos às cegas, 30 por endereço por janela. O espaço de código + CPF torna isso inviável na prática, mas um limite global (ou o firewall da Vercel) seria a próxima camada.
 - **Teste de ponta a ponta do autoatendimento em navegador**, num ambiente com banco próprio.
 - **Política de cancelamento de reserva reagendada:** definir, e então decidir se entra no e-mail.
 - **Link do mapa do Lago Norte:** preencher `bases.maps_url` faz o botão aparecer em todos os e-mails.

@@ -14,7 +14,7 @@
 
 with expected(fn, kind, exact, norm) as (values
     ('customer_reschedule_overview', 'NOVA', 'e9d06691889941446abc4f952cd13bd5', '05ec424150d165682012b95f02ed6c3c'),
-    ('customer_reschedule_throttle', 'NOVA', '84a6a6a5eeb54d1e99a79d0a6a9e8f69', '267f449206096b11a558815af3a85ccf'),
+    ('register_customer_access_attempt', 'NOVA', '034d0ad135acab10b46eedf44e4264ee', 'f41f122a37c6798d1bee4059e6f8c951'),
     ('customer_reschedule_options', 'ETAPA_2', '9cb629730d6b1aa3da298647d1d4774a', '73845f5f1bdec1737703903b7fd8c2eb'),
     ('customer_reschedule_reservation', 'ETAPA_2', '527e7caf2007bf809cf0a0f9070e293a', '2de122ee7dee9b72d0ce9e223f5a2ee9'),
     ('reservation_latest_standby', 'ETAPA_2', '769baa3c30a33be6bce7f708e0bb0841', 'ba75c6375310e323ed450a34bf93a530'),

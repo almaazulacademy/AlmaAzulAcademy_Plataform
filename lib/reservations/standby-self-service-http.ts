@@ -7,6 +7,7 @@
 import { after, NextResponse } from "next/server";
 
 import { isSameOriginRequest } from "@/lib/admin/http";
+import { trustedClientAddress } from "@/lib/http/client-address";
 import { syncReservationSessionChange } from "@/lib/integrations/google-sheets/service";
 import { followUpRescheduleConfirmationEmail, sendRescheduleConfirmationEmail } from "@/lib/reservations/reschedule-email-service";
 import {
@@ -46,6 +47,11 @@ export function selfServiceGate(request: Request): { deps: SelfServiceDeps; resp
       afterResponse: (task) => after(task),
     },
   };
+}
+
+/** Endereço para o limite por origem: só o gravado pela Vercel. */
+export function selfServiceClient(request: Request) {
+  return trustedClientAddress(request.headers);
 }
 
 export function selfServiceJson(result: SelfServiceResponse) {

@@ -23,7 +23,6 @@ import { applyMigration, fullDatabase } from "./support/full-database.ts";
 import { createPgliteAdmin } from "./support/pglite-admin.ts";
 import { ADMIN, rescheduleFixtures, type Row } from "./support/reschedule-email-fixtures.ts";
 import {
-  clientAddress,
   credentialArgs,
   handleSelfServiceOverview,
   handleSelfServiceReschedule,
@@ -207,14 +206,6 @@ test("o token do link é lido do fragmento, só no formato exato", () => {
   assert.equal(standbyTokenFromHash(`#r=${token}z`), null);
 });
 
-test("o endereço do cliente vem dos cabeçalhos gravados pela Vercel", () => {
-  const headers = (values: Record<string, string>) => new Headers(values);
-  assert.equal(clientAddress(headers({ "x-real-ip": "203.0.113.9", "x-forwarded-for": "10.0.0.1" })), "203.0.113.9");
-  assert.equal(clientAddress(headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" })), "203.0.113.7");
-  assert.equal(clientAddress(headers({})), "");
-  assert.equal(clientAddress(headers({ "x-real-ip": "x".repeat(300) })).length, 128);
-});
-
 test("cada recusa do banco vira uma mensagem para o cliente, sem detalhe interno", () => {
   const cpf: SelfServiceCredential = { kind: "CPF_CODE", cpf: "52998224725", publicCode: "AZ7K2M9Q" };
   const link: SelfServiceCredential = { kind: "LINK", token: "a".repeat(64) };
@@ -273,7 +264,7 @@ test("migration: aditiva — não substitui o corpo de nenhuma função existent
   const created = [...current.keys()].filter((name) => !old.some((row) => row.name === name)).sort();
   assert.deepEqual(created, [
     "customer_reschedule_overview(text,text,text)",
-    "customer_reschedule_throttle(text,text,text,text)",
+    "register_customer_access_attempt(text,text,text,text)",
   ]);
 
   // Idempotente: aplicar de novo não falha e não troca o segredo.
@@ -308,7 +299,7 @@ test("migration: nenhuma reserva, sessão, pagamento ou autorização muda ao ap
 });
 
 test("migration: só a service role executa; ninguém lê as tabelas do limite pela API", async () => {
-  for (const fn of ["customer_reschedule_throttle(text,text,text,text)", "customer_reschedule_overview(text,text,text)"]) {
+  for (const fn of ["register_customer_access_attempt(text,text,text,text)", "customer_reschedule_overview(text,text,text)"]) {
     const row = await one(
       `select has_function_privilege('anon', $1, 'EXECUTE') as anon,
               has_function_privilege('authenticated', $1, 'EXECUTE') as authenticated,
@@ -390,7 +381,7 @@ test("rollback: remove só o que a migration criou; reaplicar devolve tudo", asy
   const session = await local.makeSession(local.IMERSAO.id, { price: local.uniquePrice(), capacity: 10 });
   const parked = await local.reserve(session, 1);
   await local.setStandby(parked.id);
-  await database.query(`select public.customer_reschedule_throttle('203.0.113.1', null, 'ROLLBACK', null)`);
+  await database.query(`select public.register_customer_access_attempt('203.0.113.1', null, 'ROLLBACK', null)`);
 
   const functions = async () => (await database.query<{ name: string; src: string }>(
     `select p.oid::regprocedure::text as name, md5(p.prosrc) as src from pg_proc p where p.pronamespace = 'public'::regnamespace order by 1`,
@@ -403,7 +394,7 @@ test("rollback: remove só o que a migration criou; reaplicar devolve tudo", asy
   const after = await functions();
   assert.deepEqual(
     beforeFunctions.filter((row) => !after.some((kept) => kept.name === row.name)).map((row) => row.name).sort(),
-    ["customer_reschedule_overview(text,text,text)", "customer_reschedule_throttle(text,text,text,text)"],
+    ["customer_reschedule_overview(text,text,text)", "register_customer_access_attempt(text,text,text,text)"],
   );
   for (const row of after) assert.equal(row.src, beforeFunctions.find((old) => old.name === row.name)?.src, row.name);
   assert.equal((await database.query<{ t: string | null }>(`select to_regclass('public.customer_access_throttle')::text as t`)).rows[0].t, null);
@@ -422,7 +413,7 @@ test("rollback: remove só o que a migration criou; reaplicar devolve tudo", asy
 // ===========================================================================
 
 async function hit(client: string, credential: { cpf?: string; code?: string; token?: string }) {
-  return call(`public.customer_reschedule_throttle($1, $2, $3, $4)`, [client, credential.cpf ?? null, credential.code ?? null, credential.token ?? null]);
+  return call(`public.register_customer_access_attempt($1, $2, $3, $4)`, [client, credential.cpf ?? null, credential.code ?? null, credential.token ?? null]);
 }
 
 test("limite: 10 tentativas por código a cada 15 minutos, venham de onde vierem", async () => {
@@ -449,10 +440,15 @@ test("limite: 30 tentativas por endereço, para qualquer credencial", async () =
   assert.equal((await hit("192.0.2.78", { code: "OUTRO001" })).allowed, true);
 });
 
-test("limite: sem endereço, todos dividem o mesmo balde", async () => {
+test("limite: sem endereço não há balde de origem — só o da credencial, nunca um balde comum", async () => {
   await rows(`delete from public.customer_access_throttle`);
-  for (let attempt = 1; attempt <= 30; attempt += 1) await hit("", { code: `SEMIP${String(attempt).padStart(3, "0")}` });
-  assert.equal((await hit("   ", { code: "SEMIP999" })).allowed, false);
+  for (let attempt = 1; attempt <= 40; attempt += 1) {
+    assert.equal((await hit("", { code: `SEMIP${String(attempt).padStart(3, "0")}` })).allowed, true, `tentativa ${attempt}`);
+  }
+  assert.equal((await one(`select count(*)::int as n from public.customer_access_throttle where bucket like 'client:%'`)).n, 0);
+  for (let attempt = 1; attempt <= 10; attempt += 1) await hit("   ", { code: "SEMIP999" });
+  assert.equal((await hit("", { code: "SEMIP999" })).allowed, false, "a credencial continua limitada");
+  await assert.rejects(hit("", {}), /CREDENTIAL_REQUIRED/);
 });
 
 test("limite: a janela vence e o contador recomeça; baldes parados há um dia são apagados", async () => {
@@ -756,6 +752,27 @@ test("uma credencial só alcança a própria autorização", async () => {
   assert.equal((await reservation(mine.booking.id)).status, "AWAITING_RESCHEDULE");
 });
 
+test("link revogado ou substituído: não mostra a reserva e não reagenda", async () => {
+  const { booking, target } = await inStandby();
+  const revoked = await generateLink(booking.id);
+  const opened = openOverview(await overview(byLink(revoked)));
+  await call(`public.admin_revoke_reservation_standby_link($1::uuid, $2::uuid)`, [ADMIN, booking.id]);
+
+  const looked = await overview(byLink(revoked));
+  assert.deepEqual([looked.status, looked.body.code], [404, "NOT_FOUND"]);
+  assert.ok(!JSON.stringify(looked.body).includes(booking.code), "nem o código da reserva aparece");
+  const chosen = await choose(byLink(revoked), opened.standbyId, target);
+  assert.deepEqual([chosen.status, chosen.body.code], [404, "NOT_FOUND"]);
+
+  // Gerar outro link invalida o anterior do mesmo jeito.
+  const replaced = await generateLink(booking.id);
+  await generateLink(booking.id);
+  assert.equal((await choose(byLink(replaced), opened.standbyId, target)).status, 404);
+
+  assert.equal((await reservation(booking.id)).status, "AWAITING_RESCHEDULE");
+  assert.deepEqual(await emails(booking.id), []);
+});
+
 test("o limite vem antes de qualquer consulta da credencial", async () => {
   const { booking, target } = await inStandby();
   const opened = openOverview(await overview(byCpf(booking)));
@@ -767,24 +784,24 @@ test("o limite vem antes de qualquer consulta da credencial", async () => {
   assert.equal(blocked.status, 429);
   assert.equal(blocked.body.code, "TOO_MANY_ATTEMPTS");
   assert.ok((blocked.retryAfterSeconds ?? 0) > 0);
-  assert.deepEqual(admin.calls.rpc, ["customer_reschedule_throttle"], "a RPC de reagendamento nem foi chamada");
+  assert.deepEqual(admin.calls.rpc, ["register_customer_access_attempt"], "a RPC de reagendamento nem foi chamada");
   assert.equal((await reservation(booking.id)).status, "AWAITING_RESCHEDULE");
 
   admin.reset();
   const overviewBlocked = await overview(byCpf(booking), harness(), "203.0.113.251");
   assert.equal(overviewBlocked.status, 429, "o limite é do código, não só do endereço");
-  assert.deepEqual(admin.calls.rpc, ["customer_reschedule_throttle"]);
+  assert.deepEqual(admin.calls.rpc, ["register_customer_access_attempt"]);
 });
 
 test("sem o limite funcionando, o autoatendimento fica indisponível — nunca liberado", async () => {
   const { booking, target } = await inStandby();
-  admin.failRpc("customer_reschedule_throttle", { message: "function public.customer_reschedule_throttle does not exist" }, 2);
+  admin.failRpc("register_customer_access_attempt", { message: "function public.register_customer_access_attempt does not exist" }, 2);
   admin.reset();
   const looked = await overview(byCpf(booking));
   const chosen = await choose(byCpf(booking), "0b5f4a52-2d1e-4b6a-9b1e-2f2d6c9f1a10", target);
   assert.deepEqual([looked.status, looked.body.code], [503, "UNAVAILABLE"]);
   assert.deepEqual([chosen.status, chosen.body.code], [503, "UNAVAILABLE"]);
-  assert.deepEqual(admin.calls.rpc, ["customer_reschedule_throttle", "customer_reschedule_throttle"]);
+  assert.deepEqual(admin.calls.rpc, ["register_customer_access_attempt", "register_customer_access_attempt"]);
   admin.clearFailures();
 });
 

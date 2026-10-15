@@ -27,7 +27,7 @@ begin;
 set local lock_timeout = '5s';
 
 drop function if exists public.customer_reschedule_overview(text, text, text);
-drop function if exists public.customer_reschedule_throttle(text, text, text, text);
+drop function if exists public.register_customer_access_attempt(text, text, text, text);
 drop table if exists public.customer_access_throttle;
 drop table if exists public.customer_access_throttle_secret;
 

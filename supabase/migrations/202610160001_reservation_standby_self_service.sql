@@ -5,10 +5,13 @@
 --
 -- Aditiva e idempotente. Cria duas tabelas e duas funções. **Não substitui o
 -- corpo de nenhuma função existente** e não altera reserva, sessão, pagamento,
--- autorização de Stand-by nem linha de histórico. Depois de aplicada, nada muda
--- no comportamento do site: as duas funções novas só são chamadas pelas rotas
--- públicas da etapa 5, que respondem 404 enquanto `STANDBY_SELF_SERVICE_ENABLED`
--- não for `true`.
+-- autorização de Stand-by nem linha de histórico.
+--
+-- **Depois de aplicada, uma coisa muda no site, de propósito:** a consulta
+-- pública da reserva (`/api/reservations/lookup`, CPF + código) passa a contar
+-- tentativas e responde 429 a quem passar do limite. Quem consulta a própria
+-- reserva usa uma ou duas. O autoatendimento continua desligado até
+-- `STANDBY_SELF_SERVICE_ENABLED=true`: suas rotas respondem 404.
 --
 -- ## O que já existia e continua sendo o caminho
 --
@@ -21,11 +24,12 @@
 --
 -- ## O que faltava
 --
---   1. **Limite de tentativas.** A etapa 2 deixou para a rota pública "limite de
---      tentativas e checagem de origem". A origem é conferida na rota. O limite
---      precisa de estado compartilhado entre as instâncias do servidor — na
---      Vercel cada requisição pode cair em uma instância diferente, e um
---      contador em memória não limita nada. O estado fica aqui.
+--   1. **Limite de tentativas** para tudo que aceita CPF + código ou o token do
+--      link: a consulta pública da reserva e as duas rotas do autoatendimento.
+--      O limite precisa de estado compartilhado entre as instâncias do servidor
+--      — na Vercel cada requisição pode cair em uma instância diferente, e um
+--      contador em memória não limita nada. O estado fica aqui, e os baldes são
+--      os mesmos nas três rotas: alternar entre elas não dá tentativa extra.
 --
 --   2. **O que dizer quando não há o que escolher.** `customer_reschedule_options`
 --      devolve null para qualquer credencial sem autorização aberta, de
@@ -40,7 +44,8 @@
 -- ---------------------------------------------------------------------------
 --
 -- Janelas fixas por balde. Um balde é a origem da requisição (o endereço do
--- cliente) ou a credencial tentada (o código da reserva, ou o token do link).
+-- cliente, quando a aplicação conhece um confiável) ou a credencial tentada (o
+-- código da reserva, ou o token do link).
 -- Toda tentativa conta, certa ou errada: quem acerta usa duas ou três, quem
 -- procura reservas usa centenas.
 --
@@ -98,8 +103,8 @@ revoke all on table public.customer_access_throttle from public, anon, authentic
 -- Limites fixos, aqui e não na aplicação, para o servidor não ter como
 -- afrouxá-los por engano:
 --
---   origem     — 30 tentativas a cada 15 minutos;
---   credencial — 10 tentativas a cada 15 minutos.
+--   origem     — 30 tentativas a cada 15 minutos, só quando há endereço;
+--   credencial — 10 tentativas a cada 15 minutos, sempre.
 --
 -- O balde da credencial usa o código da reserva sem o CPF: quem conhece um
 -- código e tenta adivinhar o CPF esbarra em 10 tentativas por janela, venha de
@@ -107,8 +112,17 @@ revoke all on table public.customer_access_throttle from public, anon, authentic
 -- código de outra pessoa trava esse código por 15 minutos; o dono ainda tem o
 -- link individual e o WhatsApp.
 --
+-- O endereço só chega aqui quando a aplicação o leu de um cabeçalho gravado pela
+-- própria Vercel. Sem endereço, não há balde de origem — e nunca um balde comum
+-- a todos, que deixaria um único abusador travar a consulta de todo mundo. O
+-- limite da credencial vale do mesmo jeito.
+--
+-- O balde da credencial não depende de a reserva existir: um código inventado e
+-- um verdadeiro contam e são barrados da mesma forma, então o limite não revela
+-- quais códigos existem.
+--
 -- Devolve `{allowed, retryAfterSeconds}`. Tentativa barrada também conta.
-create or replace function public.customer_reschedule_throttle(
+create or replace function public.register_customer_access_attempt(
   p_client_address text,
   p_cpf text,
   p_public_code text,
@@ -133,6 +147,7 @@ declare
   credential_limit integer := 10;
   client_row public.customer_access_throttle%rowtype;
   credential_row public.customer_access_throttle%rowtype;
+  client_allowed boolean := true;
   retry_after integer := 0;
 begin
   select s.secret into key from public.customer_access_throttle_secret s where s.singleton;
@@ -140,23 +155,28 @@ begin
     raise exception 'THROTTLE_NOT_CONFIGURED' using errcode = '55000';
   end if;
 
-  -- Sem endereço conhecido, todas as requisições dividem o mesmo balde: o
-  -- limite fica mais apertado, nunca mais frouxo.
-  if client_value = '' then client_value := 'unknown'; end if;
+  if token = '' and code = '' then
+    raise exception 'CREDENTIAL_REQUIRED' using errcode = '22023';
+  end if;
   credential_value := case
     when token <> '' then 'link:' || left(token, 128)
     else 'code:' || left(code, 64)
   end;
 
-  client_bucket := 'client:' || encode(hmac(convert_to('client:' || left(client_value, 128), 'UTF8'), key, 'sha256'), 'hex');
   credential_bucket := 'credential:' || encode(hmac(convert_to(credential_value, 'UTF8'), key, 'sha256'), 'hex');
 
-  insert into public.customer_access_throttle as t (bucket, window_started_at, attempts)
-  values (client_bucket, now(), 1)
-  on conflict (bucket) do update
-  set attempts = case when t.window_started_at <= now() - client_window then 1 else t.attempts + 1 end,
-      window_started_at = case when t.window_started_at <= now() - client_window then now() else t.window_started_at end
-  returning * into client_row;
+  -- A origem antes da credencial, sempre nesta ordem: duas tentativas nunca
+  -- esperam uma pela outra em ordem cruzada.
+  if client_value <> '' then
+    client_bucket := 'client:' || encode(hmac(convert_to('client:' || left(client_value, 128), 'UTF8'), key, 'sha256'), 'hex');
+    insert into public.customer_access_throttle as t (bucket, window_started_at, attempts)
+    values (client_bucket, now(), 1)
+    on conflict (bucket) do update
+    set attempts = case when t.window_started_at <= now() - client_window then 1 else t.attempts + 1 end,
+        window_started_at = case when t.window_started_at <= now() - client_window then now() else t.window_started_at end
+    returning * into client_row;
+    client_allowed := client_row.attempts <= client_limit;
+  end if;
 
   insert into public.customer_access_throttle as t (bucket, window_started_at, attempts)
   values (credential_bucket, now(), 1)
@@ -165,7 +185,7 @@ begin
       window_started_at = case when t.window_started_at <= now() - credential_window then now() else t.window_started_at end
   returning * into credential_row;
 
-  if client_row.attempts > client_limit then
+  if not client_allowed then
     retry_after := greatest(retry_after, ceil(extract(epoch from (client_row.window_started_at + client_window - now())))::integer);
   end if;
   if credential_row.attempts > credential_limit then
@@ -182,14 +202,14 @@ begin
   );
 
   return jsonb_build_object(
-    'allowed', client_row.attempts <= client_limit and credential_row.attempts <= credential_limit,
+    'allowed', client_allowed and credential_row.attempts <= credential_limit,
     'retryAfterSeconds', greatest(retry_after, 0)
   );
 end;
 $$;
 
-comment on function public.customer_reschedule_throttle(text, text, text, text) is
-  'Limite de tentativas do autoatendimento de Stand-by: 30 por origem e 10 por credencial a cada 15 minutos. Toda tentativa conta.';
+comment on function public.register_customer_access_attempt(text, text, text, text) is
+  'Limite de tentativas da consulta pública e do autoatendimento de Stand-by: 30 por origem (quando conhecida) e 10 por credencial a cada 15 minutos. Toda tentativa conta.';
 
 -- ---------------------------------------------------------------------------
 -- 2. O que o cliente vê
@@ -299,8 +319,8 @@ comment on function public.customer_reschedule_overview(text, text, text) is
 -- O Postgres concede EXECUTE a PUBLIC em toda função nova. As duas só pela
 -- service role: o navegador fala com o servidor da aplicação, que confere a
 -- origem e chama o limite antes de qualquer outra coisa.
-revoke all on function public.customer_reschedule_throttle(text, text, text, text) from public, anon, authenticated;
+revoke all on function public.register_customer_access_attempt(text, text, text, text) from public, anon, authenticated;
 revoke all on function public.customer_reschedule_overview(text, text, text) from public, anon, authenticated;
 
-grant execute on function public.customer_reschedule_throttle(text, text, text, text) to service_role;
+grant execute on function public.register_customer_access_attempt(text, text, text, text) to service_role;
 grant execute on function public.customer_reschedule_overview(text, text, text) to service_role;

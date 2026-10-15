@@ -21,6 +21,8 @@ import test, { after, beforeEach } from "node:test";
 import type pg from "pg";
 
 import { realDatabase, realDatabaseUrl } from "./support/real-database.ts";
+import { handlePublicLookup } from "../lib/reservations/public-lookup.ts";
+import { handleSelfServiceOverview, handleSelfServiceReschedule } from "../lib/reservations/standby-self-service.ts";
 import { ADMIN, rescheduleFixtures, type Booking, type Row } from "./support/reschedule-email-fixtures.ts";
 
 const url = realDatabaseUrl();
@@ -92,7 +94,7 @@ if (!database) {
   }
 
   function throttle(client: pg.Client, address: string, code: string) {
-    return settle(client.query(`select public.customer_reschedule_throttle($1, null, $2, null) as value`, [address, code]));
+    return settle(client.query(`select public.register_customer_access_attempt($1, null, $2, null) as value`, [address, code]));
   }
 
   async function generateLink(reservationId: string) {
@@ -145,7 +147,7 @@ if (!database) {
     const pids = await Promise.all(pool.map((client) => pidOf.get(client)!));
     assert.equal(new Set(pids).size, pool.length);
     assert.equal((await setup.query(`show transaction_isolation`)).rows[0].transaction_isolation, "read committed");
-    const { n } = (await setup.query(`select count(*)::int as n from pg_proc where proname in ('customer_reschedule_throttle', 'customer_reschedule_overview')`)).rows[0];
+    const { n } = (await setup.query(`select count(*)::int as n from pg_proc where proname in ('register_customer_access_attempt', 'customer_reschedule_overview')`)).rows[0];
     assert.equal(n, 2);
   });
 
@@ -350,5 +352,82 @@ if (!database) {
     await A.query("rollback");
     const [row] = await rows(`select count(*)::int as n from public.customer_access_throttle`);
     assert.equal(row.n, 2, "só os baldes da tentativa confirmada");
+  });
+
+  // ===========================================================================
+  // 4. Os três endpoints ao mesmo tempo
+  // ===========================================================================
+
+  /** O `rpc(nome, argumentos)` do supabase-js, sobre uma sessão própria do Postgres. */
+  function rpcOn(client: pg.Client) {
+    return async (name: string, args: Record<string, unknown>) => {
+      const keys = Object.keys(args);
+      try {
+        const result = await client.query(
+          `select * from public.${name}(${keys.map((key, index) => `${key} => $${index + 1}`).join(", ")})`,
+          keys.map((key) => args[key]),
+        );
+        const scalar = result.fields.length === 1 && result.fields[0].name === name;
+        return { data: scalar ? result.rows[0]?.[name] ?? null : result.rows, error: null };
+      } catch (error) {
+        return { data: null, error: { message: (error as Error).message, code: (error as { code?: string }).code } };
+      }
+    };
+  }
+
+  let cpfSequence = 500_000_000;
+  function validCpf() {
+    cpfSequence += 7919;
+    const base = String(cpfSequence).padStart(9, "0").slice(-9);
+    const digit = (digits: string) => {
+      const sum = digits.split("").reduce((total, value, index) => total + Number(value) * (digits.length + 1 - index), 0);
+      const remainder = (sum * 10) % 11;
+      return remainder === 10 ? 0 : remainder;
+    };
+    const first = digit(base);
+    return `${base}${first}${digit(`${base}${first}`)}`;
+  }
+
+  test("rajada distribuída: 30 tentativas simultâneas no mesmo código, entre consulta, tela e escolha, em 6 sessões — passam 10", async () => {
+    const price = uniquePrice();
+    const { booking, standbyId } = await parked(1, price);
+    const target = await makeSession(SUNSET_CONCHA.id, { price, capacity: 6 });
+    const attempts = Array.from({ length: 30 }, (_, index) => {
+      const client = pool[index % pool.length];
+      const rpc = rpcOn(client);
+      const credential = { cpf: validCpf(), publicCode: booking.code };
+      const address = `203.0.113.${index}`;
+      switch (index % 3) {
+        case 0:
+          return handlePublicLookup({ rpc, lookup: async () => null }, credential, address);
+        case 1:
+          return handleSelfServiceOverview({ rpc }, { credential }, address);
+        default:
+          return handleSelfServiceReschedule({ rpc }, { credential, standbyId, sessionId: target }, address);
+      }
+    });
+    const responses = await Promise.all(attempts);
+    assert.equal(responses.filter((response) => response.status !== 429).length, 10);
+    assert.ok(responses.every((response) => [404, 429].includes(response.status)), JSON.stringify(responses.map((response) => response.status)));
+    assert.equal((await reservation(booking.id)).status, "AWAITING_RESCHEDULE");
+  });
+
+  test("rajada de um mesmo endereço com códigos diferentes, em 6 sessões: passam exatamente 30", async () => {
+    const attempts = await Promise.all(
+      Array.from({ length: 45 }, (_, index) => throttle(pool[index % pool.length], "198.51.100.99", `VARRE${String(index).padStart(3, "0")}`)),
+    );
+    assert.ok(attempts.every((attempt) => attempt.ok), "nenhuma tentativa falha por concorrência");
+    assert.equal(attempts.filter((attempt) => attempt.ok && attempt.value.allowed === true).length, 30);
+  });
+
+  test("origens e credenciais cruzadas ao mesmo tempo não se bloqueiam em ciclo", async () => {
+    const addresses = ["192.0.2.1", "192.0.2.2", "192.0.2.3", ""];
+    const codes = ["CRUZA001", "CRUZA002", "CRUZA003"];
+    const attempts = await Promise.all(
+      Array.from({ length: 60 }, (_, index) =>
+        throttle(pool[index % pool.length], addresses[index % addresses.length], codes[(index * 7) % codes.length])),
+    );
+    const failures = attempts.filter((attempt) => !attempt.ok);
+    assert.deepEqual(failures, [], "nenhum deadlock nem erro de serialização");
   });
 }

@@ -1,5 +1,5 @@
-import { clientAddress, handleSelfServiceReschedule } from "@/lib/reservations/standby-self-service";
-import { selfServiceGate, selfServiceJson } from "@/lib/reservations/standby-self-service-http";
+import { handleSelfServiceReschedule } from "@/lib/reservations/standby-self-service";
+import { selfServiceClient, selfServiceGate, selfServiceJson } from "@/lib/reservations/standby-self-service-http";
 
 // A tentativa imediata do e-mail e as duas seguintes, em segundo plano, cabem
 // com folga — o mesmo orçamento da rota do painel.
@@ -17,5 +17,5 @@ export async function POST(request: Request) {
   const gate = selfServiceGate(request);
   if (!gate.deps) return gate.response;
   const body: unknown = await request.json().catch(() => null);
-  return selfServiceJson(await handleSelfServiceReschedule(gate.deps, body, clientAddress(request.headers)));
+  return selfServiceJson(await handleSelfServiceReschedule(gate.deps, body, selfServiceClient(request)));
 }

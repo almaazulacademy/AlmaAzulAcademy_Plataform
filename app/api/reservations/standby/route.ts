@@ -1,5 +1,5 @@
-import { clientAddress, handleSelfServiceOverview } from "@/lib/reservations/standby-self-service";
-import { selfServiceGate, selfServiceJson } from "@/lib/reservations/standby-self-service-http";
+import { handleSelfServiceOverview } from "@/lib/reservations/standby-self-service";
+import { selfServiceClient, selfServiceGate, selfServiceJson } from "@/lib/reservations/standby-self-service-http";
 
 /**
  * Autoatendimento do Stand-by: o que o cliente vê.
@@ -12,5 +12,5 @@ export async function POST(request: Request) {
   const gate = selfServiceGate(request);
   if (!gate.deps) return gate.response;
   const body: unknown = await request.json().catch(() => null);
-  return selfServiceJson(await handleSelfServiceOverview(gate.deps, body, clientAddress(request.headers)));
+  return selfServiceJson(await handleSelfServiceOverview(gate.deps, body, selfServiceClient(request)));
 }

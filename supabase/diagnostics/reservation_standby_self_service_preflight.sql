@@ -53,7 +53,7 @@ functions as (
   from expected e left join prod pr on pr.fn = e.fn
 ),
 new_objects as (
-  select 'customer_reschedule_throttle' as name, exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'customer_reschedule_throttle') as present
+  select 'register_customer_access_attempt' as name, exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'register_customer_access_attempt') as present
   union all
   select 'customer_reschedule_overview', exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'customer_reschedule_overview')
   union all

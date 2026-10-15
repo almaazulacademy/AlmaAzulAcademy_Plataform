@@ -10,8 +10,9 @@
  *
  *   1. valida o formato da credencial (CPF + código, ou o token do link) e da
  *      escolha, sem consultar nada;
- *   2. registra a tentativa no limite (`customer_reschedule_throttle`) **antes**
- *      de qualquer consulta que dependa da credencial;
+ *   2. registra a tentativa no limite (`register_customer_access_attempt`, o
+ *      mesmo da consulta pública da reserva) **antes** de qualquer consulta que
+ *      dependa da credencial;
  *   3. chama a RPC e traduz a resposta para o cliente.
  *
  * A credencial vai inteira a cada chamada: não há sessão, cookie nem token
@@ -20,6 +21,7 @@
  */
 
 import { parseStandbyResolution } from "../admin/standby.ts";
+import { registerAccessAttempt, TOO_MANY_ATTEMPTS_MESSAGE } from "./access-throttle.ts";
 import { digitsOnly, isValidCpf } from "./validation.ts";
 
 // --- Ativação -----------------------------------------------------------------
@@ -88,19 +90,6 @@ export function parseRescheduleChoice(value: unknown): RescheduleChoice | null {
   const sessionId = String(value.sessionId ?? "").trim();
   if (!credential || !UUID.test(standbyId) || !UUID.test(sessionId)) return null;
   return { credential, standbyId, sessionId };
-}
-
-/**
- * Endereço do cliente para o limite por origem. Na Vercel, `x-real-ip` e o
- * primeiro item de `x-forwarded-for` são gravados pela própria plataforma.
- * Sem nenhum dos dois, o banco usa um balde comum — mais apertado, nunca mais
- * frouxo.
- */
-export function clientAddress(headers: Pick<Headers, "get">) {
-  const real = headers.get("x-real-ip")?.trim();
-  if (real) return real.slice(0, 128);
-  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded ? forwarded.slice(0, 128) : "";
 }
 
 // --- Respostas do banco -------------------------------------------------------
@@ -240,7 +229,7 @@ export const SELF_SERVICE_MESSAGES = {
   INVALID_REQUEST: "Confira os dados informados e tente de novo.",
   NOT_FOUND_CPF: "Não encontramos uma reserva aguardando nova data com este CPF e código. Confira os dados.",
   NOT_FOUND_LINK: "Este link não é válido. Ele pode ter sido substituído ou cancelado pela equipe.",
-  TOO_MANY_ATTEMPTS: "Muitas tentativas seguidas. Por segurança, aguarde alguns minutos antes de tentar de novo.",
+  TOO_MANY_ATTEMPTS: TOO_MANY_ATTEMPTS_MESSAGE,
   ALREADY_USED: "Esta reserva já foi reagendada ou não está mais aguardando uma nova data.",
   NO_SPOTS: "As vagas desta turma acabaram enquanto você escolhia. Escolha outra data.",
   SESSION_UNAVAILABLE: "Esta turma não está mais disponível. Escolha outra data.",
@@ -288,7 +277,7 @@ function notFound(credential: SelfServiceCredential): SelfServiceFailure {
 
 // --- Fluxo --------------------------------------------------------------------
 
-type RpcResult = { data: unknown; error: { message: string } | null };
+type RpcResult = { data: unknown; error: { message: string; code?: string } | null };
 
 export type SelfServiceDeps = {
   rpc(name: string, args: Record<string, unknown>): PromiseLike<RpcResult>;
@@ -320,18 +309,12 @@ function failure(result: SelfServiceFailure): SelfServiceResponse {
  * credencial nem chega a ser consultada.
  */
 async function throttle(deps: SelfServiceDeps, credential: SelfServiceCredential, client: string): Promise<SelfServiceResponse | null> {
-  let result: RpcResult;
-  try {
-    result = await deps.rpc("customer_reschedule_throttle", { p_client_address: client, ...credentialArgs(credential) });
-  } catch {
-    return failure({ status: 503, code: "UNAVAILABLE", message: SELF_SERVICE_MESSAGES.UNAVAILABLE });
+  const attempt = await registerAccessAttempt(deps.rpc, client, credentialArgs(credential));
+  if (attempt.status === "ALLOWED") return null;
+  if (attempt.status === "BLOCKED") {
+    return failure({ status: 429, code: "TOO_MANY_ATTEMPTS", message: SELF_SERVICE_MESSAGES.TOO_MANY_ATTEMPTS, retryAfterSeconds: attempt.retryAfterSeconds });
   }
-  if (result.error || !isRecord(result.data)) {
-    return failure({ status: 503, code: "UNAVAILABLE", message: SELF_SERVICE_MESSAGES.UNAVAILABLE });
-  }
-  if (result.data.allowed === true) return null;
-  const retryAfterSeconds = Math.max(1, Math.ceil(count(result.data.retryAfterSeconds)));
-  return failure({ status: 429, code: "TOO_MANY_ATTEMPTS", message: SELF_SERVICE_MESSAGES.TOO_MANY_ATTEMPTS, retryAfterSeconds });
+  return failure({ status: 503, code: "UNAVAILABLE", message: SELF_SERVICE_MESSAGES.UNAVAILABLE });
 }
 
 /** A tela: turmas elegíveis, ou o estado da autorização já encerrada. */
