@@ -5,9 +5,11 @@
 -- migration preenche o conteúdo editorial, adaptado da Remada da Lua Cheia do
 -- Lago Norte. Diferença: no Cápsula Bar não há fogueira.
 --
--- Aditiva e idempotente. Só age enquanto o conteúdo editorial ainda está vazio,
--- então edições feitas pelo painel nunca são sobrescritas. Nenhuma sessão,
--- reserva ou RPC é tocada; status, preço, duração e capacidade não mudam. A
+-- Aditiva e idempotente. Só escreve `editorial_content`, e só enquanto ele ainda
+-- está vazio, então edições feitas pelo painel nunca são sobrescritas. Nenhuma
+-- sessão, reserva ou RPC é tocada; título, resumo, status, preço, duração e
+-- capacidade não mudam. Depende de 202610080001_capsula_bar_launch (base e
+-- cadastro com base_id da Concha Acústica); aplicar depois dela. A
 -- experiência continua "em breve": a publicação e as datas são do painel.
 -- A experiência do Lago Norte (`remada-lua-cheia`) não é tocada.
 
@@ -39,7 +41,7 @@ begin
     "hero": {
       "eyebrow": "NOITE DE LUA CHEIA · CÁPSULA BAR — CONCHA ACÚSTICA",
       "title": "Reme sob a luz da lua cheia.",
-      "subtitle": "Uma experiência contemplativa em canoa havaiana, saindo do Cápsula Bar, ao lado da Concha Acústica, para acompanhar a lua nascendo no horizonte e mergulhar no Lago Paranoá.",
+      "subtitle": "Uma experiência contemplativa em canoa havaiana, saindo do Cápsula Bar, ao lado da Concha Acústica, para acompanhar a lua cheia nascendo no horizonte do Lago Paranoá.",
       "image": {
         "src": "/images/bases/concha-acustica/experiencia-remada-da-lua-cheia.webp",
         "alt": "Canoas havaianas no Lago Paranoá com a lua cheia nascendo no horizonte"
@@ -66,25 +68,14 @@ begin
       "paragraphs": [
         "A Remada da Lua Cheia é um convite para contemplar o Lago Paranoá sob uma nova luz. Saindo do Cápsula Bar, ao lado da Concha Acústica, acompanhamos de dentro da canoa havaiana a lua surgindo no horizonte e refletindo sobre as águas.",
         "Nos primeiros dias da programação, a experiência pode começar ainda com a luz do entardecer, permitindo acompanhar o pôr do sol e, logo depois, o nascimento da lua — algumas vezes, os dois no mesmo horizonte.",
-        "Durante a remada, fazemos pausas para contemplação e banho. Para quem busca mais aventura, há a possibilidade de mergulhar no meio do lago.",
+        "Durante a remada, fazemos pausas para contemplação. Quando os instrutores avaliam que as condições estão seguras, quem quiser pode tomar um banho no Lago Paranoá — a parada para banho é opcional.",
         "O retorno ao Cápsula Bar acontece já no escuro, com a lua iluminando o caminho de volta sobre as águas."
       ],
       "image": {
         "src": "/images/experiences/remada-lua-cheia/remada-lua-cheia-sobre.webp",
-        "alt": "Participantes em uma canoa havaiana à noite com a lua refletida no lago"
+        "alt": "Lua cheia surgindo no céu do entardecer sobre o Lago Paranoá",
+        "credit": "Registros de experiências Alma Azul no Lago Paranoá"
       }
-    },
-    "gallery": {
-      "eyebrow": "Galeria",
-      "title": "Remada da Lua Cheia",
-      "description": "Uma remada sob a lua cheia, com banho no lago e contemplação no horizonte.",
-      "images": [
-        { "src": "/images/experiences/remada-lua-cheia/remada-lua-cheia-galeria-02.webp", "alt": "Grupo remando em uma canoa havaiana durante o pôr do sol" },
-        { "src": "/images/experiences/remada-lua-cheia/remada-lua-cheia-galeria-03.webp", "alt": "Lua cheia próxima ao horizonte sobre o Lago Paranoá" },
-        { "src": "/images/experiences/remada-lua-cheia/remada-lua-cheia-galeria-04.webp", "alt": "Participantes remando com a lua cheia no horizonte" },
-        { "src": "/images/experiences/remada-lua-cheia/remada-lua-cheia-galeria-05.webp", "alt": "Remada noturna sob a lua cheia e seu reflexo no lago" },
-        { "src": "/images/experiences/remada-lua-cheia/remada-lua-cheia-galeria-07.webp", "alt": "Participantes em uma canoa havaiana nas águas do Lago Paranoá" }
-      ]
     },
     "steps": {
       "eyebrow": "Como funciona",
@@ -93,7 +84,7 @@ begin
       "items": [
         { "title": "Recepção e preparação", "description": "O encontro acontece em frente ao Cápsula Bar, ao lado da Concha Acústica. A equipe recebe o grupo, entrega os equipamentos e apresenta as orientações de segurança e remada." },
         { "title": "Pôr do sol e nascimento da lua", "description": "Dependendo da data, iniciamos a experiência ainda com a luz do entardecer. Remamos pelo Lago Paranoá acompanhando o pôr do sol e a lua cheia surgindo no horizonte." },
-        { "title": "Banho e contemplação", "description": "Durante o percurso, fazemos uma pausa no meio do lago para quem busca mais aventura e um momento de contemplação sob a lua." },
+        { "title": "Contemplação e banho opcional", "description": "Durante o percurso, paramos para contemplar a lua sobre o lago. Se os instrutores avaliarem que as condições estão seguras, quem quiser pode tomar um banho." },
         { "title": "Retorno sob a lua", "description": "Voltamos ao Cápsula Bar já no escuro, com a lua cheia iluminando o lago, e encerramos a experiência na chegada." }
       ]
     },
@@ -107,9 +98,8 @@ begin
         { "icon": "LifeBuoy", "title": "Colete salva-vidas", "description": "" },
         { "icon": "Compass", "title": "Instrutores em cada canoa", "description": "" },
         { "icon": "ShieldCheck", "title": "Instrução completa para iniciantes", "description": "" },
-        { "icon": "Droplets", "title": "Pausa para banho", "description": "" },
         { "icon": "Sparkles", "title": "Momento de contemplação no lago", "description": "" },
-        { "icon": "Sparkles", "title": "Fotos registradas pelos instrutores", "description": "" }
+        { "icon": "Droplets", "title": "Pausa para banho opcional, conforme avaliação de segurança dos instrutores", "description": "" }
       ]
     },
     "whatToBring": {
@@ -117,7 +107,7 @@ begin
       "title": "O que levar",
       "items": [
         "Roupa confortável para atividade física",
-        "Roupa de banho",
+        "Roupa de banho, caso queira entrar na água",
         "Chinelo",
         "Repelente",
         "Garrafa de água",
@@ -140,23 +130,22 @@ begin
     "reservations": {
       "eyebrow": "Remada da Lua Cheia · Cápsula Bar",
       "title": "Ver próximas datas",
-      "description": "Uma experiência noturna em canoa havaiana, saindo do Cápsula Bar, para acompanhar a lua cheia nascendo no horizonte e mergulhar no Lago Paranoá.",
+      "description": "Uma experiência noturna em canoa havaiana, saindo do Cápsula Bar, para acompanhar a lua cheia nascendo no horizonte do Lago Paranoá.",
       "image": {
         "src": "/images/experiences/remada-lua-cheia/remada-lua-cheia-reservas.webp",
-        "alt": "Lua cheia refletida no Lago Paranoá ao lado de uma canoa havaiana"
+        "alt": "Lua cheia refletida no Lago Paranoá ao lado de uma canoa havaiana",
+        "credit": "Registros de experiências Alma Azul no Lago Paranoá"
       }
     },
     "seo": {
       "title": "Remada da Lua Cheia no Cápsula Bar — Concha Acústica | Alma Azul Academy",
-      "description": "Reme sob a lua cheia no Lago Paranoá, saindo do Cápsula Bar, ao lado da Concha Acústica. Experiência de canoa havaiana com banho, contemplação e fotos."
+      "description": "Reme sob a lua cheia no Lago Paranoá, saindo do Cápsula Bar, ao lado da Concha Acústica. Experiência de canoa havaiana com instrução, contemplação e acompanhamento completo."
     }
   }
   $editorial$::jsonb;
 
   update public.experiences
   set editorial_content = experience_editorial,
-      summary = 'Uma remada sob a lua cheia, saindo do Cápsula Bar, com banho no lago e contemplação no horizonte.',
-      description = 'Uma experiência noturna em canoa havaiana, saindo do Cápsula Bar, ao lado da Concha Acústica, para acompanhar a lua cheia nascendo no horizonte e mergulhar no Lago Paranoá.',
       updated_at = now()
   where slug = 'remada-lua-cheia-concha-acustica'
     and base_id = capsula_id
