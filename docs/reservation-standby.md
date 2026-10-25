@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Pagamentos](payments.md) · [Painel](admin.md)
 
-**Estado: autoatendimento do cliente (etapa 5 de 6), desligado por padrão.** As migrations `202610130001`, `202610130002`, `202610140001` e `202610150001` estão aplicadas em produção. O painel só existe com `STANDBY_ADMIN_ENABLED=true`. O e-mail de reagendamento só sai com `STANDBY_RESCHEDULE_EMAIL_ENABLED=true`. O cliente só escolhe a nova data pelo site com a migration `202610160001` aplicada **e** `STANDBY_SELF_SERVICE_ENABLED=true`. Mergear o PR não aplica migration, não liga nada e não envia e-mail.
+**Estado (conferido em 25/10/2026): painel e e-mail de reagendamento ligados em Production; autoatendimento do cliente desligado.** As cinco migrations do Stand-by (`202610130001`, `202610130002`, `202610140001`, `202610150001` e `202610160001`) estão aplicadas em produção, todas com postcheck OK. Desde 16/10/2026 Production tem `STANDBY_ADMIN_ENABLED=true` e `STANDBY_RESCHEDULE_EMAIL_ENABLED=true`; o painel foi testado com a reserva da equipe e o único e-mail da fila saiu uma vez (`SENT=1`). `STANDBY_SELF_SERVICE_ENABLED` não existe em nenhum ambiente: as rotas do autoatendimento respondem 404. Para ver o estado atual sem editar nada, rode `supabase/diagnostics/reservation_standby_status.sql`. Mergear um PR não aplica migration, não liga nada e não envia e-mail.
 
 ## O que é
 
@@ -173,7 +173,7 @@ Assunto `Reagendamento confirmado — <código>`. Mesma moldura, rodapé e bloco
 
 Duas escolhas deliberadas:
 
-- **O link do mapa só aparece quando a base tem um cadastrado** (`bases.maps_url`). O Lago Norte não tem; o endereço sai em texto, como no e-mail de pagamento.
+- **O ponto de encontro e o link do mapa só aparecem quando a base tem um cadastrado** (`bases.meeting_point`, `bases.maps_url`). O Lago Norte não tem nenhum dos dois — a migration `202610080001` os deixou nulos de propósito —, e o bloco "Localização" mostra só o endereço, como no e-mail de pagamento. Por isso uma auditoria que confira o payload de uma reserva do Lago Norte vê `ponto de encontro=false, endereço=true, link do mapa=false`: é o cadastro esperado, não falha de mapeamento. Mantido assim por decisão da operação em 16/10/2026.
 - **A política de cancelamento fica de fora.** O que vale para uma reserva reagendada é decisão da operação, e o e-mail não a antecipa.
 
 `pnpm email:preview` gera `.preview/reagendamento-<base>.html` e `.txt`, sem enviar nada.
@@ -396,7 +396,9 @@ Colocar em Stand-by uma reserva de uma dessas sessões funciona normalmente no b
 
 ## Publicação
 
-### Etapa 5 (autoatendimento)
+### Etapa 5 (autoatendimento) — migration aplicada, autoatendimento ainda desligado
+
+Os passos 1 a 4 foram concluídos: a `202610160001` está em produção e o postcheck terminou em `STANDBY_AUTOATENDIMENTO_POSTCHECK_OK | 0 falha(s), 0 ponto(s) de atenção | OK`. Falta só o passo 5, a ativação.
 
 Cada passo depende de autorização própria. Nenhum deles liga o autoatendimento sozinho, exceto o último.
 
@@ -410,7 +412,9 @@ Não testar no Preview: ele usa o banco de produção. A verificação de ponta 
 
 **Rollback da etapa 5.** Desligar a variável e publicar de novo tira o autoatendimento do ar; reagendamentos já feitos continuam válidos. Do banco: `supabase/rollback/202610160001_reservation_standby_self_service.rollback.sql` remove as duas funções e as duas tabelas do limite (só contadores e o segredo). Com a variável ligada e sem as funções, as rotas do autoatendimento respondem 503 — nunca liberam acesso sem limite —, e a consulta pública volta a funcionar sem limite, como antes.
 
-### Etapa 4 (e-mail de reagendamento)
+### Etapa 4 (e-mail de reagendamento) — concluída, e-mail ligado
+
+Todos os passos foram concluídos. A variável foi ligada em Production em 16/10/2026 e o primeiro envio, o da reserva da equipe, saiu uma única vez.
 
 Cada passo depende de autorização própria. Nenhum deles envia e-mail sozinho, exceto o último.
 
@@ -427,9 +431,9 @@ Não testar reagendamento no Preview: ele usa o banco de produção e, com as va
 
 **Rollback da etapa 4.** Desligar a variável e publicar de novo já interrompe os envios. Do banco: `supabase/rollback/202610150001_reservation_reschedule_email.rollback.sql` remove a trigger e as treze funções e mantém as duas tabelas, que são o registro do que foi enviado. As mensagens guardadas para repetição são apagadas, e os envios de resultado desconhecido passam a `UNCERTAIN` — não voltam à fila como "não enviados" se a migration for reaplicada. E-mails ainda na fila deixam de sair. Para reverter também `202610140001` ou `202610130002`, este rollback vem primeiro. Reaplicar a migration depois devolve tudo; os reagendamentos feitos nesse intervalo ficam sem e-mail, e o postcheck avisa em `REAGENDAMENTOS_SEM_LINHA_NA_FILA`.
 
-### Etapa 3 (painel) — migration aplicada, painel ainda desligado
+### Etapa 3 (painel) — concluída, painel ligado
 
-Os passos 1 a 4 foram concluídos: a `202610140001` está em produção e o postcheck terminou em `STANDBY_PAINEL_POSTCHECK_OK | 0 falha(s), 0 ponto(s) de atenção | OK`. Falta só o passo 5, a ativação.
+Todos os passos foram concluídos: a `202610140001` está em produção (postcheck `STANDBY_PAINEL_POSTCHECK_OK | 0 falha(s), 0 ponto(s) de atenção | OK`), e `STANDBY_ADMIN_ENABLED=true` está ligada em Production. O painel foi testado com a reserva da equipe: Stand-by, vaga liberada e reagendamento.
 
 Cada passo depende de autorização própria. Nenhum deles liga o painel sozinho, exceto o último.
 
