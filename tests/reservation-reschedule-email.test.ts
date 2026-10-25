@@ -1519,6 +1519,7 @@ const STANDBY_MIGRATION = "202610130002_reservation_standby.sql";
 const PREFLIGHT = "diagnostics/reservation_reschedule_email_preflight.sql";
 const POSTCHECK = "diagnostics/reservation_reschedule_email_postcheck.sql";
 const REPORT = "diagnostics/reservation_reschedule_email_report.sql";
+const STATUS = "diagnostics/reservation_standby_status.sql";
 const ROLLBACK = "rollback/202610150001_reservation_reschedule_email.rollback.sql";
 
 type Check = { check_name: string; result: string; status: string };
@@ -1786,6 +1787,48 @@ test("relatório da fila: só leitura, só contagens e ids técnicos", async () 
   const dump = JSON.stringify(report);
   for (const booking of [pending.booking, broken.booking, unsure.booking]) {
     for (const secret of [booking.email, booking.name, booking.code, booking.cpf]) assert.ok(!dump.includes(secret), "nenhum dado do cliente");
+  }
+});
+
+test("estado do Stand-by: só leitura, sem dados do cliente, e o Lago Norte sem ponto de encontro é o esperado", async () => {
+  const database = await fullDatabase();
+  const fx = await fixturesOf(database);
+  const done = await fx.rescheduled();
+  const price = fx.uniquePrice();
+  const waiting = await fx.reserve(await fx.makeSession(fx.IMERSAO.id, { price, startsIn: "6 days" }), 1);
+  await fx.setStandby(waiting.id);
+
+  const sql = operationsFile(STATUS);
+  assert.ok(!/\b(insert|update|delete|alter|create|drop|grant|revoke|truncate)\b/i.test(sql.replace(/--.*$/gm, "").replace(/'[^']*'/g, "''")), "somente leitura");
+  const snapshot = async () => JSON.stringify((await database.query(
+    `select (select json_agg(t order by id) from public.reservation_reschedule_emails t) as emails,
+            (select json_agg(t order by id) from public.reservation_standby t) as standby,
+            (select json_agg(t order by id) from public.reservations t) as reservations`,
+  )).rows);
+  const before = await snapshot();
+  await database.exec("begin transaction read only");
+  const report = (await database.query(sql)).rows as Array<{ check_name: string; result: string }>;
+  await database.exec("rollback");
+  assert.equal(await snapshot(), before, "nada mudou");
+  const value = (name: string) => report.find((row) => row.check_name.startsWith(name))?.result;
+
+  assert.equal(value("RESERVAS_AGUARDANDO_REAGENDAMENTO"), "1");
+  assert.equal(value("AUTORIZACOES_ABERTAS"), "1");
+  assert.equal(value("INCOERENCIAS_STATUS_X_AUTORIZACAO"), "0");
+  assert.equal(value("FILA_POR_STATUS"), "QUEUED=1");
+  assert.equal(value("PENDENTES_QUE_SAIRIAM_AO_ABRIR_O_PAINEL"), "1");
+  assert.equal(value("MENSAGEM_CONGELADA_RESIDUAL"), "0");
+  assert.equal(value("REAGENDAMENTOS_SEM_LINHA_NA_FILA"), "0");
+  assert.equal(value("MAIS_DE_UMA_LINHA_POR_REAGENDAMENTO"), "0");
+  assert.equal(value("LIMITE_BLOQUEIOS_AGORA"), "0 credencial(is), 0 origem(ns)");
+  assert.doesNotMatch(value("RPCS_DO_CLIENTE_SO_PELA_SERVICE_ROLE") ?? "false", /false/);
+  assert.match(value("BASES_LOCAL") ?? "", /lago-norte: false\/true\/false/, "Lago Norte: só o endereço");
+  assert.match(value("BASES_LOCAL") ?? "", /concha-acustica: true\/true\/true/);
+  assert.ok(report.length <= 100, "cabe no limite de linhas do SQL Editor");
+
+  const dump = JSON.stringify(report);
+  for (const booking of [done.booking, waiting]) {
+    for (const secret of [booking.email, booking.name, booking.code, booking.cpf, booking.id]) assert.ok(!dump.includes(secret), "nenhum dado do cliente");
   }
 });
 
