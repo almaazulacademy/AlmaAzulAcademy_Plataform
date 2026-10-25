@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Pagamentos](payments.md) · [Painel](admin.md)
 
-**Estado (conferido em 25/10/2026): painel e e-mail de reagendamento ligados em Production; autoatendimento do cliente desligado.** As cinco migrations do Stand-by (`202610130001`, `202610130002`, `202610140001`, `202610150001` e `202610160001`) estão aplicadas em produção, todas com postcheck OK. Desde 16/10/2026 Production tem `STANDBY_ADMIN_ENABLED=true` e `STANDBY_RESCHEDULE_EMAIL_ENABLED=true`; o painel foi testado com a reserva da equipe e o único e-mail da fila saiu uma vez (`SENT=1`). `STANDBY_SELF_SERVICE_ENABLED` não existe em nenhum ambiente: as rotas do autoatendimento respondem 404. Para ver o estado atual sem editar nada, rode `supabase/diagnostics/reservation_standby_status.sql`. Mergear um PR não aplica migration, não liga nada e não envia e-mail.
+**Estado (25/10/2026): painel, e-mail de reagendamento e autoatendimento do cliente ligados em Production.** As cinco migrations do Stand-by (`202610130001`, `202610130002`, `202610140001`, `202610150001` e `202610160001`) estão aplicadas em produção, todas com postcheck OK. `STANDBY_ADMIN_ENABLED` e `STANDBY_RESCHEDULE_EMAIL_ENABLED` estão ligadas desde 16/10/2026 e `STANDBY_SELF_SERVICE_ENABLED` desde 25/10/2026, as três só em Production (deploy `5cyv6vsCj`, commit `c11e3ba`). Para ver o estado atual sem editar nada, rode `supabase/diagnostics/reservation_standby_status.sql`. Mergear um PR não aplica migration, não liga nada e não envia e-mail.
 
 ## O que é
 
@@ -396,9 +396,11 @@ Colocar em Stand-by uma reserva de uma dessas sessões funciona normalmente no b
 
 ## Publicação
 
-### Etapa 5 (autoatendimento) — migration aplicada, autoatendimento ainda desligado
+### Etapa 5 (autoatendimento) — concluída, autoatendimento ligado
 
-Os passos 1 a 4 foram concluídos: a `202610160001` está em produção e o postcheck terminou em `STANDBY_AUTOATENDIMENTO_POSTCHECK_OK | 0 falha(s), 0 ponto(s) de atenção | OK`. Falta só o passo 5, a ativação.
+Todos os passos foram concluídos. A `202610160001` está em produção (postcheck `STANDBY_AUTOATENDIMENTO_POSTCHECK_OK | 0 falha(s), 0 ponto(s) de atenção | OK`), e `STANDBY_SELF_SERVICE_ENABLED=true` foi ligada em Production em 25/10/2026, com redeploy (`5cyv6vsCj`); o deploy anterior, `4tdZxh78b`, é o alvo de Instant Rollback.
+
+Verificado em produção com reservas da equipe: reagendamento pelo cliente com CPF + código e pelo link, uso único (a consulta seguinte mostra a reserva confirmada, sem nova escolha), um e-mail por reagendamento, aceito na primeira tentativa, planilha sincronizada e nenhum erro nas rotas. Link substituído e link revogado não foram exercitados em produção; ficam cobertos pelos testes automatizados.
 
 Cada passo depende de autorização própria. Nenhum deles liga o autoatendimento sozinho, exceto o último.
 
@@ -498,7 +500,6 @@ Limite conhecido: o banco de teste tem uma única conexão. A ordem de chegada d
 - **Teste de concorrência com duas conexões para as etapas 2 e 3:** o Postgres em memória tem uma conexão só. A fila do e-mail já é testada com sessões independentes no CI, e esses testes passam pelo núcleo do Stand-by (reagendamento simultâneo, repetição), mas as demais operações de Stand-by ainda não têm os seus.
 - **Agendamento mais frequente da recuperação de e-mails:** quatro opções descritas em [Recuperação de falhas](#recuperação-de-falhas), nenhuma aplicada.
 - **Abuso distribuído:** quem tem muitos endereços ainda pode tentar códigos às cegas, 30 por endereço por janela. O espaço de código + CPF torna isso inviável na prática, mas um limite global (ou o firewall da Vercel) seria a próxima camada.
-- **Teste de ponta a ponta do autoatendimento em navegador**, num ambiente com banco próprio.
 - **Política de cancelamento de reserva reagendada:** definir, e então decidir se entra no e-mail.
 - **Link do mapa do Lago Norte:** preencher `bases.maps_url` faz o botão aparecer em todos os e-mails.
 - **Ambiente de teste de ponta a ponta:** o Preview da Vercel usa o banco de produção e não pode ser usado para operações de escrita.
