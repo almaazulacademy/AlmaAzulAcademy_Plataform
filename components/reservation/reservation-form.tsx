@@ -7,6 +7,7 @@ import { useState } from "react";
 import { ReservationHold } from "@/components/reservation/reservation-hold";
 import { ReservationSummary } from "@/components/reservation/reservation-summary";
 import { Button } from "@/components/ui/button";
+import { WaitlistJoinLink } from "@/components/waitlist/join-link";
 import { SoldOutNotice } from "@/components/waitlist/sold-out-notice";
 import type { BookingSession } from "@/lib/reservations/types";
 import { formatCpf, formatPhone, validateReservationInput } from "@/lib/reservations/validation";
@@ -26,7 +27,7 @@ const inputClass = "mt-2 h-12 w-full rounded-2xl border border-ink/15 bg-white p
  * Ligado, a tela acompanha a disponibilidade real devolvida na recusa: esgotou,
  * o formulário dá lugar ao aviso; sobrou menos, a quantidade é reduzida.
  */
-export function ReservationForm({ session, waitlistEnabled = false }: { session: BookingSession; waitlistEnabled?: boolean }) {
+export function ReservationForm({ session, waitlistEnabled = false, waitlistSignup = false }: { session: BookingSession; waitlistEnabled?: boolean; waitlistSignup?: boolean }) {
   const [spots, setSpots] = useState(session.remainingSpots);
   const [soldOut, setSoldOut] = useState(false);
   const [quantity, setQuantity] = useState(1);
@@ -94,7 +95,7 @@ export function ReservationForm({ session, waitlistEnabled = false }: { session:
       <div className="rounded-4xl bg-white p-10 text-center sm:p-16">
         <h1 className="text-4xl font-medium tracking-[-0.05em]">{waitlistEnabled ? "Esgotado" : "Sessão indisponível"}</h1>
         {waitlistEnabled
-          ? <SoldOutNotice className="mx-auto mt-5 max-w-lg items-center text-center" note={SOLD_OUT_WHILE_FILLING} />
+          ? <SoldOutNotice className="mx-auto mt-5 max-w-lg items-center text-center" note={SOLD_OUT_WHILE_FILLING} action={waitlistSignup ? <WaitlistJoinLink sessionId={session.id} className="mt-2" /> : undefined} />
           : <p className="mx-auto mt-4 max-w-lg leading-7 text-ink/55">A data pode ter esgotado ou não estar mais aberta. Confira as próximas sessões disponíveis.</p>}
         <Link href="/agenda" className="mt-7 inline-flex font-semibold text-forest">Ver próximas datas</Link>
       </div>

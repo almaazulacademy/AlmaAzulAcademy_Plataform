@@ -173,6 +173,48 @@ if (!database) {
     assert.deepEqual(await second, { ok: true, value: { status: "ALREADY_CLOSED", state: "CANCELLED" } });
   });
 
+  test("fase 3: duas instâncias pedem a mesma confirmação ao mesmo tempo — só uma envia", async () => {
+    const session = await soldOutSession();
+    const who = person();
+    await joinOn(A, session, who);
+    const claimOn = (client: pg.Client) => settle(client.query(
+      `select public.claim_waitlist_joined_email($1::uuid, $2, 6, 2, 1380) as value`, [session, who.email],
+    ));
+
+    await A.query("begin");
+    const first = await claimOn(A);
+    assert.ok(first.ok && first.value?.claimToken, "a primeira reivindica");
+    // A segunda não espera a primeira: a linha está travada e é pulada.
+    await B.query("set statement_timeout = '3s'");
+    const second = await claimOn(B);
+    assert.deepEqual(second, { ok: true, value: null });
+    await A.query("commit");
+
+    // Confirmada a primeira, o e-mail está em envio: ninguém mais o pega.
+    assert.deepEqual(await claimOn(B), { ok: true, value: null });
+    const row = await one(`select n.status, n.attempts from public.waitlist_notifications n join public.waitlist_entries we on we.id = n.entry_id where we.session_id = $1::uuid`, [session]);
+    assert.deepEqual([row.status, row.attempts], ["SENDING", 1]);
+  });
+
+  test("fase 3: cancelamento durante a reivindicação espera e descarta o que ainda não saiu", async () => {
+    const session = await soldOutSession();
+    const who = person();
+    await joinOn(A, session, who);
+    const entry = await one(`select id from public.waitlist_entries where session_id = $1::uuid and email = $2`, [session, who.email]);
+    const token = await call(`public.waitlist_cancel_token($1::uuid)`, [entry.id]);
+
+    await A.query("begin");
+    await A.query(`select id from public.waitlist_entries where id = $1::uuid for update`, [entry.id]);
+    await B.query("set statement_timeout = '10s'");
+    const claim = settle(B.query(`select public.claim_waitlist_joined_email($1::uuid, $2, 6, 2, 1380) as value`, [session, who.email]));
+    assert.equal(await stillWaiting(claim), true, "a reivindicação espera a inscrição");
+    await A.query(`select public.waitlist_cancel($1, null)`, [token]);
+    await A.query("commit");
+    assert.deepEqual(await claim, { ok: true, value: null }, "inscrição encerrada: nada a enviar");
+    const row = await one(`select status, skip_reason from public.waitlist_notifications where entry_id = $1::uuid`, [entry.id]);
+    assert.deepEqual([row.status, row.skip_reason], ["SKIPPED", "ENTRY_CLOSED"]);
+  });
+
   test("cliente cancela enquanto a equipe remove: uma decisão só, sem erro", async () => {
     const session = await soldOutSession();
     const who = person();

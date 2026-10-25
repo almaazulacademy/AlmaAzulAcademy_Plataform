@@ -8,7 +8,7 @@
 
 import { maskIdentifier } from "@/lib/payments/observability";
 
-export type EmailStage = "confirmation" | "retry" | "configuration" | "checkin_reminder" | "reschedule" | "reschedule_retry";
+export type EmailStage = "confirmation" | "retry" | "configuration" | "checkin_reminder" | "reschedule" | "reschedule_retry" | "waitlist_joined" | "waitlist_retry";
 
 export type EmailOutcome = "sent" | "skipped" | "pending" | "failed" | "disabled";
 

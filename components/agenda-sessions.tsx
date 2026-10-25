@@ -16,6 +16,7 @@ import {
 
 import { SessionDateFilter } from "@/components/session-date-filter";
 import { buttonVariants } from "@/components/ui/button";
+import { WaitlistJoinLink } from "@/components/waitlist/join-link";
 import { SoldOutNotice } from "@/components/waitlist/sold-out-notice";
 import { listAgendaSessions, type AgendaSession } from "@/lib/agenda/data";
 import { WHATSAPP_AGENDA_LINK } from "@/lib/contact";
@@ -23,6 +24,7 @@ import { buildSessionChoice } from "@/lib/sessions/choice";
 import { sessionDayKey } from "@/lib/sessions/date-filter";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSessionBookable, SOLD_OUT_LABEL } from "@/lib/waitlist/public";
+import { isWaitlistSignupEnabled } from "@/lib/waitlist/signup";
 
 function resolveExperienceIcon(slug: string): LucideIcon {
   if (/lua/.test(slug)) return Moon;
@@ -86,7 +88,7 @@ function EmptyState({ error = false }: { error?: boolean }) {
  * Horário e destino vêm de `buildSessionChoice`, isto é, do `starts_at` e do
  * `id` da mesma sessão.
  */
-function AgendaCard({ session }: { session: AgendaSession }) {
+function AgendaCard({ session, waitlistSignup }: { session: AgendaSession; waitlistSignup: boolean }) {
   const Icon = resolveExperienceIcon(session.experienceSlug);
   const choice = buildSessionChoice(session);
   const dateLabel = `${choice.weekday}, ${choice.dayMonth}`;
@@ -135,7 +137,9 @@ function AgendaCard({ session }: { session: AgendaSession }) {
 
       <div className="mt-auto pt-6">
         {soldOut ? (
-          <SoldOutNotice />
+          <SoldOutNotice
+            action={waitlistSignup ? <WaitlistJoinLink sessionId={session.id} ariaLabel={`Entrar na lista de espera — ${session.experienceTitle}, ${choice.ariaLabel}`} /> : undefined}
+          />
         ) : (
           <Link
             href={choice.href}
@@ -165,6 +169,7 @@ export async function AgendaSessions({ date = null }: { date?: string | null }) 
 
   try {
     const sessions = await listAgendaSessions(supabase);
+    const waitlistSignup = isWaitlistSignupEnabled();
     if (!sessions.length) return <EmptyState />;
 
     return (
@@ -176,7 +181,7 @@ export async function AgendaSessions({ date = null }: { date?: string | null }) 
         entries={sessions.map((session) => ({
           key: session.id,
           dayKey: sessionDayKey(session.startsAt),
-          node: <AgendaCard session={session} />,
+          node: <AgendaCard session={session} waitlistSignup={waitlistSignup} />,
         }))}
       />
     );
