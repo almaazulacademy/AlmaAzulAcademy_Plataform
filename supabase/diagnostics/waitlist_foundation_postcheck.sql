@@ -80,6 +80,16 @@ new_tables as (
     and c.relname in ('waitlist_throttle_secret', 'waitlist_throttle', 'waitlist_entries', 'waitlist_openings',
                       'waitlist_notifications', 'waitlist_notification_attempts')
 ),
+queue_sequence as (
+  select c.oid, c.relname,
+         exists (
+           select 1 from unnest(array['anon', 'authenticated', 'service_role']) r(role),
+                         unnest(array['USAGE', 'SELECT', 'UPDATE']) p(priv)
+           where has_sequence_privilege(r.role, c.oid, p.priv)
+         ) as api_access
+  from pg_class c
+  where c.relnamespace = 'public'::regnamespace and c.relkind = 'S' and c.relname = 'waitlist_entries_queue_sequence_seq'
+),
 unique_indexes(name) as (values
     ('waitlist_entries_active_email_key'), ('waitlist_entries_cancel_token_key'), ('waitlist_notifications_joined_key'),
     ('waitlist_notifications_opening_key'), ('waitlist_openings_open_session_key'), ('waitlist_notification_attempts_number_key')
@@ -137,6 +147,10 @@ checks as (
                    where not relrowsecurity or policies > 0 or api_access), 'todas: rls ligada, nenhuma policy, nenhum acesso pela API')
            || ' (' || (select count(*)::text from new_tables) || ' de 6)',
          case when (select count(*) = 6 from new_tables where relrowsecurity and policies = 0 and not api_access) then 'OK' else 'FALHOU' end
+  union all
+  select 'SEQUENCIA_DA_FILA_FECHADA',
+         coalesce((select relname || ': api=' || api_access::text from queue_sequence), 'ausente'),
+         case when exists (select 1 from queue_sequence where not api_access) then 'OK' else 'FALHOU' end
   union all
   select 'INDICES_UNICOS',
          coalesce('ausentes: ' || (select string_agg(name, ', ' order by name) from missing_indexes), 'todos presentes'),

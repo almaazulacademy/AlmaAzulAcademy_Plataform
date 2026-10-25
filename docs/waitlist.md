@@ -41,7 +41,7 @@ Migration `202610250001_waitlist_foundation.sql`. É aditiva e idempotente: **n�
 
 ### Tabelas
 
-Todas com RLS ligada, sem policy e **sem nenhum privilégio para `anon`, `authenticated` ou mesmo `service_role`**. Tudo passa por funções `security definer` com `search_path` fixo.
+Todas com RLS ligada, sem policy e **sem nenhum privilégio para `anon`, `authenticated` ou mesmo `service_role`** — inclusive a sequência da ordem da fila, que o Supabase também abriria por padrão. Tudo passa por funções `security definer` com `search_path` fixo.
 
 | Tabela | Guarda |
 | --- | --- |
@@ -134,7 +134,7 @@ Não testar escrita no Preview: ele usa o banco de produção.
 
 ## Testes
 
-- `tests/waitlist-foundation.test.ts`: Postgres em memória com todas as migrations, 44 testes. Migration aditiva e idempotente; tabelas fechadas inclusive para a service role; permissões de cada função; `list_public_sessions` igual a `list_open_sessions` mais as esgotadas, com as mesmas regras e colunas; esgotamento por pré-reserva válida, vaga devolvida por expiração e por Stand-by; inscrição (D4, turma indisponível, validação, normalização, duplicidade com resposta idêntica, reinscrição, campo isca, tetos por e-mail e por turma); a lista não escreve em reservas nem trava sessões; limites (origem, e-mail, cancelamento, HMAC, janela); cancelamento (dois passos, sem dado pessoal, idempotente, token não guardado, turma iniciada); painel (autorização, ordem da fila, posição, filtros, busca literal, paginação, totais, remoção com auditoria sem dado pessoal, detalhe); expiração, conversão e anonimização; régua das ondas (D2) e dos limites de aviso (D3); constraints; exclusão de sessão; preflight, postcheck e rollback.
+- `tests/waitlist-foundation.test.ts`: Postgres em memória com todas as migrations, 45 testes. Migration aditiva e idempotente; tabelas e sequência fechadas inclusive para a service role, também com os privilégios padrão do Supabase ligados; permissões de cada função; `list_public_sessions` igual a `list_open_sessions` mais as esgotadas, com as mesmas regras e colunas; esgotamento por pré-reserva válida, vaga devolvida por expiração e por Stand-by; inscrição (D4, turma indisponível, validação, normalização, duplicidade com resposta idêntica, reinscrição, campo isca, tetos por e-mail e por turma); a lista não escreve em reservas nem trava sessões; limites (origem, e-mail, cancelamento, HMAC, janela); cancelamento (dois passos, sem dado pessoal, idempotente, token não guardado, turma iniciada); painel (autorização, ordem da fila, posição, filtros, busca literal, paginação, totais, remoção com auditoria sem dado pessoal, detalhe); expiração, conversão e anonimização; régua das ondas (D2) e dos limites de aviso (D3); constraints; exclusão de sessão; preflight, postcheck e rollback.
 - `tests/waitlist-foundation-concurrency.test.ts`: **sessões independentes do Postgres**, só no CI (contêiner efêmero do job). O mesmo e-mail em duas abas (com a primeira confirmando ou desistindo), a inscrição ao lado de uma pré-reserva que trava a turma (nas duas ordens: a espera é curta e as duas terminam), rajada de 18 tentativas da mesma origem (exatamente 10 aceitas) e cancelamentos simultâneos, do cliente com o cliente e do cliente com a equipe.
 
 ## Pendências

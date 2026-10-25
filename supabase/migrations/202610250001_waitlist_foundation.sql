@@ -338,6 +338,10 @@ revoke all on table public.waitlist_openings from public, anon, authenticated, s
 revoke all on table public.waitlist_notifications from public, anon, authenticated, service_role;
 revoke all on table public.waitlist_notification_attempts from public, anon, authenticated, service_role;
 
+-- A sequência da ordem da fila também nasce com os privilégios padrão do
+-- Supabase. Só o dono a usa, pelas funções.
+revoke all on sequence public.waitlist_entries_queue_sequence_seq from public, anon, authenticated, service_role;
+
 -- ---------------------------------------------------------------------------
 -- 6. Apoio interno
 -- ---------------------------------------------------------------------------

@@ -66,6 +66,17 @@ const SERVER_FUNCTIONS = new Set([
   "admin_remove_waitlist_entry(uuid,uuid,text)",
 ]);
 
+const PREFLIGHT = readFileSync(new URL("../supabase/diagnostics/waitlist_foundation_preflight.sql", import.meta.url), "utf8");
+const POSTCHECK = readFileSync(new URL("../supabase/diagnostics/waitlist_foundation_postcheck.sql", import.meta.url), "utf8");
+const ROLLBACK = readFileSync(new URL("../supabase/rollback/202610250001_waitlist_foundation.rollback.sql", import.meta.url), "utf8");
+
+type Check = { check_name: string; result: string; status: string };
+
+async function report(database: { query: (sql: string) => Promise<{ rows: unknown[] }> }, sql: string) {
+  const result = (await database.query(sql)).rows as Check[];
+  return new Map(result.map((row) => [row.check_name, row]));
+}
+
 // --- Cenários -----------------------------------------------------------------
 
 let emailSequence = 0;
@@ -185,6 +196,47 @@ test("acesso: tabelas fechadas para a API, inclusive para a service role", async
     );
     assert.deepEqual([row.rls, row.policies, row.api], [true, 0, false], table);
   }
+});
+
+test("acesso: com os privilégios padrão do Supabase, nada novo fica aberto à API", async () => {
+  // O Supabase concede tudo a anon, authenticated e service_role em toda tabela,
+  // sequência e função nova do schema public. O PGlite não faz isso sozinho: aqui
+  // o padrão é ligado antes da migration, como em produção.
+  const before = await fullDatabase({ until: PREVIOUS });
+  await before.exec(`
+    alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+    alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+    alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+  `);
+  await applyMigration(before, MIGRATION);
+  const opened = (await before.query<{ name: string }>(
+    `select c.relname as name from pg_class c
+     where c.relnamespace = 'public'::regnamespace and c.relname like 'waitlist\\_%' and c.relkind in ('r', 'S')
+       and exists (
+         select 1 from unnest(array['anon', 'authenticated', 'service_role']) r(role)
+         where (c.relkind = 'r' and (has_table_privilege(r.role, c.oid, 'SELECT') or has_table_privilege(r.role, c.oid, 'INSERT')
+                                     or has_table_privilege(r.role, c.oid, 'UPDATE') or has_table_privilege(r.role, c.oid, 'DELETE')))
+            or (c.relkind = 'S' and (has_sequence_privilege(r.role, c.oid, 'USAGE') or has_sequence_privilege(r.role, c.oid, 'UPDATE')))
+       )
+     order by 1`,
+  )).rows.map((row) => row.name);
+  assert.deepEqual(opened, []);
+  const executable = (await before.query<{ name: string; anon: boolean; service: boolean }>(
+    `select p.oid::regprocedure::text as name, has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
+            has_function_privilege('service_role', p.oid, 'EXECUTE') as service
+     from pg_proc p where p.pronamespace = 'public'::regnamespace and p.oid::regprocedure::text = any($1::text[])`,
+    [NEW_FUNCTIONS],
+  )).rows;
+  assert.equal(executable.length, NEW_FUNCTIONS.length);
+  for (const row of executable) {
+    const expected = PUBLIC_FUNCTIONS.has(row.name) ? [true, true] : SERVER_FUNCTIONS.has(row.name) ? [false, true] : [false, false];
+    assert.deepEqual([row.anon, row.service], expected, row.name);
+  }
+  const post = await report(before, POSTCHECK);
+  assert.equal(post.get("SEQUENCIA_DA_FILA_FECHADA")?.status, "OK");
+  assert.equal(post.get("TABELAS_FECHADAS")?.status, "OK");
+  assert.equal(post.get("PERMISSOES_DAS_FUNCOES")?.status, "OK");
+  await before.close();
 });
 
 test("acesso: pública só a listagem; cliente e painel só pela service role; apoio para ninguém", async () => {
@@ -899,17 +951,6 @@ test("integridade: reservar uma vaga que reabriu continua igual, com ou sem list
 // 9. Preflight, postcheck e rollback
 // ===========================================================================
 
-const PREFLIGHT = readFileSync(new URL("../supabase/diagnostics/waitlist_foundation_preflight.sql", import.meta.url), "utf8");
-const POSTCHECK = readFileSync(new URL("../supabase/diagnostics/waitlist_foundation_postcheck.sql", import.meta.url), "utf8");
-const ROLLBACK = readFileSync(new URL("../supabase/rollback/202610250001_waitlist_foundation.rollback.sql", import.meta.url), "utf8");
-
-type Check = { check_name: string; result: string; status: string };
-
-async function report(database: { query: (sql: string) => Promise<{ rows: unknown[] }> }, sql: string) {
-  const result = (await database.query(sql)).rows as Check[];
-  return new Map(result.map((row) => [row.check_name, row]));
-}
-
 const COUNTS = ["ASSINATURA_DAS_FUNCOES_EXISTENTES", "RESERVAS_POR_STATUS", "SESSOES_POR_STATUS", "EVENTOS_DE_PAGAMENTO", "AUDITORIA"];
 
 test("preflight e postcheck: aprovam o banco do repositório, nas duas pontas da migration", async () => {
@@ -959,10 +1000,12 @@ test("postcheck: reprova se uma função nova ficar exposta ou divergir do repos
   const database = await fullDatabase();
   await database.exec(`grant execute on function public.waitlist_cancel_token(uuid) to anon`);
   await database.exec(`grant select on public.waitlist_entries to service_role`);
+  await database.exec(`grant usage on sequence public.waitlist_entries_queue_sequence_seq to anon`);
   const post = await report(database, POSTCHECK);
   assert.equal(post.get("PERMISSOES_DAS_FUNCOES")?.status, "FALHOU");
   assert.match(post.get("PERMISSOES_DAS_FUNCOES")!.result, /waitlist_cancel_token/);
   assert.equal(post.get("TABELAS_FECHADAS")?.status, "FALHOU");
+  assert.equal(post.get("SEQUENCIA_DA_FILA_FECHADA")?.status, "FALHOU");
   assert.equal(post.get("WAITLIST_FUNDACAO_POSTCHECK_OK")?.status, "FALHOU");
   await database.close();
 });
