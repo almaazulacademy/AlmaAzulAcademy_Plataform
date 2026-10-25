@@ -3,9 +3,10 @@ import { ArrowRight, CalendarDays, Ticket, Users } from "lucide-react";
 
 import { SessionDateFilter } from "@/components/session-date-filter";
 import { buttonVariants } from "@/components/ui/button";
-import { readOpenSessions } from "@/lib/reservations/session-catalog";
-import type { BookingSession } from "@/lib/reservations/types";
+import { SoldOutNotice } from "@/components/waitlist/sold-out-notice";
+import { readPublicSessions } from "@/lib/reservations/session-catalog";
 import { groupSessionsByDay, type SessionChoice } from "@/lib/sessions/choice";
+import { isSessionBookable, type PublicSession } from "@/lib/waitlist/public";
 
 function formatPrice(cents: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
@@ -43,7 +44,9 @@ function EmptyState({ error = false }: { error?: boolean }) {
  * O destino vem de `choice.href`, montado a partir de `sessions.id` na mesma
  * chamada que produziu o horário exibido. Não existe associação por posição.
  */
-function SessionCard({ choice, session }: { choice: SessionChoice; session: BookingSession }) {
+function SessionCard({ choice, session }: { choice: SessionChoice; session: PublicSession }) {
+  if (!isSessionBookable(session)) return <SoldOutSessionCard choice={choice} session={session} />;
+
   return (
     <Link
       href={choice.href}
@@ -75,6 +78,36 @@ function SessionCard({ choice, session }: { choice: SessionChoice; session: Book
 }
 
 /**
+ * Turma esgotada, com a lista de espera pública ligada.
+ *
+ * Mesmo desenho do cartão de reserva, com o horário em destaque, mas **não é um
+ * link**: nada aqui leva a `/reservar`. O espaço do futuro "Entrar na lista de
+ * espera" é o `action` do aviso, vazio nesta fase.
+ */
+function SoldOutSessionCard({ choice, session }: { choice: SessionChoice; session: PublicSession }) {
+  return (
+    <article
+      aria-label={`${choice.ariaLabel} — esgotada`}
+      className="flex min-h-[16rem] flex-col rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-white/80 sm:p-7"
+    >
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sand/70">Turma</p>
+      <p className="mt-2 text-[clamp(3.2rem,13vw,4rem)] font-medium leading-[0.85] tracking-[-0.06em] text-white/60">
+        {choice.time}
+      </p>
+
+      <div className="mt-7 space-y-2.5 border-t border-white/10 pt-5 text-sm text-white/50">
+        <p className="flex items-center gap-3">
+          <Ticket aria-hidden="true" className="size-4 shrink-0 text-sand/60" />
+          {formatPrice(session.priceCents)} por pessoa
+        </p>
+      </div>
+
+      <SoldOutNotice tone="dark" className="mt-auto pt-7" />
+    </article>
+  );
+}
+
+/**
  * Grade de escolha da sessão, agrupada por dia e filtrável por data.
  *
  * O agrupamento existe para tornar óbvio o que confundia o cliente: o mesmo
@@ -86,7 +119,7 @@ function SessionCard({ choice, session }: { choice: SessionChoice; session: Book
  * as mesmas de sempre — só desta experiência, porque `readOpenSessions` já
  * recebeu o slug.
  */
-export function SessionsGrid({ sessions, date = null }: { sessions: BookingSession[]; date?: string | null }) {
+export function SessionsGrid({ sessions, date = null }: { sessions: PublicSession[]; date?: string | null }) {
   const days = groupSessionsByDay(sessions);
 
   return (
@@ -122,7 +155,10 @@ export function SessionsGrid({ sessions, date = null }: { sessions: BookingSessi
   );
 }
 
-/** Lê as sessões abertas da experiência e decide entre grade e estado vazio. */
+/**
+ * Lê as turmas da experiência e decide entre grade e estado vazio. Com a lista
+ * de espera pública ligada, as esgotadas entram na grade, sem link de reserva.
+ */
 export async function SessionsSection({
   experienceSlug,
   date = null,
@@ -130,7 +166,7 @@ export async function SessionsSection({
   experienceSlug: string;
   date?: string | null;
 }) {
-  const result = await readOpenSessions(experienceSlug);
+  const result = await readPublicSessions(experienceSlug);
   if (result.status === "ERROR") return <EmptyState error />;
   if (result.status === "UNCONFIGURED" || !result.sessions.length) return <EmptyState />;
 

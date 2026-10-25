@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 
 import { getPaymentProvider } from "@/lib/payments";
+import { getBookingSession } from "@/lib/reservations/data";
 import { drainReconciliationOpportunistically } from "@/lib/reservations/payment-reconciliation";
 import { validateReservationInput } from "@/lib/reservations/validation";
 import { SITE_URL } from "@/lib/site";
@@ -53,10 +54,26 @@ function publicOrigin() {
 }
 
 function reservationError(message: string) {
-  if (message.includes("INSUFFICIENT_SPOTS")) return { status: 409, message: "Não há vagas suficientes para essa quantidade." };
-  if (message.includes("SESSION_UNAVAILABLE")) return { status: 409, message: "Essa sessão não está mais disponível." };
-  if (message.includes("EXPERIENCE_UNAVAILABLE")) return { status: 409, message: "Esta experiência ainda não está com reservas abertas." };
-  return { status: 500, message: "Não foi possível criar a pré-reserva." };
+  if (message.includes("INSUFFICIENT_SPOTS")) return { status: 409, code: "INSUFFICIENT_SPOTS", message: "Não há vagas suficientes para essa quantidade." };
+  if (message.includes("SESSION_UNAVAILABLE")) return { status: 409, code: "SESSION_UNAVAILABLE", message: "Essa sessão não está mais disponível." };
+  if (message.includes("EXPERIENCE_UNAVAILABLE")) return { status: 409, code: "EXPERIENCE_UNAVAILABLE", message: "Esta experiência ainda não está com reservas abertas." };
+  return { status: 500, code: null, message: "Não foi possível criar a pré-reserva." };
+}
+
+/**
+ * Vagas da turma agora, depois de uma recusa por falta de vaga. A tela usa
+ * isso para trocar o formulário pelo aviso de esgotado, ou reduzir a
+ * quantidade, quando a disponibilidade mudou entre a página e o envio.
+ * Só leitura (`get_booking_session`, que devolve nada para turma sem vaga).
+ * Nunca derruba a resposta: sem leitura, a recusa segue sem o número.
+ */
+async function remainingSpotsNow(client: NonNullable<ReturnType<typeof getSupabaseAdminClient>>, sessionId: string) {
+  try {
+    const session = await getBookingSession(client, sessionId);
+    return session ? Math.max(session.remainingSpots, 0) : 0;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -80,7 +97,12 @@ export async function POST(request: Request) {
   });
   if (creation.error) {
     const error = reservationError(creation.error.message);
-    return NextResponse.json({ message: error.message }, { status: error.status });
+    // Campos aditivos: `message` continua o mesmo, e nenhuma vaga foi bloqueada.
+    const remainingSpots = error.code === "INSUFFICIENT_SPOTS" ? await remainingSpotsNow(admin, input.sessionId) : undefined;
+    return NextResponse.json(
+      { message: error.message, ...(error.code ? { code: error.code } : {}), ...(typeof remainingSpots === "number" ? { remainingSpots } : {}) },
+      { status: error.status },
+    );
   }
   if (!isCreatedReservation(creation.data)) return NextResponse.json({ message: "Resposta inválida ao criar reserva." }, { status: 500 });
 

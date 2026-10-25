@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Clock3 } from "lucide-react";
 
-import { readOpenSessions } from "@/lib/reservations/session-catalog";
+import { readPublicSessions } from "@/lib/reservations/session-catalog";
 import { listSessionStartTimes } from "@/lib/sessions/choice";
 
 const COUNT_WORD = ["", "uma", "duas", "três", "quatro", "cinco", "seis"] as const;
@@ -76,7 +76,9 @@ export function SessionTimesBoard({ times }: { times: string[] }) {
  * não aparece — a seção de datas já explica a ausência.
  */
 export async function SessionTimes({ experienceSlug }: { experienceSlug: string }) {
-  const result = await readOpenSessions(experienceSlug);
+  // Mesma leitura da grade: com a lista de espera pública ligada, o horário de
+  // uma turma esgotada continua no destaque — é a agenda da experiência.
+  const result = await readPublicSessions(experienceSlug);
   if (result.status !== "READY") return null;
 
   const times = listSessionStartTimes(result.sessions);

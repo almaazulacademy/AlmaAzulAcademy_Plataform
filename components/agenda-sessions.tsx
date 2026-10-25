@@ -16,11 +16,13 @@ import {
 
 import { SessionDateFilter } from "@/components/session-date-filter";
 import { buttonVariants } from "@/components/ui/button";
+import { SoldOutNotice } from "@/components/waitlist/sold-out-notice";
 import { listAgendaSessions, type AgendaSession } from "@/lib/agenda/data";
 import { WHATSAPP_AGENDA_LINK } from "@/lib/contact";
 import { buildSessionChoice } from "@/lib/sessions/choice";
 import { sessionDayKey } from "@/lib/sessions/date-filter";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { isSessionBookable, SOLD_OUT_LABEL } from "@/lib/waitlist/public";
 
 function resolveExperienceIcon(slug: string): LucideIcon {
   if (/lua/.test(slug)) return Moon;
@@ -88,7 +90,9 @@ function AgendaCard({ session }: { session: AgendaSession }) {
   const Icon = resolveExperienceIcon(session.experienceSlug);
   const choice = buildSessionChoice(session);
   const dateLabel = `${choice.weekday}, ${choice.dayMonth}`;
-  const soldOut = session.remainingSpots <= 0;
+  // Só aparece com a lista de espera pública ligada: sem ela, a agenda lê
+  // list_open_sessions e toda turma listada tem vaga.
+  const soldOut = !isSessionBookable(session);
 
   return (
     <article className="flex flex-col rounded-3xl border border-ink/10 bg-white p-6 shadow-soft transition duration-300 hover:-translate-y-1 sm:p-7">
@@ -125,15 +129,13 @@ function AgendaCard({ session }: { session: AgendaSession }) {
         </p>
         <p className="flex items-center gap-2.5">
           <Users className="size-4 shrink-0 text-lake" aria-hidden="true" />
-          {soldOut ? "Sem vagas para esta data" : formatSpots(session.remainingSpots)}
+          {soldOut ? SOLD_OUT_LABEL : formatSpots(session.remainingSpots)}
         </p>
       </div>
 
       <div className="mt-auto pt-6">
         {soldOut ? (
-          <p className="rounded-full border border-ink/15 px-4 py-3 text-center text-sm font-semibold text-ink/45">
-            Sessão esgotada
-          </p>
+          <SoldOutNotice />
         ) : (
           <Link
             href={choice.href}

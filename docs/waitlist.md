@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md)
 
-**Estado (25/10/2026): fase 1 de 7 (fundação no banco) no repositório, não aplicada em produção.** Nenhuma rota, tela, rotina ou e-mail usa a lista ainda. Mergear o PR não aplica a migration nem liga nada.
+**Estado (25/10/2026): fase 1 (fundação no banco) aplicada e validada em produção. Fase 2 (turmas esgotadas no site) no repositório, desligada** — só aparece com `WAITLIST_PUBLIC_ENABLED=true`. Ninguém se inscreve, nenhum e-mail sai e nada é agendado.
 
 ## O que é
 
@@ -27,8 +27,8 @@ Também valem: uma inscrição ativa por e-mail e turma; o grupo precisa caber n
 
 | Fase | O que entrega | Estado |
 | --- | --- | --- |
-| 1. Fundação no banco | Tabelas, funções, limite de tentativas, preflight, postcheck, rollback e testes | **Este PR** |
-| 2. "Esgotado" no site | Landing e agenda passam a usar `list_public_sessions`, atrás de variável | — |
+| 1. Fundação no banco | Tabelas, funções, limite de tentativas, preflight, postcheck, rollback e testes | Aplicada em produção |
+| 2. "Esgotado" no site | Landing e agenda passam a usar `list_public_sessions`, atrás de variável | No repositório, desligada |
 | 3. Inscrição, confirmação e cancelamento | Formulário, `POST` da inscrição, e-mail `JOINED`, página do link | — |
 | 4. Painel | `/admin/lista-de-espera` sobre as funções `admin_*` desta fase | — |
 | 5. Detecção de vagas | Abertura e fechamento de `waitlist_openings` e enfileiramento pela régua | — |
@@ -115,6 +115,44 @@ Ver e cancelar são **dois passos**, os dois por POST: um leitor de e-mail que a
 
 `waitlist_anonymize_entries` apaga nome, e-mail e telefone das inscrições de turmas que começaram há mais de 90 dias e as mensagens congeladas da fila. A linha fica, sem dado pessoal, para as contagens e o histórico de avisos. Os baldes do limite são HMAC e são apagados depois de um dia parados. A auditoria das remoções não leva dado pessoal nos metadados; o motivo é texto livre da equipe.
 
+## Fase 2 — turmas esgotadas no site
+
+Só código de aplicação, sem migration. Atrás de `WAITLIST_PUBLIC_ENABLED`, variável de servidor desligada por padrão: só o valor exato `true` liga.
+
+### Com a variável desligada (padrão)
+
+O site é o de antes. Agenda, grade de datas e destaque de horários leem `list_open_sessions`, que só devolve turma com vaga; a página de reserva de uma turma esgotada diz "Sessão indisponível". As duas únicas diferenças valem para qualquer valor da variável e não mudam o que o cliente vê:
+
+- a página de reserva confere `remainingSpots >= 1` antes de mostrar o formulário (`get_booking_session` já garantia isso; é a segunda barreira);
+- a recusa por falta de vaga em `POST /api/reservations` (409) ganha os campos `code` e, para `INSUFFICIENT_SPOTS`, `remainingSpots` — lidos por `get_booking_session`, só leitura, antes de qualquer checkout. A mensagem é a mesma, e o formulário só usa os campos novos com a variável ligada.
+
+### Com a variável ligada
+
+| Onde | O que muda |
+| --- | --- |
+| Página da experiência (grade de datas) | Turmas esgotadas aparecem no dia delas, com o horário em destaque, o selo **Esgotado** e "Todas as vagas desta turma já foram reservadas." O cartão **não é link**: nada leva a `/reservar`. As turmas com vaga são exatamente as de antes |
+| Destaque "Turmas disponíveis" | Os horários das esgotadas continuam listados: é a agenda da experiência |
+| Filtro por data | Conta e mostra as esgotadas do dia escolhido |
+| Agenda geral | Cartão da esgotada com **Esgotado** no lugar das vagas e o aviso no lugar do botão |
+| `/reservar/[id]` de turma esgotada | "Turma esgotada", com o horário, e links para outras turmas e para a agenda. Nunca o formulário |
+| Formulário, se esgotar enquanto o cliente preenche | O envio é recusado pelo banco (`create_pre_reservation`, como sempre) e o formulário dá lugar ao aviso de esgotado: nenhuma vaga foi bloqueada e nada foi cobrado. Se sobrou menos vaga do que o pedido, a quantidade é reduzida ao que sobrou e o cliente envia de novo |
+
+Fonte das turmas: `list_public_sessions`, da fase 1, com as mesmas regras de `list_open_sessions` (experiência publicada, turma aberta e futura). Se a função não existir no banco — migration revertida —, o site volta sozinho para `list_open_sessions` e registra só o símbolo `LIST_PUBLIC_SESSIONS_MISSING`.
+
+**O lugar do botão "Entrar na lista de espera"** é o `action` do aviso (`components/waitlist/sold-out-notice.tsx`). Nesta fase nenhuma tela o preenche: não há botão, formulário, rota de inscrição nem e-mail.
+
+### O que não muda
+
+`list_open_sessions`, `get_booking_session`, `available_spots` e `create_pre_reservation` não foram tocadas, e a fase não traz migration. Checkout, pagamento, cancelamento, Stand-by, e-mails, planilha e painel continuam iguais. A disputa pela última vaga continua sendo decidida pelo banco, com a sessão travada.
+
+### Ativação
+
+1. Merge e deploy: com a variável ausente, nada muda para o cliente.
+2. `WAITLIST_PUBLIC_ENABLED=true` na Vercel, **só em Production**, seguido de novo deploy.
+3. Conferir uma turma esgotada na agenda e na página da experiência, e abrir `/reservar/<id>` dela.
+
+Desligar a variável e publicar de novo é o botão de emergência. A fase só lê o banco: mesmo no Preview, que usa o banco de produção, ligar a variável não escreve nada.
+
 ## Publicação da fase 1
 
 Cada passo depende de autorização própria. **Nenhum deles liga nada no site.**
@@ -136,6 +174,8 @@ Não testar escrita no Preview: ele usa o banco de produção.
 
 - `tests/waitlist-foundation.test.ts`: Postgres em memória com todas as migrations, 46 testes. Migration aditiva e idempotente; tabelas e sequência fechadas inclusive para a service role, também com os privilégios padrão do Supabase ligados; permissões de cada função; `list_public_sessions` igual a `list_open_sessions` mais as esgotadas, com as mesmas regras e colunas; esgotamento por pré-reserva válida, vaga devolvida por expiração e por Stand-by; inscrição (D4, turma indisponível, validação, normalização, duplicidade com resposta idêntica, reinscrição, campo isca, tetos por e-mail e por turma contando só quem ainda espera); a lista não escreve em reservas nem trava sessões; limites (origem, e-mail, cancelamento, HMAC, janela); cancelamento (dois passos, sem dado pessoal, idempotente, token não guardado, turma iniciada); painel (autorização, ordem da fila, posição, filtros, busca literal, paginação, totais, remoção com auditoria sem dado pessoal, detalhe); expiração, conversão e anonimização; régua das ondas (D2) e dos limites de aviso (D3); constraints; exclusão de sessão; preflight, postcheck e rollback.
 - `tests/waitlist-foundation-concurrency.test.ts`: **sessões independentes do Postgres**, só no CI (contêiner efêmero do job). O mesmo e-mail em duas abas (com a primeira confirmando ou desistindo), a inscrição ao lado de uma pré-reserva que trava a turma (nas duas ordens: a espera é curta e as duas terminam), rajada de 36 tentativas da mesma origem (exatamente 30 aceitas) e cancelamentos simultâneos, do cliente com o cliente e do cliente com a equipe.
+
+- `tests/waitlist-public-sessions.test.ts` (fase 2): variável; regras de exibição (reservável só com vaga, quantidades, corrida entre página e envio); leitura contra o Postgres em memória — desligada é exatamente `list_open_sessions`, ligada acrescenta só as esgotadas, vaga devolvida tira a marca, função ausente cai para a leitura de sempre; e, no código-fonte, que nenhum caminho de turma esgotada leva a `/reservar`, que o formulário nunca aparece sem vaga e que nada de inscrição, e-mail ou agendamento entrou.
 
 ## Pendências
 

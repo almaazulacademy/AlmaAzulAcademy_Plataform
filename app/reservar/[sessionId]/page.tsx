@@ -8,10 +8,12 @@ import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { ReservationForm } from "@/components/reservation/reservation-form";
 import { SessionTurma } from "@/components/reservation/session-turma";
 import { BaseLocationCard } from "@/components/bases/base-location";
+import { SoldOutNotice } from "@/components/waitlist/sold-out-notice";
 import { getExperiencePlacement, getSessionAvailabilityContext } from "@/lib/bases/data";
 import { baseLocation } from "@/lib/bases/location";
-import { getBookingSession } from "@/lib/reservations/data";
+import { getBookingSession, listPublicSessions } from "@/lib/reservations/data";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { isSessionBookable, isWaitlistPublicEnabled, type PublicSession } from "@/lib/waitlist/public";
 
 export const metadata: Metadata = { title: "Reservar experiência", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -19,10 +21,14 @@ export const dynamic = "force-dynamic";
 export default async function ReservePage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
   const supabase = getSupabaseServerClient();
+  const waitlistEnabled = isWaitlistPublicEnabled();
   let session = null;
   if (supabase && /^[0-9a-f-]{36}$/i.test(sessionId)) {
     try { session = await getBookingSession(supabase, sessionId); } catch (error) { console.error("Falha ao carregar sessão:", error instanceof Error ? error.message : "erro desconhecido"); }
   }
+  // O formulário nunca aparece com zero vagas. get_booking_session já só devolve
+  // turma com vaga; esta conferência é a segunda barreira, na própria página.
+  if (session && session.remainingSpots < 1) session = null;
   // Sessão fora da reserva: se ela pertence a uma experiência ou base "em
   // breve", explica isso em vez do genérico "sessão indisponível". Não libera
   // nada — a RPC de pré-reserva continua recusando qualquer experiência não publicada.
@@ -32,6 +38,14 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
   // Local de encontro: sai da base da experiência desta sessão, nunca do nome dela.
   const placement = session ? await getExperiencePlacement(session.experienceSlug).catch(() => null) : null;
   const comingSoon = upcoming && (upcoming.experienceStatus === "COMING_SOON" || upcoming.baseStatus !== "ACTIVE") ? upcoming : null;
+  // Turma publicada, aberta e futura, mas sem vaga: com a lista de espera
+  // pública ligada, a página diz "Esgotado" em vez de "Sessão indisponível".
+  // Só leitura, pela mesma função da agenda; nunca abre o formulário.
+  const soldOut: PublicSession | null = waitlistEnabled && supabase && !session && upcoming && !comingSoon && upcoming.experienceStatus === "PUBLISHED"
+    ? await listPublicSessions(supabase, upcoming.experienceSlug)
+        .then((sessions) => sessions.find((item) => item.id === sessionId && !isSessionBookable(item)) ?? null)
+        .catch(() => null)
+    : null;
 
   return (
     <main className="min-h-screen bg-paper pt-24">
@@ -50,7 +64,24 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
               className="mb-8"
             />
             {placement ? <BaseLocationCard location={baseLocation(placement.base)} className="mb-8" /> : null}
-            <ReservationForm session={session} />
+            <ReservationForm session={session} waitlistEnabled={waitlistEnabled} />
+          </>
+        ) : soldOut ? (
+          <>
+            <SessionTurma
+              startsAt={soldOut.startsAt}
+              experienceTitle={soldOut.experienceTitle}
+              label="Turma esgotada"
+              className="mb-8"
+            />
+            <div className="rounded-4xl bg-white p-10 text-center sm:p-16">
+              <h1 className="text-4xl font-medium tracking-[-0.05em]">Esgotado</h1>
+              <SoldOutNotice className="mx-auto mt-5 max-w-lg items-center text-center" note="Todas as vagas desta turma já foram reservadas. Nenhuma reserva pode ser feita para ela agora." />
+              <div className="mt-7 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                <Link href={`/experiencias/${soldOut.experienceSlug}#reservas`} className="inline-flex font-semibold text-forest">Ver outras turmas</Link>
+                <Link href="/agenda" className="inline-flex font-semibold text-forest">Ver a agenda</Link>
+              </div>
+            </div>
           </>
         ) : comingSoon ? (
           <div className="rounded-4xl bg-white p-10 text-center sm:p-16" role="status">

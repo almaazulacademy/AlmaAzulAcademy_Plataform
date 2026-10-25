@@ -1,5 +1,14 @@
 # Changelog
 
+## Lista de espera — turmas esgotadas no site (fase 2 de 7, desligada por padrão)
+
+- **Nada muda para o cliente ao publicar este código.** Com `WAITLIST_PUBLIC_ENABLED` ausente, agenda, grade e destaque de horários continuam lendo `list_open_sessions`. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-2--turmas-esgotadas-no-site).
+- **Com a variável ligada**, turmas publicadas e esgotadas aparecem na página da experiência, no filtro por data, no destaque de horários e na agenda geral, com o selo **Esgotado** e sem link de reserva. `/reservar/<id>` de turma esgotada mostra "Turma esgotada" em vez do formulário. A fonte é `list_public_sessions` (fase 1); sem ela no banco, o site volta para as turmas com vaga.
+- **Formulário nunca sem vaga**: a página confere as vagas antes de mostrá-lo e as opções de quantidade vão de 1 às vagas restantes. Se a turma esgotar enquanto o cliente preenche, a recusa do banco troca o formulário pelo aviso (variável ligada); se sobrar menos vaga, a quantidade é reduzida.
+- `POST /api/reservations`: a recusa 409 ganha `code` e, por falta de vaga, `remainingSpots` (lidos por `get_booking_session`, antes de qualquer checkout). A mensagem não muda.
+- Lugar do futuro botão "Entrar na lista de espera" preparado e vazio: nenhuma inscrição, e-mail ou agendamento.
+- Sem migration. `list_open_sessions`, `get_booking_session`, `available_spots`, `create_pre_reservation`, pagamento, cancelamento e Stand-by **não foram alterados**.
+
 ## Lista de espera — fundação no banco (fase 1 de 7, nada ligado)
 
 - **Nada muda em produção ao publicar este código**, nem ao aplicar a migration: nenhuma rota, tela, rotina ou e-mail usa a lista ainda. Detalhes, regras aprovadas (D1 a D6) e fases em [docs/waitlist.md](docs/waitlist.md).
