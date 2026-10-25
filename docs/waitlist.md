@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md)
 
-**Estado (25/10/2026): fase 1 aplicada em produção; fase 2 publicada e desligada** (`WAITLIST_PUBLIC_ENABLED` não existe na Vercel). **Fase 3 (inscrição e confirmação por e-mail) no repositório**, com a migration `202610250002` **não aplicada** e `WAITLIST_SIGNUP_ENABLED` desligada. Nenhum aviso de vaga sai e nada é agendado.
+**Estado (25/10/2026): migrations `202610250001` e `202610250002` aplicadas em produção, com postcheck OK. Fases 2 e 3 publicadas e desligadas** (`WAITLIST_PUBLIC_ENABLED` e `WAITLIST_SIGNUP_ENABLED` ausentes). **Fase 4 (painel) no repositório**, sem migration, atrás de `WAITLIST_ADMIN_ENABLED`. Nenhum aviso de vaga sai e nada é agendado.
 
 ## O que é
 
@@ -29,8 +29,8 @@ Também valem: uma inscrição ativa por e-mail e turma; o grupo precisa caber n
 | --- | --- | --- |
 | 1. Fundação no banco | Tabelas, funções, limite de tentativas, preflight, postcheck, rollback e testes | Aplicada em produção |
 | 2. "Esgotado" no site | Landing e agenda passam a usar `list_public_sessions`, atrás de variável | Publicada, desligada |
-| 3. Inscrição, confirmação e cancelamento | Formulário, `POST` da inscrição, e-mail `JOINED`, página do link | No repositório, desligada; migration não aplicada |
-| 4. Painel | `/admin/lista-de-espera` sobre as funções `admin_*` desta fase | — |
+| 3. Inscrição, confirmação e cancelamento | Formulário, `POST` da inscrição, e-mail `JOINED`, página do link | Publicada, desligada; migration aplicada |
+| 4. Painel | `/admin/lista-de-espera` sobre as funções `admin_*` da fase 1 | No repositório, desligado; sem migration |
 | 5. Detecção de vagas | Abertura e fechamento de `waitlist_openings` e enfileiramento pela régua | — |
 | 6. Envio dos avisos | Fila `SPOT_AVAILABLE`, conferência da vaga antes de enviar e gatilhos (D1) | — |
 | 7. Retenção e operação | Rotina de anonimização e diagnósticos | — |
@@ -204,6 +204,39 @@ Cada passo com autorização própria.
 
 **Rollback.** Desligar `WAITLIST_SIGNUP_ENABLED` e publicar de novo tira o botão e a inscrição do ar; inscrições feitas continuam e os links continuam valendo. Do banco: `supabase/rollback/202610250002_waitlist_signup_email.rollback.sql` remove as oito funções e as três colunas; confirmações ainda na fila ficam `QUEUED`.
 
+## Fase 4 — painel administrativo
+
+Só código de aplicação, **sem migration**: usa as quatro RPCs administrativas da fase 1 (`admin_waitlist_sessions`, `admin_list_waitlist_entries_page`, `admin_waitlist_entry`, `admin_remove_waitlist_entry`), que conferem `is_active_admin` (ADMIN ou OPERATOR ativo) a cada chamada. Atrás de `WAITLIST_ADMIN_ENABLED`, variável de servidor desligada por padrão e independente das do site: a equipe pode acompanhar a lista antes de abrir a inscrição, ou depois de fechá-la.
+
+### O que a equipe vê
+
+- **Menu**: "Lista de espera", logo depois de Reservas e do Stand-by, só com a variável ligada.
+- **`/admin/lista-de-espera` — Turmas com lista de espera**: experiência, base, data e horário, capacidade, vagas agora ("Esgotada" ou o número livre), quantas inscrições aguardam e quantas pessoas, total de inscrições e a última. Filtros por **experiência, base e data** (no fuso de Brasília) e "incluir turmas que já aconteceram". "Ver inscritos" leva às inscrições da turma.
+- **Inscrições**: nome, e-mail, WhatsApp, pessoas, posição na fila, data da inscrição, avisos de vaga enviados e status ("Aguardando vaga", "Reservou", "Saiu da lista", "Removida pela equipe", "Encerrada"). Filtros por **turma, base, status** (padrão: aguardando) e busca por nome, e-mail ou WhatsApp. **Paginação no banco**, 25 por página. Inscrição anonimizada aparece como "Dados anonimizados".
+- **`/admin/lista-de-espera/<inscrição>` — histórico**: contato, turma e situação; cada e-mail (confirmação e, na fase 6, aviso de vaga) com status, motivo de não envio e cada tentativa; e as ações da equipe da auditoria, com quem fez e o motivo. Nunca mostra o link de cancelamento nem a mensagem guardada da fila.
+- **Remover**: só em inscrição ativa. Diálogo com motivo obrigatório (3 a 500 caracteres) e confirmação. O banco trava a inscrição, descarta o e-mail pendente e grava `WAITLIST_ENTRY_REMOVED` na auditoria com o motivo — sem dado pessoal nos metadados. Repetir não muda nada nem audita de novo.
+
+Os filtros de experiência e data valem para a lista de turmas; as inscrições filtram por turma escolhida, base, status e busca. Um filtro de experiência ou data direto nas inscrições pediria uma RPC nova — e uma migration —, e o caminho "escolher a turma" cobre o uso do dia a dia.
+
+### Segurança
+
+| Camada | O que garante |
+| --- | --- |
+| `requireAdmin` nas páginas e `authorizeWaitlistAdminApi` na rota | Só ADMIN e OPERATOR; instrutor é redirecionado (página) ou recebe 403 (rota); variável desligada é 404 antes de tudo |
+| Rota de remoção | Origem do próprio site, id válido, motivo e confirmação; ator da sessão, nunca do corpo; sem cache |
+| RPCs da fase 1 | Conferem `is_active_admin` de novo; a remoção trava a inscrição e audita |
+| Logs | Nenhum `console.*` nas páginas, na rota ou no acesso a dados; erros do banco viram mensagens fixas |
+
+Nada desta fase lê ou escreve reserva, pagamento, cancelamento ou Stand-by.
+
+### Publicação da fase 4
+
+1. Merge e deploy: sem a variável, nada muda (sem menu; página e rota em 404).
+2. `WAITLIST_ADMIN_ENABLED=true` só em Production, com novo deploy.
+3. Conferir o menu e a página com um admin; a lista pode estar vazia enquanto a inscrição pública estiver desligada.
+
+Desligar a variável e publicar de novo tira o painel do ar sem afetar inscrições nem e-mails.
+
 ## Publicação da fase 1
 
 Cada passo depende de autorização própria. **Nenhum deles liga nada no site.**
@@ -226,6 +259,7 @@ Não testar escrita no Preview: ele usa o banco de produção.
 - `tests/waitlist-foundation.test.ts`: Postgres em memória com todas as migrations, 46 testes. Migration aditiva e idempotente; tabelas e sequência fechadas inclusive para a service role, também com os privilégios padrão do Supabase ligados; permissões de cada função; `list_public_sessions` igual a `list_open_sessions` mais as esgotadas, com as mesmas regras e colunas; esgotamento por pré-reserva válida, vaga devolvida por expiração e por Stand-by; inscrição (D4, turma indisponível, validação, normalização, duplicidade com resposta idêntica, reinscrição, campo isca, tetos por e-mail e por turma contando só quem ainda espera); a lista não escreve em reservas nem trava sessões; limites (origem, e-mail, cancelamento, HMAC, janela); cancelamento (dois passos, sem dado pessoal, idempotente, token não guardado, turma iniciada); painel (autorização, ordem da fila, posição, filtros, busca literal, paginação, totais, remoção com auditoria sem dado pessoal, detalhe); expiração, conversão e anonimização; régua das ondas (D2) e dos limites de aviso (D3); constraints; exclusão de sessão; preflight, postcheck e rollback.
 - `tests/waitlist-foundation-concurrency.test.ts`: **sessões independentes do Postgres**, só no CI (contêiner efêmero do job). O mesmo e-mail em duas abas (com a primeira confirmando ou desistindo), a inscrição ao lado de uma pré-reserva que trava a turma (nas duas ordens: a espera é curta e as duas terminam), rajada de 36 tentativas da mesma origem (exatamente 30 aceitas) e cancelamentos simultâneos, do cliente com o cliente e do cliente com a equipe.
 
+- `tests/waitlist-admin.test.ts` (fase 4), 20 testes: variável; filtros vindos da URL (inválido vira "sem filtro"); endereço com filtros; recorte das turmas por experiência, base e data no fuso de Brasília; leitura das respostas; validação da remoção; tradução dos erros sem repassar texto do banco; contra o Postgres em memória — permissões (instrutor e desconhecido recusados em leitura e remoção, nada auditado), turmas com capacidade, vagas e interessados, passadas só quando pedidas, inscrições na ordem da fila com contato e status, filtros por base, status e busca, paginação acima de 25 sem repetição, histórico sem token nem mensagem guardada, remoção com auditoria sem dado pessoal, repetição sem efeito, pedido inválido sem tocar no banco, e nenhuma reserva, pagamento, sessão ou Stand-by alterado; e, no código-fonte, a ordem das barreiras da rota, as páginas atrás de `requireAdmin` e da variável, sem logs, e o item do menu.
 - `tests/waitlist-signup.test.ts` (fase 3), 30 testes: variáveis e formato; a migration (aditiva, permissões, preflight, postcheck, rollback); a inscrição pelo fluxo do servidor (grava, responde sem dado pessoal, envia uma confirmação depois da resposta; repetida não envia de novo; campo isca não grava; recusas sem e-mail; banco fora do ar é 503); a fila (resultado desconhecido repete chave e mensagem e o cliente recebe uma vez, recusa comprovada gera chave nova, chave recusada duas vezes e janela vencida param em `UNCERTAIN`, prazo vencido com outra instância assumindo, congelamento só para o e-mail da inscrição, descarte de inscrição encerrada e de turma iniciada ou arquivada, tentativas esgotadas, recuperação sem duplicar, aviso de vaga intocado); o conteúdo do e-mail e o link que tira o cliente da lista; e, no código-fonte, as barreiras das rotas, o botão só com a variável e nenhum caminho de pagamento ou reserva.
 - `tests/waitlist-foundation-concurrency.test.ts` ganhou, para a fase 3: duas instâncias pedindo a mesma confirmação (só uma envia) e cancelamento durante a reivindicação (espera e descarta).
 - `tests/waitlist-public-sessions.test.ts` (fase 2): variável; regras de exibição (reservável só com vaga, quantidades, corrida entre página e envio); leitura contra o Postgres em memória — desligada é exatamente `list_open_sessions`, ligada acrescenta só as esgotadas, vaga devolvida tira a marca, função ausente cai para a leitura de sempre; e, no código-fonte, que nenhum caminho de turma esgotada leva a `/reservar`, que o formulário nunca aparece sem vaga e que nada de inscrição, e-mail ou agendamento entrou.
@@ -233,6 +267,6 @@ Não testar escrita no Preview: ele usa o banco de produção.
 ## Pendências
 
 - **D1, o agendador do envio**, antes da fase 6. As opções estão em [reservation-standby.md](reservation-standby.md#recuperação-de-falhas).
-- **Fase 4:** painel (`/admin/lista-de-espera`), inclusive reenvio manual de confirmação com entrega não confirmada.
+- **Painel:** reenvio manual de uma confirmação com entrega não confirmada (`UNCERTAIN`) ou com tentativas esgotadas — precisa de RPC nova, junto com a fase 6.
 - **Fase 6:** aviso de vaga (`SPOT_AVAILABLE`): as funções da fila desta fase operam só `JOINED`.
 - **Fase 7:** agendar `waitlist_expire_entries`, `waitlist_mark_conversions` e `waitlist_anonymize_entries`.
