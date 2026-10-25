@@ -84,7 +84,7 @@ As funções do painel exigem ADMIN ou OPERATOR ativo (`is_active_admin`), como 
 | `INVALID` | Campo inválido; traz `field` (`fullName`, `email`, `phone` ou `quantity`) |
 | `SESSION_UNAVAILABLE` | Turma inexistente, fechada, cancelada, arquivada, já iniciada ou de experiência não publicada |
 | `NOT_SOLD_OUT` | A turma tem vaga: o caminho é reservar (D4). Traz `remainingSpots`, que o site já mostra |
-| `LIMIT_REACHED` | O e-mail já tem 10 inscrições ativas |
+| `LIMIT_REACHED` | O e-mail já tem 10 inscrições ativas em turmas que ainda não começaram (turma passada, cancelada ou arquivada não conta, mesmo antes da rotina de expiração) |
 | `WAITLIST_FULL` | A turma já tem 100 inscrições ativas |
 
 A confirmação por e-mail nasce **na mesma transação** da inscrição (`JOINED`, `QUEUED`). Nesta fase ninguém a envia. Quando o envio vier (fase 3), ele precisa conferir a inscrição de novo antes de cada tentativa: uma inscrição já encerrada tem a confirmação descartada (`SKIPPED`, `ENTRY_CLOSED`) no momento em que é encerrada.
@@ -97,11 +97,11 @@ No banco, compartilhado entre as instâncias, em janelas fixas. Toda tentativa c
 
 | Ação | Balde | Limite |
 | --- | --- | --- |
-| Inscrição | Origem, só quando há endereço confiável | 10 por hora |
+| Inscrição | Origem, só quando há endereço confiável | 30 por hora |
 | Inscrição | E-mail | 6 por hora |
 | Ver ou cancelar pelo link | Origem, só quando há endereço confiável | 30 a cada 15 minutos |
 
-O balde do e-mail limita quantas confirmações alguém consegue disparar para a caixa de outra pessoa. Junto com o teto de 10 inscrições ativas por e-mail, e sem o link de cancelamento (que só o dono da caixa recebe), não há como fazer um ciclo inscreve-cancela-inscreve na caixa alheia. Sem endereço confiável não existe balde de origem, como no limite da consulta de reservas. O endereço vem de `trustedClientAddress` (`lib/http/client-address.ts`), que a rota da fase 3 vai usar.
+A origem é folgada de propósito: operadora móvel (CGNAT) e Wi-Fi compartilhado põem muitos clientes atrás do mesmo endereço. O balde do e-mail limita quantas confirmações alguém consegue disparar para a caixa de outra pessoa. Junto com o teto de 10 inscrições ativas por e-mail, e sem o link de cancelamento (que só o dono da caixa recebe), não há como fazer um ciclo inscreve-cancela-inscreve na caixa alheia. Sem endereço confiável não existe balde de origem, como no limite da consulta de reservas. O endereço vem de `trustedClientAddress` (`lib/http/client-address.ts`), que a rota da fase 3 vai usar.
 
 É um limite **separado** do `register_customer_access_attempt`: aquele protege CPF + código, com outros números, e tem rollback próprio.
 
@@ -134,8 +134,8 @@ Não testar escrita no Preview: ele usa o banco de produção.
 
 ## Testes
 
-- `tests/waitlist-foundation.test.ts`: Postgres em memória com todas as migrations, 45 testes. Migration aditiva e idempotente; tabelas e sequência fechadas inclusive para a service role, também com os privilégios padrão do Supabase ligados; permissões de cada função; `list_public_sessions` igual a `list_open_sessions` mais as esgotadas, com as mesmas regras e colunas; esgotamento por pré-reserva válida, vaga devolvida por expiração e por Stand-by; inscrição (D4, turma indisponível, validação, normalização, duplicidade com resposta idêntica, reinscrição, campo isca, tetos por e-mail e por turma); a lista não escreve em reservas nem trava sessões; limites (origem, e-mail, cancelamento, HMAC, janela); cancelamento (dois passos, sem dado pessoal, idempotente, token não guardado, turma iniciada); painel (autorização, ordem da fila, posição, filtros, busca literal, paginação, totais, remoção com auditoria sem dado pessoal, detalhe); expiração, conversão e anonimização; régua das ondas (D2) e dos limites de aviso (D3); constraints; exclusão de sessão; preflight, postcheck e rollback.
-- `tests/waitlist-foundation-concurrency.test.ts`: **sessões independentes do Postgres**, só no CI (contêiner efêmero do job). O mesmo e-mail em duas abas (com a primeira confirmando ou desistindo), a inscrição ao lado de uma pré-reserva que trava a turma (nas duas ordens: a espera é curta e as duas terminam), rajada de 18 tentativas da mesma origem (exatamente 10 aceitas) e cancelamentos simultâneos, do cliente com o cliente e do cliente com a equipe.
+- `tests/waitlist-foundation.test.ts`: Postgres em memória com todas as migrations, 46 testes. Migration aditiva e idempotente; tabelas e sequência fechadas inclusive para a service role, também com os privilégios padrão do Supabase ligados; permissões de cada função; `list_public_sessions` igual a `list_open_sessions` mais as esgotadas, com as mesmas regras e colunas; esgotamento por pré-reserva válida, vaga devolvida por expiração e por Stand-by; inscrição (D4, turma indisponível, validação, normalização, duplicidade com resposta idêntica, reinscrição, campo isca, tetos por e-mail e por turma contando só quem ainda espera); a lista não escreve em reservas nem trava sessões; limites (origem, e-mail, cancelamento, HMAC, janela); cancelamento (dois passos, sem dado pessoal, idempotente, token não guardado, turma iniciada); painel (autorização, ordem da fila, posição, filtros, busca literal, paginação, totais, remoção com auditoria sem dado pessoal, detalhe); expiração, conversão e anonimização; régua das ondas (D2) e dos limites de aviso (D3); constraints; exclusão de sessão; preflight, postcheck e rollback.
+- `tests/waitlist-foundation-concurrency.test.ts`: **sessões independentes do Postgres**, só no CI (contêiner efêmero do job). O mesmo e-mail em duas abas (com a primeira confirmando ou desistindo), a inscrição ao lado de uma pré-reserva que trava a turma (nas duas ordens: a espera é curta e as duas terminam), rajada de 36 tentativas da mesma origem (exatamente 30 aceitas) e cancelamentos simultâneos, do cliente com o cliente e do cliente com a equipe.
 
 ## Pendências
 

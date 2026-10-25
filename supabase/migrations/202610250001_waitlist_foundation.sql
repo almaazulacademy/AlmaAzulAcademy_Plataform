@@ -427,8 +427,10 @@ $$;
 -- Registra uma tentativa e diz se ela cabe no limite. Toda tentativa conta,
 -- inclusive a barrada e a inválida.
 --
---   SIGNUP — 10 por origem a cada hora (quando há endereço confiável) e 6 por
---            e-mail a cada hora. O balde do e-mail limita quantas confirmações
+--   SIGNUP — 30 por origem a cada hora (quando há endereço confiável) e 6 por
+--            e-mail a cada hora. A origem é folgada de propósito: operadora
+--            móvel (CGNAT) e Wi-Fi compartilhado põem muitos clientes atrás do
+--            mesmo endereço. O balde do e-mail limita quantas confirmações
 --            alguém consegue disparar para a caixa de outra pessoa.
 --   CANCEL — 30 por origem a cada 15 minutos. O token tem 256 bits: o limite só
 --            corta varredura.
@@ -462,7 +464,7 @@ begin
   end if;
 
   if action = 'SIGNUP' then
-    client_prefix := 'signup-client'; client_limit := 10; client_window := interval '1 hour';
+    client_prefix := 'signup-client'; client_limit := 30; client_window := interval '1 hour';
     email_prefix := 'signup-email'; email_limit := 6; email_window := interval '1 hour';
   elsif action = 'CANCEL' then
     client_prefix := 'cancel-client'; client_limit := 30; client_window := interval '15 minutes';
@@ -530,7 +532,8 @@ $$;
 --                        iniciada ou de experiência não publicada.
 --   NOT_SOLD_OUT       — a turma tem vaga: o caminho é reservar (D4). Traz
 --                        `remainingSpots`, que a página pública já mostra.
---   LIMIT_REACHED      — o e-mail já tem 10 inscrições ativas.
+--   LIMIT_REACHED      — o e-mail já tem 10 inscrições ativas em turmas que
+--                        ainda não começaram.
 --   WAITLIST_FULL      — a turma já tem 100 inscrições ativas.
 --
 -- Não pede lock na sessão: a lista não disputa vaga com a reserva, e uma
@@ -620,9 +623,19 @@ begin
     return jsonb_build_object('status', 'ACCEPTED');
   end if;
 
-  if (select count(*) from public.waitlist_entries where email = normalized_email and status = 'ACTIVE') >= 10 then
+  -- Só contam as inscrições que ainda esperam de verdade: turma futura, nem
+  -- cancelada nem arquivada. Uma inscrição de turma que já passou e que a
+  -- rotina de expiração ainda não gravou não pode bloquear o cliente.
+  if (
+    select count(*)
+    from public.waitlist_entries we
+    join public.sessions s on s.id = we.session_id
+    where we.email = normalized_email
+      and public.waitlist_effective_status(we.status, s.starts_at, s.status) = 'ACTIVE'
+  ) >= 10 then
     return jsonb_build_object('status', 'LIMIT_REACHED');
   end if;
+  -- A turma é futura e aberta neste ponto: as ativas gravadas são as que esperam.
   if (select count(*) from public.waitlist_entries where session_id = target_session.id and status = 'ACTIVE') >= 100 then
     return jsonb_build_object('status', 'WAITLIST_FULL');
   end if;

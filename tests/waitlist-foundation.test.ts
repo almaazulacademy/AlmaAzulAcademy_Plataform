@@ -472,6 +472,43 @@ test("inscrição: no máximo 10 inscrições ativas por e-mail e 100 por turma"
   await resetThrottle();
 });
 
+test("inscrição: os tetos contam só quem ainda espera, sem depender da rotina de expiração", async () => {
+  await resetThrottle();
+  const who = person();
+  const sessions: string[] = [];
+  for (let index = 0; index < 10; index += 1) {
+    const { session } = await soldOutSession({ capacity: 1 });
+    if (index % 5 === 0) await resetThrottle();
+    assert.equal((await join(session, who)).status, "ACCEPTED");
+    sessions.push(session);
+  }
+  await resetThrottle();
+
+  // Três turmas passam, uma é cancelada e uma é arquivada. Ninguém rodou
+  // waitlist_expire_entries: as linhas continuam gravadas como ACTIVE.
+  for (const session of sessions.slice(0, 3)) {
+    await db.query(`update public.sessions set starts_at = now() - interval '1 day' where id = $1::uuid`, [session]);
+  }
+  await db.query(`update public.sessions set status = 'CANCELLED' where id = $1::uuid`, [sessions[3]]);
+  await db.query(`update public.sessions set status = 'ARCHIVED' where id = $1::uuid`, [sessions[4]]);
+  assert.equal((await one(`select count(*)::int as n from public.waitlist_entries where email = $1 and status = 'ACTIVE'`, [who.email])).n, 10);
+
+  // Sobram 5 esperando de verdade: cabem mais 5, e a 6ª passa do teto.
+  for (let index = 0; index < 5; index += 1) {
+    const { session } = await soldOutSession({ capacity: 1 });
+    assert.equal((await join(session, who)).status, "ACCEPTED", `nova inscrição ${index + 1}`);
+  }
+  await resetThrottle();
+  const { session: extra } = await soldOutSession({ capacity: 1 });
+  assert.deepEqual(await join(extra, who), { status: "LIMIT_REACHED" });
+
+  // Cancelar e remover também liberam lugar no teto.
+  const latest = await entryOf(sessions[9], who.email);
+  await call(`public.waitlist_cancel($1, null)`, [await tokenOf(latest.id)]);
+  assert.equal((await join(extra, who)).status, "ACCEPTED");
+  await resetThrottle();
+});
+
 test("inscrição: não pede lock na turma nem escreve em reservas", async () => {
   const { session } = await soldOutSession();
   const reservations = async () => (await one(`select md5(string_agg(r::text, '|' order by r.id)) as h from public.reservations r`)).h;
@@ -488,16 +525,16 @@ test("inscrição: não pede lock na turma nem escreve em reservas", async () =>
 // 4. Limite de tentativas
 // ===========================================================================
 
-test("limite: 10 inscrições por origem a cada hora; a barrada também conta", async () => {
+test("limite: 30 inscrições por origem a cada hora; a barrada também conta", async () => {
   await resetThrottle();
   const { session } = await soldOutSession({ capacity: 3 });
-  for (let index = 0; index < 10; index += 1) {
+  for (let index = 0; index < 30; index += 1) {
     assert.equal((await join(session, person(), 1, { client: "203.0.113.10" })).status, "ACCEPTED");
   }
   const blocked = await join(session, person(), 1, { client: "203.0.113.10" });
   assert.equal(blocked.status, "RATE_LIMITED");
   assert.ok(blocked.retryAfterSeconds > 3000 && blocked.retryAfterSeconds <= 3600, String(blocked.retryAfterSeconds));
-  assert.equal((await entriesOf(session)).length, 10, "a tentativa barrada não grava");
+  assert.equal((await entriesOf(session)).length, 30, "a tentativa barrada não grava");
 
   // Outra origem não é afetada; sem origem, só vale o limite do e-mail.
   assert.equal((await join(session, person(), 1, { client: "203.0.113.11" })).status, "ACCEPTED");

@@ -146,15 +146,15 @@ if (!database) {
     assert.equal((await rows(`select id from public.waitlist_entries where session_id = $1::uuid and status = 'ACTIVE'`, [session])).length, 1);
   });
 
-  test("limite sob rajada: 10 inscrições por origem, nem uma a mais", async () => {
+  test("limite sob rajada: 30 inscrições por origem, nem uma a mais", async () => {
     const session = await soldOutSession(3);
-    const attempts = pool.flatMap((client) => Array.from({ length: 3 }, () => client)).map((client) => joinOn(client, session, person(), 1, "203.0.113.50"));
+    const attempts = pool.flatMap((client) => Array.from({ length: 6 }, () => client)).map((client) => joinOn(client, session, person(), 1, "203.0.113.50"));
     const results = await Promise.all(attempts);
     for (const result of results) assert.equal(result.ok, true, result.ok ? "" : result.error);
     const statuses = results.map((result) => (result.ok ? result.value.status : "ERRO"));
-    assert.equal(statuses.filter((status) => status === "ACCEPTED").length, 10);
-    assert.equal(statuses.filter((status) => status === "RATE_LIMITED").length, 8);
-    assert.equal((await rows(`select id from public.waitlist_entries where session_id = $1::uuid`, [session])).length, 10);
+    assert.equal(statuses.filter((status) => status === "ACCEPTED").length, 30);
+    assert.equal(statuses.filter((status) => status === "RATE_LIMITED").length, 6);
+    assert.equal((await rows(`select id from public.waitlist_entries where session_id = $1::uuid`, [session])).length, 30);
   });
 
   test("dois cancelamentos ao mesmo tempo: um cancela, o outro vê encerrada", async () => {
