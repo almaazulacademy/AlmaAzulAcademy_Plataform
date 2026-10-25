@@ -4,6 +4,7 @@ import { getAdminContext, getStaffContext } from "@/lib/admin/auth";
 import { canManageTeam } from "@/lib/admin/roles";
 import { adminMutationError, standbyMutationError } from "@/lib/admin/mutation-errors";
 import { isStandbyAdminEnabled } from "@/lib/admin/standby";
+import { isWaitlistAdminEnabled } from "@/lib/admin/waitlist";
 
 export function isSameOriginRequest(request: Request) {
   const originHeader = request.headers.get("origin");
@@ -86,6 +87,18 @@ export { adminMutationError, standbyMutationError };
  */
 export async function authorizeStandbyApi() {
   if (!isStandbyAdminEnabled()) {
+    return { context: null, response: NextResponse.json({ message: "Recurso não disponível." }, { status: 404 }) };
+  }
+  return authorizeAdminApi();
+}
+
+/**
+ * Rotas do painel da lista de espera. Com `WAITLIST_ADMIN_ENABLED` desligada,
+ * 404 antes de qualquer outra coisa. Ligada, as regras das demais rotas
+ * administrativas: só ADMIN e OPERATOR; instrutor recebe 403.
+ */
+export async function authorizeWaitlistAdminApi() {
+  if (!isWaitlistAdminEnabled()) {
     return { context: null, response: NextResponse.json({ message: "Recurso não disponível." }, { status: 404 }) };
   }
   return authorizeAdminApi();

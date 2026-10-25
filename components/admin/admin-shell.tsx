@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  BellRing,
   BookOpenCheck,
   CalendarClock,
   CalendarDays,
@@ -34,7 +35,7 @@ const operations = [
 
 type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; badge?: string };
 
-function AdminShellContent({ children, profile, bases, standbyEnabled }: { children: ReactNode; profile: AdminProfile; bases: AdminBase[]; standbyEnabled: boolean }) {
+function AdminShellContent({ children, profile, bases, standbyEnabled, waitlistEnabled }: { children: ReactNode; profile: AdminProfile; bases: AdminBase[]; standbyEnabled: boolean; waitlistEnabled: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const { notify } = useToast();
@@ -121,7 +122,12 @@ function AdminShellContent({ children, profile, bases, standbyEnabled }: { child
               // "Stand-by" entra logo depois de Reservas, e só com o painel ligado.
               ...operations.flatMap((item) => item.href === "/admin/reservas" && standbyEnabled
                 ? [item, { href: "/admin/stand-by", label: "Stand-by", icon: CalendarClock }]
-                : [item]),
+                : [item])
+                // "Lista de espera" vem em seguida (depois do Stand-by, se ele
+                // existir), e só com o painel da lista ligado.
+                .flatMap((item) => item.href === (standbyEnabled ? "/admin/stand-by" : "/admin/reservas") && waitlistEnabled
+                  ? [item, { href: "/admin/lista-de-espera", label: "Lista de espera", icon: BellRing }]
+                  : [item]),
               ...(canManageTeam(profile.role) ? [{ href: "/admin/equipe", label: "Equipe", icon: UsersRound }] : []),
             ].map(renderItem)}
           </div>
@@ -169,6 +175,6 @@ function AdminShellContent({ children, profile, bases, standbyEnabled }: { child
   );
 }
 
-export function AdminShell({ children, profile, bases = [], standbyEnabled = false }: { children: ReactNode; profile: AdminProfile; bases?: AdminBase[]; standbyEnabled?: boolean }) {
-  return <ToastProvider><AdminShellContent profile={profile} bases={bases} standbyEnabled={standbyEnabled}>{children}</AdminShellContent></ToastProvider>;
+export function AdminShell({ children, profile, bases = [], standbyEnabled = false, waitlistEnabled = false }: { children: ReactNode; profile: AdminProfile; bases?: AdminBase[]; standbyEnabled?: boolean; waitlistEnabled?: boolean }) {
+  return <ToastProvider><AdminShellContent profile={profile} bases={bases} standbyEnabled={standbyEnabled} waitlistEnabled={waitlistEnabled}>{children}</AdminShellContent></ToastProvider>;
 }

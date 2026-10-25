@@ -1,5 +1,14 @@
 # Changelog
 
+## Lista de espera — painel administrativo (fase 4 de 7, desligado por padrão)
+
+- **Nada muda em produção ao publicar este código.** O painel só existe com `WAITLIST_ADMIN_ENABLED=true`; sem a variável não há menu, e `/admin/lista-de-espera` e a rota de remoção respondem 404. **Sem migration**: usa as RPCs administrativas da fase 1, já aplicadas. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-4--painel-administrativo).
+- **Turmas com lista de espera**: experiência, base, data e horário, capacidade, vagas agora e interessados (inscrições e pessoas), com filtros por experiência, base, data e turmas passadas.
+- **Inscrições**: nome, e-mail, WhatsApp, pessoas, posição na fila, data e status, com filtros por turma, base, status e busca, e **paginação no banco**.
+- **Histórico** de cada inscrição: e-mails com cada tentativa e motivo de não envio, e as ações da equipe da auditoria.
+- **Remover** inscrição ativa, com motivo obrigatório e confirmação; o banco descarta o e-mail pendente e audita, sem dado pessoal nos metadados.
+- Só ADMIN e OPERATOR (`requireAdmin`, `authorizeWaitlistAdminApi`, `is_active_admin` nas RPCs); instrutor recebe 403; origem conferida na remoção; nenhum log com dado pessoal. Reservas, pagamento, cancelamento e Stand-by **não foram alterados**.
+
 ## Lista de espera — inscrição gratuita e confirmação por e-mail (fase 3 de 7, desligada por padrão)
 
 - **Nada muda em produção ao publicar este código.** A inscrição só existe com a migration `202610250002` aplicada **e** `WAITLIST_SIGNUP_ENABLED=true` junto com `WAITLIST_PUBLIC_ENABLED=true`. Sem elas, não há botão, `/lista-de-espera/<turma>` e `POST /api/waitlist` respondem 404. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-3--inscrição-gratuita-confirmação-e-saída-pelo-link).

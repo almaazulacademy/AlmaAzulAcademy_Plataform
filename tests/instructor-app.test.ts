@@ -233,17 +233,23 @@ test("toda rota /api/admin exige papel administrativo; só o check-in aceita ins
       assert.equal([...text.matchAll(/await authorizeTeamManagerApi\(\)/g)].length, exported, route);
     } else {
       assert.ok(!text.includes("authorizeCheckinApi"), route);
-      // As rotas de Stand-by passam por `authorizeStandbyApi`, que só acrescenta
-      // a checagem de ativação e delega a `authorizeAdminApi` — conferido abaixo.
-      assert.ok(/authorize(Admin|Standby)Api\(\)/.test(text), route);
+      // As rotas de Stand-by e da lista de espera passam por `authorizeStandbyApi`
+      // e `authorizeWaitlistAdminApi`, que só acrescentam a checagem de ativação
+      // e delegam a `authorizeAdminApi` — conferido abaixo.
+      assert.ok(/authorize(Admin|Standby|WaitlistAdmin)Api\(\)/.test(text), route);
       if (/authorizeStandbyApi\(\)/.test(text)) {
         assert.equal([...text.matchAll(/await authorizeStandbyApi\(\)/g)].length, exported, route);
+      }
+      if (/authorizeWaitlistAdminApi\(\)/.test(text)) {
+        assert.equal([...text.matchAll(/await authorizeWaitlistAdminApi\(\)/g)].length, exported, route);
       }
     }
   }
   const http = source("lib/admin/http.ts");
   const standby = http.slice(http.indexOf("export async function authorizeStandbyApi"));
   assert.match(standby, /^export async function authorizeStandbyApi\(\) \{[\s\S]*?return authorizeAdminApi\(\);\n\}/);
+  const waitlist = http.slice(http.indexOf("export async function authorizeWaitlistAdminApi"));
+  assert.match(waitlist, /^export async function authorizeWaitlistAdminApi\(\) \{[\s\S]*?return authorizeAdminApi\(\);\n\}/);
 });
 
 test("área do instrutor exige sessão da equipe e não usa nada do painel restrito", () => {
