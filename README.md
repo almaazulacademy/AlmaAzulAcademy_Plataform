@@ -164,6 +164,7 @@ O push não comprova sozinho que o deployment terminou. Verifique o dashboard, l
 - [docs/google-sheets-integration.md](docs/google-sheets-integration.md) — sincronização das reservas confirmadas com a planilha operacional
 - [docs/reservation-confirmation-email.md](docs/reservation-confirmation-email.md) — e-mail automático de confirmação de reserva
 - [docs/reservation-standby.md](docs/reservation-standby.md) — Stand-by de reservas e reagendamento: regras, modelo, travas financeiras e publicação
+- [docs/waitlist.md](docs/waitlist.md) — Lista de espera: regras aprovadas, fases, modelo no banco e publicação
 - [docs/session-time-clarity.md](docs/session-time-clarity.md) — auditoria dos horários da Imersão Paranoá e comunicação das três turmas
 
 ## Contribuição

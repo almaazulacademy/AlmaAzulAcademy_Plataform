@@ -1,5 +1,17 @@
 # Changelog
 
+## Lista de espera — fundação no banco (fase 1 de 7, nada ligado)
+
+- **Nada muda em produção ao publicar este código**, nem ao aplicar a migration: nenhuma rota, tela, rotina ou e-mail usa a lista ainda. Detalhes, regras aprovadas (D1 a D6) e fases em [docs/waitlist.md](docs/waitlist.md).
+- **`list_public_sessions(slug)`**: as mesmas turmas de `list_open_sessions` mais as esgotadas, com `sold_out`, para a fase 2 mostrar "Esgotado". Só exibição: `list_open_sessions`, `get_booking_session` e `create_pre_reservation` não mudam, e uma turma esgotada continua sem poder ser reservada.
+- **Inscrição** (`waitlist_join`) só em turma com zero vagas, uma ativa por e-mail e turma, grupo de 1 a 20 que caiba na turma, teto de 10 inscrições ativas por e-mail (só turmas que ainda não começaram) e 100 por turma, campo isca e resposta idêntica para quem já estava inscrito. A confirmação nasce na fila na mesma transação e **não é enviada**. A lista não reserva, não bloqueia vaga e não escreve em reservas (opção A).
+- **Cancelamento pelo link** em dois passos (ver e cancelar), idempotente, sem dado pessoal na resposta. O token é um HMAC recalculável; o banco guarda só o hash.
+- **Limite de tentativas próprio no banco**: inscrição 30 por origem e 6 por e-mail a cada hora; link 30 por origem a cada 15 minutos. Baldes em HMAC.
+- **Painel (funções, sem tela ainda)**: turmas com inscrições, lista paginada na ordem da fila com posição, detalhe com avisos e auditoria, remoção com motivo. Só ADMIN e OPERATOR.
+- **Preparado, sem uso**: aberturas de vaga, fila de avisos e tentativas, régua das ondas (`max(5, 3 × vagas)`, no máximo 3 avisos e 12 horas entre eles), expiração, conversão e anonimização em 90 dias. Nada é agendado.
+- Migration `202610250001_waitlist_foundation.sql`, **não aplicada**: seis tabelas (RLS ligada e nenhum acesso pela API, nem da service role) e dezoito funções. Não substitui o corpo de nenhuma função, não cria trigger em tabela existente e não toca nenhuma linha. Preflight, postcheck e rollback em `supabase/diagnostics/waitlist_foundation_*.sql` e `supabase/rollback/`; o rollback recusa enquanto houver inscrição ativa.
+- Reservas, checkout, pagamento, cancelamento, Stand-by, e-mails, planilha e painel **não foram alterados**.
+
 ## Stand-by de reservas — autoatendimento do cliente (etapa 5 de 6, desligado por padrão)
 
 - **Nada muda em produção ao publicar este código.** Ao aplicar a migration `202610160001`, uma coisa muda, de propósito: a consulta pública da reserva passa a ter limite de tentativas. O autoatendimento só existe com a migration aplicada **e** `STANDBY_SELF_SERVICE_ENABLED=true`. Sem a variável, as rotas respondem 404 e `/acompanhar-reserva` continua mandando o cliente em Stand-by para a equipe. Detalhes em [docs/reservation-standby.md](docs/reservation-standby.md#autoatendimento-do-cliente).
