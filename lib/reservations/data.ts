@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { parseBaseLocation, type BaseLocation } from "@/lib/bases/location";
 import type { BookingSession, ReservationDetails, ReservationStatus } from "@/lib/reservations/types";
+import type { PublicSession } from "@/lib/waitlist/public";
 
 type Row = Record<string, unknown>;
 
@@ -37,6 +38,42 @@ export async function listOpenSessions(client: SupabaseClient, experienceSlug: s
   const result = await client.rpc("list_open_sessions", { p_experience_slug: experienceSlug });
   if (result.error) throw new Error(result.error.message);
   return (Array.isArray(result.data) ? result.data : []).map((row) => mapBookingSession(row as Row));
+}
+
+/** Falha de leitura com o código do PostgREST/Postgres preservado. */
+export class SessionListError extends Error {
+  readonly code: string;
+
+  // Campo declarado, e não propriedade de parâmetro: o runner de testes do Node
+  // carrega os `.ts` em strip-only mode, que não suporta a forma curta.
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "SessionListError";
+    this.code = code;
+  }
+}
+
+/** PostgREST (PGRST202) ou Postgres (42883): a função não existe no banco. */
+export function isMissingFunctionError(error: unknown) {
+  if (!(error instanceof SessionListError)) return false;
+  return error.code === "PGRST202" || error.code === "42883" || /could not find the function|does not exist/i.test(error.message);
+}
+
+export function mapPublicSession(row: Row): PublicSession {
+  const session = mapBookingSession(row);
+  // Esgotada pela marca do banco ou pela própria contagem: as duas valem.
+  return { ...session, soldOut: row.sold_out === true || session.remainingSpots <= 0 };
+}
+
+/**
+ * Turmas abertas e futuras **inclusive as esgotadas** (`list_public_sessions`,
+ * da migration 202610250001). Só exibição: reservar continua passando por
+ * `get_booking_session` e `create_pre_reservation`.
+ */
+export async function listPublicSessions(client: SupabaseClient, experienceSlug: string): Promise<PublicSession[]> {
+  const result = await client.rpc("list_public_sessions", { p_experience_slug: experienceSlug });
+  if (result.error) throw new SessionListError(result.error.message, result.error.code ?? "");
+  return (Array.isArray(result.data) ? result.data : []).map((row) => mapPublicSession(row as Row));
 }
 
 /**
