@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isAuthorizedCronRequest } from "@/lib/cron/authorization";
 import { retryPendingConfirmationEmails } from "@/lib/reservations/confirmation-email-service";
 import { retryPendingRescheduleConfirmationEmails } from "@/lib/reservations/reschedule-email-service";
+import { retryPendingWaitlistConfirmationEmails } from "@/lib/waitlist/joined-email-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +32,10 @@ export const dynamic = "force-dynamic";
  * A mesma execução recupera, em seguida, os e-mails de reagendamento vindos de
  * Stand-by. São filas separadas: uma não lê nem escreve a outra, e a segunda
  * nunca lança. Fica na mesma rota para não criar mais uma rotina agendada.
+ *
+ * Por último, a confirmação da lista de espera, também com fila própria e que
+ * nunca lança. Desligada (`WAITLIST_SIGNUP_ENABLED`), responde DISABLED sem
+ * tocar no banco.
  */
 async function run(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();
@@ -43,7 +48,8 @@ async function run(request: Request) {
 
   const report = await retryPendingConfirmationEmails();
   const reschedule = await retryPendingRescheduleConfirmationEmails();
-  const status = report.outcome === "FAILED" || reschedule.outcome === "FAILED" ? 503 : 200;
+  const waitlist = await retryPendingWaitlistConfirmationEmails();
+  const status = report.outcome === "FAILED" || reschedule.outcome === "FAILED" || waitlist.outcome === "FAILED" ? 503 : 200;
 
   // Só contadores. Nenhum e-mail, nome ou código de reserva na resposta.
   return NextResponse.json(
@@ -53,6 +59,7 @@ async function run(request: Request) {
       sent: report.sent,
       errorCode: report.errorCode,
       reschedule: { outcome: reschedule.outcome, processed: reschedule.processed, sent: reschedule.sent, errorCode: reschedule.errorCode },
+      waitlist: { outcome: waitlist.outcome, processed: waitlist.processed, sent: waitlist.sent, errorCode: waitlist.errorCode },
     },
     { status },
   );

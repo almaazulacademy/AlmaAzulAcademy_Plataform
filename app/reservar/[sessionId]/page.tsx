@@ -8,12 +8,14 @@ import { WhatsappFloatButton } from "@/components/layout/whatsapp-float-button";
 import { ReservationForm } from "@/components/reservation/reservation-form";
 import { SessionTurma } from "@/components/reservation/session-turma";
 import { BaseLocationCard } from "@/components/bases/base-location";
+import { WaitlistJoinLink } from "@/components/waitlist/join-link";
 import { SoldOutNotice } from "@/components/waitlist/sold-out-notice";
 import { getExperiencePlacement, getSessionAvailabilityContext } from "@/lib/bases/data";
 import { baseLocation } from "@/lib/bases/location";
 import { getBookingSession, listPublicSessions } from "@/lib/reservations/data";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSessionBookable, isWaitlistPublicEnabled, type PublicSession } from "@/lib/waitlist/public";
+import { isWaitlistSignupEnabled } from "@/lib/waitlist/signup";
 
 export const metadata: Metadata = { title: "Reservar experiência", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -22,6 +24,7 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
   const { sessionId } = await params;
   const supabase = getSupabaseServerClient();
   const waitlistEnabled = isWaitlistPublicEnabled();
+  const waitlistSignup = isWaitlistSignupEnabled();
   let session = null;
   if (supabase && /^[0-9a-f-]{36}$/i.test(sessionId)) {
     try { session = await getBookingSession(supabase, sessionId); } catch (error) { console.error("Falha ao carregar sessão:", error instanceof Error ? error.message : "erro desconhecido"); }
@@ -64,7 +67,7 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
               className="mb-8"
             />
             {placement ? <BaseLocationCard location={baseLocation(placement.base)} className="mb-8" /> : null}
-            <ReservationForm session={session} waitlistEnabled={waitlistEnabled} />
+            <ReservationForm session={session} waitlistEnabled={waitlistEnabled} waitlistSignup={waitlistSignup} />
           </>
         ) : soldOut ? (
           <>
@@ -76,7 +79,11 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
             />
             <div className="rounded-4xl bg-white p-10 text-center sm:p-16">
               <h1 className="text-4xl font-medium tracking-[-0.05em]">Esgotado</h1>
-              <SoldOutNotice className="mx-auto mt-5 max-w-lg items-center text-center" note="Todas as vagas desta turma já foram reservadas. Nenhuma reserva pode ser feita para ela agora." />
+              <SoldOutNotice
+                className="mx-auto mt-5 max-w-lg items-center text-center"
+                note="Todas as vagas desta turma já foram reservadas. Nenhuma reserva pode ser feita para ela agora."
+                action={waitlistSignup ? <WaitlistJoinLink sessionId={soldOut.id} className="mt-2" /> : undefined}
+              />
               <div className="mt-7 flex flex-col items-center justify-center gap-4 sm:flex-row">
                 <Link href={`/experiencias/${soldOut.experienceSlug}#reservas`} className="inline-flex font-semibold text-forest">Ver outras turmas</Link>
                 <Link href="/agenda" className="inline-flex font-semibold text-forest">Ver a agenda</Link>

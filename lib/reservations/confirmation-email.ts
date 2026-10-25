@@ -84,7 +84,7 @@ const CLOSING_PARAGRAPHS = [
 ] as const;
 
 /** Paleta da marca, espelhando as variáveis de `app/globals.css`. */
-const BRAND = {
+export const BRAND = {
   ink: "#14312c",
   paper: "#f7f5ef",
   mist: "#e9eee8",
@@ -132,12 +132,12 @@ export type ConfirmationEmail = {
 };
 
 /** Primeiro nome, para o cumprimento não ficar solene demais. */
-function firstName(fullName: string) {
+export function firstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || fullName.trim();
 }
 
 /** Escapa o que vai para dentro do HTML. Nome de cliente é entrada de usuário. */
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -150,7 +150,7 @@ function whatsappLink() {
   return `https://wa.me/${WHATSAPP_NUMBER}`;
 }
 
-function formatWhatsappNumber() {
+export function formatWhatsappNumber() {
   const digits = WHATSAPP_NUMBER.replace(/\D/g, "").replace(/^55/, "");
   if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   return WHATSAPP_NUMBER;
@@ -302,7 +302,7 @@ function buildText(data: ReservationConfirmationData) {
 const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 
 /** Cartão destacado: rótulo pequeno, valor grande e, quando houver, uma nota e um botão. */
-function highlightCard(label: string, value: string, note?: string, extraHtml = "") {
+export function highlightCard(label: string, value: string, note?: string, extraHtml = "") {
   const noteHtml = (note
     ? `
                 <p style="margin:8px 0 0;font-size:14px;line-height:21px;color:${BRAND.ink};opacity:0.7;">${escapeHtml(note)}</p>`
@@ -343,7 +343,7 @@ function locationCard(data: ReservationConfirmationData) {
 }
 
 /** Seção de leitura: título curto e um parágrafo ou uma lista curta. */
-function infoSection(title: string, body: string) {
+export function infoSection(title: string, body: string) {
   return `
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 4px;">
                 <tr>
@@ -354,7 +354,7 @@ function infoSection(title: string, body: string) {
               </table>`;
 }
 
-function paragraph(text: string) {
+export function paragraph(text: string) {
   return `
                     <p style="margin:0;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.8;">${escapeHtml(text)}</p>`;
 }
@@ -421,7 +421,7 @@ function checkinHtml(data: ReservationConfirmationData) {
 }
 
 /** Moldura comum aos e-mails: cabeçalho da marca, corpo e rodapé de contato. */
-function emailLayout({ title, preheader, heading, body }: { title: string; preheader: string; heading: string; body: string }) {
+export function emailLayout({ title, preheader, heading, body }: { title: string; preheader: string; heading: string; body: string }) {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>

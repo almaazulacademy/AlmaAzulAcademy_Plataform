@@ -3,10 +3,12 @@ import { ArrowRight, CalendarDays, Ticket, Users } from "lucide-react";
 
 import { SessionDateFilter } from "@/components/session-date-filter";
 import { buttonVariants } from "@/components/ui/button";
+import { WaitlistJoinLink } from "@/components/waitlist/join-link";
 import { SoldOutNotice } from "@/components/waitlist/sold-out-notice";
 import { readPublicSessions } from "@/lib/reservations/session-catalog";
 import { groupSessionsByDay, type SessionChoice } from "@/lib/sessions/choice";
 import { isSessionBookable, type PublicSession } from "@/lib/waitlist/public";
+import { isWaitlistSignupEnabled } from "@/lib/waitlist/signup";
 
 function formatPrice(cents: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
@@ -44,8 +46,8 @@ function EmptyState({ error = false }: { error?: boolean }) {
  * O destino vem de `choice.href`, montado a partir de `sessions.id` na mesma
  * chamada que produziu o horário exibido. Não existe associação por posição.
  */
-function SessionCard({ choice, session }: { choice: SessionChoice; session: PublicSession }) {
-  if (!isSessionBookable(session)) return <SoldOutSessionCard choice={choice} session={session} />;
+function SessionCard({ choice, session, waitlistSignup }: { choice: SessionChoice; session: PublicSession; waitlistSignup: boolean }) {
+  if (!isSessionBookable(session)) return <SoldOutSessionCard choice={choice} session={session} waitlistSignup={waitlistSignup} />;
 
   return (
     <Link
@@ -81,10 +83,10 @@ function SessionCard({ choice, session }: { choice: SessionChoice; session: Publ
  * Turma esgotada, com a lista de espera pública ligada.
  *
  * Mesmo desenho do cartão de reserva, com o horário em destaque, mas **não é um
- * link**: nada aqui leva a `/reservar`. O espaço do futuro "Entrar na lista de
- * espera" é o `action` do aviso, vazio nesta fase.
+ * link**: nada aqui leva a `/reservar`. Com a inscrição ligada
+ * (`WAITLIST_SIGNUP_ENABLED`), o aviso ganha "Entrar na lista de espera".
  */
-function SoldOutSessionCard({ choice, session }: { choice: SessionChoice; session: PublicSession }) {
+function SoldOutSessionCard({ choice, session, waitlistSignup }: { choice: SessionChoice; session: PublicSession; waitlistSignup: boolean }) {
   return (
     <article
       aria-label={`${choice.ariaLabel} — esgotada`}
@@ -102,7 +104,11 @@ function SoldOutSessionCard({ choice, session }: { choice: SessionChoice; sessio
         </p>
       </div>
 
-      <SoldOutNotice tone="dark" className="mt-auto pt-7" />
+      <SoldOutNotice
+        tone="dark"
+        className="mt-auto pt-7"
+        action={waitlistSignup ? <WaitlistJoinLink sessionId={session.id} tone="dark" ariaLabel={`Entrar na lista de espera da ${choice.ariaLabel}`} /> : undefined}
+      />
     </article>
   );
 }
@@ -119,7 +125,7 @@ function SoldOutSessionCard({ choice, session }: { choice: SessionChoice; sessio
  * as mesmas de sempre — só desta experiência, porque `readOpenSessions` já
  * recebeu o slug.
  */
-export function SessionsGrid({ sessions, date = null }: { sessions: PublicSession[]; date?: string | null }) {
+export function SessionsGrid({ sessions, date = null, waitlistSignup = false }: { sessions: PublicSession[]; date?: string | null; waitlistSignup?: boolean }) {
   const days = groupSessionsByDay(sessions);
 
   return (
@@ -145,7 +151,7 @@ export function SessionsGrid({ sessions, date = null }: { sessions: PublicSessio
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {day.turmas.map(({ choice, session }) => (
-                <SessionCard key={choice.sessionId} choice={choice} session={session} />
+                <SessionCard key={choice.sessionId} choice={choice} session={session} waitlistSignup={waitlistSignup} />
               ))}
             </div>
           </section>
@@ -170,5 +176,5 @@ export async function SessionsSection({
   if (result.status === "ERROR") return <EmptyState error />;
   if (result.status === "UNCONFIGURED" || !result.sessions.length) return <EmptyState />;
 
-  return <SessionsGrid sessions={result.sessions} date={date} />;
+  return <SessionsGrid sessions={result.sessions} date={date} waitlistSignup={isWaitlistSignupEnabled()} />;
 }

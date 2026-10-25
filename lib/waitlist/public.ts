@@ -83,3 +83,10 @@ export function fewerSpotsMessage(remainingSpots: number) {
 }
 
 export const SOLD_OUT_WHILE_FILLING = "Esta turma esgotou enquanto você preenchia. Nenhuma vaga foi bloqueada e nada foi cobrado.";
+
+/** Página de inscrição na lista de espera de uma turma (fase 3). */
+export function waitlistSignupHref(sessionId: string) {
+  return `/lista-de-espera/${sessionId}`;
+}
+
+export const JOIN_WAITLIST_LABEL = "Entrar na lista de espera";

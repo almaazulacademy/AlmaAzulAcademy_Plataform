@@ -201,18 +201,22 @@ test("destaque de horários e agenda leem a mesma fonte, e a agenda marca Esgota
   const agenda = code("components/agenda-sessions.tsx");
   assert.match(agenda, /const soldOut = !isSessionBookable\(session\)/);
   assert.match(agenda, /soldOut \? SOLD_OUT_LABEL/);
-  assert.match(agenda, /\{soldOut \? \(\s*<SoldOutNotice \/>\s*\) : \(\s*<Link/);
+  assert.match(agenda, /\{soldOut \? \(\s*<SoldOutNotice[\s\S]*?\/>\s*\) : \(\s*<Link/);
   const data = code("lib/agenda/data.ts");
   assert.match(data, /enabled: isWaitlistPublicEnabled\(\)/);
   assert.match(data, /listOpen: \(slug\) => listOpenSessions\(client, slug\)/);
 });
 
-test("aviso de esgotado: nunca é link de reserva; o lugar do botão da lista existe e está vazio", () => {
+test("aviso de esgotado: nunca é link de reserva; o botão da lista só aparece com a inscrição ligada (fase 3)", () => {
   const notice = code("components/waitlist/sold-out-notice.tsx");
   assert.doesNotMatch(notice, /<Link|href=|\/reservar|fetch\(|waitlist_join/);
   assert.match(notice, /action\?: ReactNode/);
   for (const path of ["components/sessions-section.tsx", "components/agenda-sessions.tsx", "app/reservar/[sessionId]/page.tsx", "components/reservation/reservation-form.tsx"]) {
-    assert.doesNotMatch(code(path), /<SoldOutNotice[^>]*action=/, `${path} não pode preencher o botão nesta fase`);
+    // Fase 3: o lugar é preenchido, mas só com WAITLIST_SIGNUP_ENABLED, e sempre
+    // com o link de inscrição — nunca com reserva.
+    for (const action of code(path).match(/action=\{[^}]*\}/g) ?? []) {
+      assert.match(action, /^action=\{waitlistSignup \? <WaitlistJoinLink/, `${path}: ${action}`);
+    }
   }
 });
 
@@ -222,7 +226,7 @@ test("página de reserva: formulário só com vaga; esgotada diz Esgotado só co
   assert.match(page, /const waitlistEnabled = isWaitlistPublicEnabled\(\);/);
   assert.match(page, /waitlistEnabled && supabase && !session && upcoming && !comingSoon/);
   assert.match(page, /!isSessionBookable\(item\)/);
-  assert.match(page, /<ReservationForm session=\{session\} waitlistEnabled=\{waitlistEnabled\} \/>/);
+  assert.match(page, /<ReservationForm session=\{session\} waitlistEnabled=\{waitlistEnabled\} waitlistSignup=\{waitlistSignup\} \/>/);
   // A ordem dos estados: formulário (com vaga), esgotado, em breve, indisponível.
   const order = ["<ReservationForm", ") : soldOut ? (", ") : comingSoon ? (", "Sessão indisponível"].map((marker) => page.indexOf(marker));
   assert.ok(order.every((index) => index > 0), JSON.stringify(order));
@@ -277,5 +281,6 @@ test("nada de inscrição, e-mail ou agendamento nesta fase; a variável é só 
 
 test("a fase 2 não traz migration: nada no banco muda", () => {
   const migrations = readdirSync(new URL("../supabase/migrations/", import.meta.url)).filter((file) => file.endsWith(".sql")).sort();
-  assert.equal(migrations.at(-1), "202610250001_waitlist_foundation.sql", "a última migration continua sendo a da fase 1");
+  // Depois da fundação (fase 1), só a fila do e-mail de confirmação (fase 3).
+  assert.deepEqual(migrations.filter((file) => file > "202610250001_waitlist_foundation.sql"), ["202610250002_waitlist_signup_email.sql"]);
 });

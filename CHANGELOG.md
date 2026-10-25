@@ -1,5 +1,15 @@
 # Changelog
 
+## Lista de espera — inscrição gratuita e confirmação por e-mail (fase 3 de 7, desligada por padrão)
+
+- **Nada muda em produção ao publicar este código.** A inscrição só existe com a migration `202610250002` aplicada **e** `WAITLIST_SIGNUP_ENABLED=true` junto com `WAITLIST_PUBLIC_ENABLED=true`. Sem elas, não há botão, `/lista-de-espera/<turma>` e `POST /api/waitlist` respondem 404. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-3--inscrição-gratuita-confirmação-e-saída-pelo-link).
+- **Botão "Entrar na lista de espera"** no aviso de turma esgotada (grade, agenda, `/reservar` e formulário que esgotou). **Formulário** com nome, WhatsApp, e-mail e quantidade, avisando antes do envio que não há pagamento nem reserva. Mesma resposta para quem já estava inscrito.
+- **E-mail de confirmação** pela infraestrutura existente (Resend), com o destaque "Isto não é uma reserva — nenhuma vaga reservada, nenhuma cobrança", a regra da opção A e o link **Sair da lista de espera** (`/lista-de-espera#t=<token>`, token no fragmento, saída em dois passos).
+- **Fila com o protocolo do e-mail de reagendamento**: reivindicação exclusiva, mensagem congelada antes do envio, chave de idempotência por geração, resultado desconhecido nunca tratado como "não enviado", `UNCERTAIN` em conflito ou janela vencida, descarte de inscrição encerrada ou turma iniciada, seis tentativas com espera crescente. Envio depois da resposta, com duas novas tentativas em segundo plano, e recuperação na rotina diária que já existe. `vercel.json` não mudou.
+- **Contra abuso**: recurso ligado, origem do site, formato e o limite do banco (por origem e por e-mail), campo isca, tetos e duplicidade da fase 1; só POST, sem cache e sem dado pessoal nas respostas.
+- Migration `202610250002_waitlist_signup_email.sql`, **não aplicada**: três colunas e oito funções; não substitui função, não cria trigger, não toca linha. Preflight, postcheck e rollback em `supabase/diagnostics/waitlist_signup_email_*.sql` e `supabase/rollback/`.
+- Os e-mails de pagamento e de reagendamento são os mesmos: `confirmation-email.ts` só passou a exportar a moldura que já usava. Reservas, checkout, pagamento, cancelamento e Stand-by **não foram alterados**.
+
 ## Lista de espera — turmas esgotadas no site (fase 2 de 7, desligada por padrão)
 
 - **Nada muda para o cliente ao publicar este código.** Com `WAITLIST_PUBLIC_ENABLED` ausente, agenda, grade e destaque de horários continuam lendo `list_open_sessions`. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-2--turmas-esgotadas-no-site).
