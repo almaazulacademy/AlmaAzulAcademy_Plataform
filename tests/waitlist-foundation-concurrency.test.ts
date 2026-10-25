@@ -5,8 +5,8 @@
  * partir do estado que encontra. Aqui cada conexão é uma sessão de verdade, e os
  * testes mantêm transações abertas de propósito para observar quem espera e o
  * que cada um decide quando a outra termina: o mesmo e-mail em duas abas, a
- * inscrição ao lado de uma pré-reserva que trava a turma, o limite sob rajada e
- * dois cancelamentos ao mesmo tempo.
+ * inscrição ao lado de uma pré-reserva que trava a turma (espera curta, sem
+ * ciclo), o limite sob rajada e dois cancelamentos ao mesmo tempo.
  *
  * Precisa de `TEST_DATABASE_URL` apontando para um Postgres local e
  * descartável. No CI é o contêiner do próprio job, e ali estes testes são
@@ -111,29 +111,39 @@ if (!database) {
     assert.equal((await rows(`select id from public.waitlist_entries where session_id = $1::uuid`, [session])).length, 1);
   });
 
-  test("a inscrição não espera a turma travada por uma pré-reserva em curso", async () => {
+  // Gravar a inscrição pega FOR KEY SHARE na sessão (chave estrangeira), como
+  // gravar uma reserva. Isso espera o FOR UPDATE de uma pré-reserva em curso, e
+  // vice-versa — pelo tempo de uma chamada, sem ciclo. Os dois testes provam que
+  // a espera termina e que as duas operações concluem.
+  test("inscrição ao lado de uma pré-reserva em curso: espera a turma ser solta e conclui", async () => {
     const session = await soldOutSession();
     await A.query("begin");
     await A.query(`select id from public.sessions where id = $1::uuid for update`, [session]);
-    await B.query("set statement_timeout = '3s'");
-    const joined = await joinOn(B, session, person());
-    assert.deepEqual(joined, { ok: true, value: { status: "ACCEPTED" } }, "nenhuma espera pelo lock da sessão");
+    await B.query("set statement_timeout = '10s'");
+    const joined = joinOn(B, session, person());
+    assert.equal(await stillWaiting(joined), true, "a chave estrangeira espera o FOR UPDATE da turma");
     await A.query("rollback");
+    assert.deepEqual(await joined, { ok: true, value: { status: "ACCEPTED" } });
   });
 
-  test("a pré-reserva não espera uma inscrição em curso na mesma turma", async () => {
+  test("pré-reserva ao lado de uma inscrição em curso: espera a inscrição terminar e conclui", async () => {
     const session = await makeSession(IMERSAO.id, { price: uniquePrice(), capacity: 2 });
     const booking = await reserve(session, 2);
     await A.query("begin");
     assert.deepEqual(await joinOn(A, session, person()), { ok: true, value: { status: "ACCEPTED" } });
+    // Libera as vagas por outra sessão, sem tocar na inscrição em curso.
     await call(`public.admin_set_reservation_standby($1::uuid, $2::uuid, 'Libera a turma no meio do teste')`, [ADMIN, booking.id]);
-    await B.query("set statement_timeout = '3s'");
-    const reserved = await settle(B.query(
+    await B.query("set statement_timeout = '10s'");
+    const reserved = settle(B.query(
       `select public.create_pre_reservation($1::uuid, 'Quem Chegou Primeiro', '52998224725', '+5561988887777', 'primeiro@teste.local', 2, null, gen_random_uuid()) as value`,
       [session],
     ));
-    assert.equal(reserved.ok, true, reserved.ok ? "" : reserved.error);
+    assert.equal(await stillWaiting(reserved), true, "o FOR UPDATE da pré-reserva espera a chave estrangeira da inscrição");
     await A.query("commit");
+    const outcome = await reserved;
+    assert.equal(outcome.ok, true, outcome.ok ? "" : outcome.error);
+    assert.ok(outcome.ok && outcome.value.reservationId, "a vaga é de quem reservou (opção A)");
+    assert.equal((await rows(`select id from public.waitlist_entries where session_id = $1::uuid and status = 'ACTIVE'`, [session])).length, 1);
   });
 
   test("limite sob rajada: 10 inscrições por origem, nem uma a mais", async () => {

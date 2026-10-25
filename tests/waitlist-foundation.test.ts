@@ -420,7 +420,7 @@ test("inscrição: no máximo 10 inscrições ativas por e-mail e 100 por turma"
   await resetThrottle();
 });
 
-test("inscrição: não trava a turma nem escreve em reservas", async () => {
+test("inscrição: não pede lock na turma nem escreve em reservas", async () => {
   const { session } = await soldOutSession();
   const reservations = async () => (await one(`select md5(string_agg(r::text, '|' order by r.id)) as h from public.reservations r`)).h;
   const sessionRow = async () => (await one(`select s::text as t from public.sessions s where id = $1::uuid`, [session])).t;
@@ -428,7 +428,7 @@ test("inscrição: não trava a turma nem escreve em reservas", async () => {
   await join(session, person());
   assert.deepEqual([await reservations(), await sessionRow()], before);
   const source = readFileSync(new URL(`../supabase/migrations/${MIGRATION}`, import.meta.url), "utf8");
-  assert.doesNotMatch(source, /from public\.sessions[^;]*for update/i, "nenhuma função da lista trava sessões");
+  assert.doesNotMatch(source, /from public\.sessions[^;]*for (update|share|no key update|key share)/i, "nenhuma função da lista pede lock em sessões");
   assert.doesNotMatch(source, /(insert into|update|delete from) public\.(reservations|sessions|payment_events|reservation_standby)\b/i);
 });
 

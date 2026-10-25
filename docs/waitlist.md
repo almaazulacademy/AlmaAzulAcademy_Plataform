@@ -89,7 +89,7 @@ As funções do painel exigem ADMIN ou OPERATOR ativo (`is_active_admin`), como 
 
 A confirmação por e-mail nasce **na mesma transação** da inscrição (`JOINED`, `QUEUED`). Nesta fase ninguém a envia. Quando o envio vier (fase 3), ele precisa conferir a inscrição de novo antes de cada tentativa: uma inscrição já encerrada tem a confirmação descartada (`SKIPPED`, `ENTRY_CLOSED`) no momento em que é encerrada.
 
-**Concorrência.** A inscrição **não trava a turma**: a lista não disputa vaga com a reserva, e uma inscrição ao mesmo tempo que uma mudança de disponibilidade não tem consequência (opção A). O mesmo e-mail é serializado por um advisory lock da transação, e o índice único parcial `(session_id, email) where status = 'ACTIVE'` é a barreira final.
+**Concorrência.** A inscrição **não pede lock na turma**: a lista não disputa vaga com a reserva, e uma inscrição ao mesmo tempo que uma mudança de disponibilidade não tem consequência (opção A). A única espera possível vem da chave estrangeira para `sessions`: gravar a inscrição pega `FOR KEY SHARE` na sessão — o mesmo que gravar uma reserva —, o que espera o `FOR UPDATE` de uma pré-reserva em curso naquela turma, e vice-versa, pelo tempo de uma chamada. Não há ciclo possível, porque a pré-reserva não toca nada da lista; o teste de concorrência confere que as duas terminam. O mesmo e-mail é serializado por um advisory lock da transação, e o índice único parcial `(session_id, email) where status = 'ACTIVE'` é a barreira final.
 
 ### Limite de tentativas
 
@@ -135,7 +135,7 @@ Não testar escrita no Preview: ele usa o banco de produção.
 ## Testes
 
 - `tests/waitlist-foundation.test.ts`: Postgres em memória com todas as migrations, 44 testes. Migration aditiva e idempotente; tabelas fechadas inclusive para a service role; permissões de cada função; `list_public_sessions` igual a `list_open_sessions` mais as esgotadas, com as mesmas regras e colunas; esgotamento por pré-reserva válida, vaga devolvida por expiração e por Stand-by; inscrição (D4, turma indisponível, validação, normalização, duplicidade com resposta idêntica, reinscrição, campo isca, tetos por e-mail e por turma); a lista não escreve em reservas nem trava sessões; limites (origem, e-mail, cancelamento, HMAC, janela); cancelamento (dois passos, sem dado pessoal, idempotente, token não guardado, turma iniciada); painel (autorização, ordem da fila, posição, filtros, busca literal, paginação, totais, remoção com auditoria sem dado pessoal, detalhe); expiração, conversão e anonimização; régua das ondas (D2) e dos limites de aviso (D3); constraints; exclusão de sessão; preflight, postcheck e rollback.
-- `tests/waitlist-foundation-concurrency.test.ts`: **sessões independentes do Postgres**, só no CI (contêiner efêmero do job). O mesmo e-mail em duas abas (com a primeira confirmando ou desistindo), a inscrição ao lado de uma pré-reserva que trava a turma (nas duas ordens), rajada de 18 tentativas da mesma origem (exatamente 10 aceitas) e cancelamentos simultâneos, do cliente com o cliente e do cliente com a equipe.
+- `tests/waitlist-foundation-concurrency.test.ts`: **sessões independentes do Postgres**, só no CI (contêiner efêmero do job). O mesmo e-mail em duas abas (com a primeira confirmando ou desistindo), a inscrição ao lado de uma pré-reserva que trava a turma (nas duas ordens: a espera é curta e as duas terminam), rajada de 18 tentativas da mesma origem (exatamente 10 aceitas) e cancelamentos simultâneos, do cliente com o cliente e do cliente com a equipe.
 
 ## Pendências
 

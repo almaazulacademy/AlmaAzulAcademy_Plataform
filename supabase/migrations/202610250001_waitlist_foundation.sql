@@ -529,8 +529,12 @@ $$;
 --   LIMIT_REACHED      — o e-mail já tem 10 inscrições ativas.
 --   WAITLIST_FULL      — a turma já tem 100 inscrições ativas.
 --
--- Não trava a sessão: a lista não disputa vaga com a reserva, e uma inscrição
--- concorrente com uma mudança de disponibilidade não tem consequência (opção A).
+-- Não pede lock na sessão: a lista não disputa vaga com a reserva, e uma
+-- inscrição concorrente com uma mudança de disponibilidade não tem consequência
+-- (opção A). A única espera possível é a da chave estrangeira: gravar a
+-- inscrição pega `FOR KEY SHARE` na sessão, como gravar uma reserva, e isso
+-- espera o `FOR UPDATE` de uma pré-reserva em curso naquela turma (e vice-versa)
+-- pelo tempo de uma chamada. Não há ciclo: a pré-reserva não toca nada da lista.
 -- O mesmo e-mail é serializado por um advisory lock da transação.
 --
 -- A confirmação por e-mail nasce aqui, na mesma transação (`JOINED`, `QUEUED`).
