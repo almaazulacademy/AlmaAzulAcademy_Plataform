@@ -31,8 +31,8 @@ Também valem: uma inscrição ativa por e-mail e turma; o grupo precisa caber n
 | 2. "Esgotado" no site | Landing e agenda passam a usar `list_public_sessions`, atrás de variável | Publicada, desligada |
 | 3. Inscrição, confirmação e cancelamento | Formulário, `POST` da inscrição, e-mail `JOINED`, página do link | Publicada, desligada; migration aplicada |
 | 4. Painel | `/admin/lista-de-espera` sobre as funções `admin_*` da fase 1 | Publicado, desligado; sem migration |
-| 5. Detecção de vagas | `waitlist_scan()`: aberturas, ondas pela régua e avisos na fila, sem envio | No repositório; migration não aplicada, desligada, sem agendamento |
-| 6. Envio dos avisos | Fila `SPOT_AVAILABLE`, conferência da vaga antes de enviar e gatilhos (D1) | — |
+| 5. Detecção de vagas | `waitlist_scan()`: aberturas, ondas pela régua e avisos na fila, sem envio | Publicada; migration aplicada, desligada, sem agendamento |
+| 6. Envio dos avisos | Fila `SPOT_AVAILABLE`, conferência da vaga antes de enviar, rota e agendamento proposto (D1) | No repositório; migration não aplicada, desligado, sem agendamento |
 | 7. Retenção e operação | Rotina de anonimização e diagnósticos | — |
 
 ## Fase 1 — fundação no banco
@@ -305,24 +305,104 @@ Sem acesso pela API (RLS, nenhum privilégio). Mudança só por SQL, no SQL Edit
 4. Postcheck → `WAITLIST_DETECCAO_POSTCHECK_OK | OK`, com o interruptor desligado e nenhum agendamento.
 5. Opcional, para observar sem enviar: `waitlist_scan_schedule.sql` e depois `update public.waitlist_settings set detection_enabled = true;`. Os avisos se acumulam na fila e aparecem no histórico do painel como "Aviso de vaga — Na fila". Para parar: `detection_enabled = false` (imediato) ou `waitlist_scan_unschedule.sql`.
 
-## Fase 6 — envio dos avisos: alternativas para o agendamento
+## Fase 6 — envio automático dos avisos de vaga
 
-O que a fase 6 precisa: reivindicar os `SPOT_AVAILABLE` da fila e enviá-los pelo Resend com o mesmo protocolo da fase 3 (prazo, mensagem congelada, chave por geração), conferindo **antes de cada envio** que a turma ainda tem vaga para o grupo; e, ao enviar, somar `notifications_sent` e gravar `last_notified_at` (o que faz valer D3). O envio fica no servidor da aplicação — é onde estão o template, o Resend e a chave —, e o aviso perde valor em minutos: o agendador precisa acionar o servidor com frequência.
+**Nada muda em produção ao publicar o código.** O envio só existe com a migration `202610260002` aplicada, `WAITLIST_NOTIFY_ENABLED=true` e alguém chamando `/api/cron/waitlist-notifications`; e só há o que enviar com a detecção da fase 5 ligada. Hoje nenhuma das três condições existe.
 
-| Opção | Frequência | Custo e peças | Riscos |
+### O que o cliente recebe
+
+Assunto `Abriu vaga: <experiência>, <data> às <hora> | Alma Azul Academy`. O e-mail traz a turma, a base, quantas pessoas a inscrição pediu e o valor por pessoa, e, em destaque, **"A vaga não está garantida"**: a lista não reserva nem bloqueia vagas, o aviso foi para outras pessoas também e a vaga fica com quem concluir primeiro a reserva e o pagamento (opção A). O botão **Reservar esta turma** leva a `/reservar/<turma>`, o fluxo normal, sem atalho nem preço especial; "a reserva só é confirmada depois de o pagamento ser aprovado". No fim, o mesmo link **Sair da lista de espera** da confirmação.
+
+### Conferência antes de cada envio
+
+A reivindicação (`waitlist_spot_take`) confere de novo, no momento em que o aviso sai da fila, o que a varredura conferiu ao enfileirar. Na ordem, o primeiro motivo que valer marca o aviso `SKIPPED` com esse motivo, e nada é enviado:
+
+| Motivo | Quando |
+| --- | --- |
+| `ENTRY_CLOSED` | Inscrição cancelada, removida, convertida, expirada ou anonimizada |
+| `SESSION_STARTED` | A turma já começou |
+| `SESSION_UNAVAILABLE` | Turma não está `OPEN` ou a experiência não está `PUBLISHED` |
+| `OPENING_CLOSED` | A abertura que gerou o aviso foi fechada (a vaga sumiu e a varredura viu) |
+| `NO_SPOTS` | `waitlist_detection_spots` (`available_spots` menos as pré-reservas vencidas a caminho do pagamento) menor que a quantidade pedida |
+| `LIMIT_REACHED` | A inscrição já recebeu 3 avisos |
+| `TOO_SOON` | O último aviso foi há menos de 12 horas |
+
+**O envio é que conta** (D3): `notifications_sent` e `last_notified_at` mudam só quando o aviso vira `SENT` (`complete_waitlist_spot_email`), uma vez por aviso, mesmo com conclusão repetida. Aviso descartado, falho ou incerto não conta.
+
+### Fila e Resend
+
+O mesmo protocolo da confirmação (fase 3) e do e-mail de reagendamento: reivindicação exclusiva com prazo de 2 min (`for update skip locked`: duas execuções ao mesmo tempo nunca pegam o mesmo aviso), mensagem congelada antes do envio, chave de idempotência `waitlist-spot/<aviso>/<geração>`. Resultado desconhecido (timeout, 5xx) repete chave e mensagem — o Resend não entrega de novo; recusa comprovada abre geração nova; chave recusada duas vezes ou janela de 23 h vencida param em `UNCERTAIN`, sem reenvio às cegas. Seis tentativas, com espera de 3 s, 15 s, 5 min, 30 min e 2 h. Cada execução da rota drena até 3 lotes de 20.
+
+As filas não se misturam: as funções da fase 3 só pegam `JOINED`, as desta fase só `SPOT_AVAILABLE`. Congelar e falhar reaproveitam `freeze_waitlist_email` e `fail_waitlist_email`, sem mudança.
+
+### Concorrência
+
+A reivindicação trava a inscrição em `FOR SHARE` e o aviso em `FOR UPDATE SKIP LOCKED`, com `lock_timeout` de 3 s: inscrição presa em outra transação (um cancelamento em curso) é pulada e fica para a próxima execução. Não trava `sessions` nem `reservations`: uma reserva durante o envio não espera. Testado com sessões reais do Postgres no CI.
+
+### Segurança
+
+- Rota `/api/cron/waitlist-notifications` (GET e POST): sem `CRON_SECRET`, 503; segredo errado, 401; desligada, `DISABLED` sem tocar no banco. A resposta tem só contadores, sem e-mail, nome ou turma, e `no-store`.
+- No banco: reivindicar e concluir só pela service role; conferência, payload e núcleo internos. Nada para `anon` ou `authenticated`.
+- `vercel.json` não mudou.
+
+### Agendamento (D1): proposta
+
+**Recomendação: pg_cron + pg_net + Vault, a cada minuto, chamando a rota só quando há aviso pendente.** Script pronto em `supabase/maintenance/waitlist_notify_schedule.sql`, **não aplicado**.
+
+| | |
+| --- | --- |
+| Frequência | `* * * * *`, o mesmo ritmo da expiração das pré-reservas que já roda no pg_cron. Um aviso sai no máximo ~1 min depois de enfileirado; com a varredura também a cada minuto e a carência de 2 min, ~3–4 min depois de a vaga abrir |
+| Quando chama | Só se o segredo existe no Vault **e** há `SPOT_AVAILABLE` pendente (na fila, com nova tentativa vencida ou com prazo vencido). Sem aviso, o job só faz um `select` e nenhuma chamada sai |
+| Custo no Supabase | `pg_net` e Vault são extensões incluídas em todos os planos, sem cobrança à parte. Um `select` por minuto é desprezível. `pg_net` guarda as respostas em `net._http_response` por 6 horas |
+| Custo na Vercel | Uma execução de função por minuto **só com fila**, com poucos segundos cada. Mesmo no pior caso (fila o mês inteiro), ~43 mil execuções/mês, dentro do 1 milhão incluído no Hobby. Não precisa do Pro |
+| Custo no Resend | Um e-mail por aviso enviado; limitado pela régua (no máximo `greatest(5, 3 × vagas)` por onda, 3 por inscrição) |
+| Dependências novas | Extensão `pg_net` (não instalada hoje) e um segredo no Vault |
+
+Riscos e como ficam cobertos:
+
+- **O `CRON_SECRET` passa a existir também no banco**, no Vault (criptografado em repouso; legível só por quem já é dono do banco). Quem lê o Vault já tem acesso total aos dados; o segredo nunca entra no repositório nem no texto do job. Para girar: novo valor na Vercel, deploy, `vault.update_secret`.
+- **`pg_net` é assíncrono**: a chamada sai depois do commit do job, e uma falha de rede só é percebida no minuto seguinte. A fila é idempotente; nada se perde nem duplica.
+- **Domínio fixo no script**: se o domínio mudar, o job precisa ser reagendado.
+- **Chamada sem fim**: a rota tem `maxDuration` de 60 s e o `pg_net`, timeout de 10 s; o job não espera a resposta.
+
+Alternativas, se `pg_net`/Vault não forem aceitos:
+
+| Opção | Frequência | Custo | Por que não é a primeira |
 | --- | --- | --- | --- |
-| **pg_cron + pg_net** chamando `POST /api/cron/waitlist-notifications` com o `CRON_SECRET` guardado no Vault do Supabase | A cada minuto | Grátis. Extensão `pg_net` (disponível no Supabase, não instalada hoje), o segredo no Vault e uma migration | O segredo passa a existir também no banco. Uma falha de rede é só perdida até o próximo minuto; a fila é idempotente |
-| **GitHub Actions** agendado chamando a mesma rota | A cada 5–15 min, com atrasos | Grátis em repositório público; o `CRON_SECRET` como segredo do GitHub | Atrasa sob carga, é desligado após 60 dias sem atividade no repositório |
-| **Várias entradas diárias no `vercel.json`** | Uma por entrada, ±59 min | Grátis no Hobby (até 100 crons) | Impreciso demais para aviso de vaga; não testado se o deploy aceita várias entradas na mesma rota |
-| **Vercel Pro** | A cada minuto | Custo mensal | Nenhum técnico |
-| **Carona** (`after()` em cancelamento, Stand-by, painel e páginas públicas) | Quando há tráfego | Grátis, só código | Não cobre a expiração de pré-reserva sem tráfego; serve como complemento, não como base |
+| GitHub Actions agendado | 5–15 min, com atrasos | Grátis; `CRON_SECRET` nos segredos do GitHub | Atrasa sob carga e é pausado depois de 60 dias sem atividade no repositório |
+| Entradas no `vercel.json` | Diária no Hobby, ±59 min | Grátis | Impreciso demais para aviso de vaga |
+| Vercel Pro | A cada minuto | Mensalidade | Custo recorrente só para isto |
+| Carona (`after()` nos cancelamentos e no painel) | Quando há tráfego | Só código | Não cobre a pré-reserva que vence sem ninguém no site; serve só como complemento |
 
-**Recomendação para a fase 6: pg_cron + pg_net**, com a carona como complemento. O pg_cron já roda a expiração das pré-reservas a cada minuto em produção, e a detecção já mora nele: o mesmo agendador passaria a acionar o envio, sem contratar nada, sem depender do GitHub e com a precisão de um minuto. O desenho:
+### Scripts
 
-1. Migration da fase 6: funções da fila para `SPOT_AVAILABLE` (as da fase 3 generalizadas por tipo, ou irmãs delas), com a conferência de vaga no momento da reivindicação (`waitlist_detection_spots ≥ quantidade`, turma ainda aceitando reserva, abertura ainda aberta — senão `SKIPPED`), e a contagem de avisos ao concluir.
-2. Rota `/api/cron/waitlist-notifications`, com `CRON_SECRET` e atrás de `WAITLIST_NOTIFY_ENABLED`, que drena a fila em lotes curtos.
-3. `pg_net` + Vault + um agendamento `waitlist-notify` a cada minuto, logo depois da varredura — cada um em script à parte, como nesta fase.
-4. Texto do aviso: turma, vagas, o link para reservar e, em destaque, "a vaga não está garantida: fica com quem concluir a reserva primeiro".
+| Arquivo | Para quê |
+| --- | --- |
+| `supabase/diagnostics/waitlist_spot_email_preflight.sql` | Antes da migration: fases 3 e 5 aplicadas, as quatro funções reaproveitadas iguais ao repositório, objetos novos ainda ausentes, assinatura e contagens |
+| `supabase/diagnostics/waitlist_spot_email_postcheck.sql` | Depois: cinco funções com a definição do repositório, permissões, a regra respondendo, existentes iguais, interruptor da detecção e agendamentos (`ATENCAO` se ligados), assinatura e contagens iguais ao preflight |
+| `supabase/rollback/202610260002_waitlist_spot_email.rollback.sql` | Tira o agendamento `waitlist-notify`, se houver, e as cinco funções. Fila, contagens e histórico ficam |
+| `supabase/maintenance/waitlist_notify_schedule.sql` / `..._unschedule.sql` | Agendar ou tirar o envio do pg_cron. **Não aplicados.** O passo do `pg_net` e do Vault vem comentado e o segredo é digitado por você |
+
+### Publicação da fase 6 (cada passo com autorização)
+
+1. **Merge e deploy.** Nada muda: a variável não existe e nada chama a rota.
+2. Preflight → `WAITLIST_AVISO_PREFLIGHT_OK | OK`. Guarde a assinatura e as contagens.
+3. Migration, com `begin;` + `set local lock_timeout = '5s';` … `commit;`. Só cria cinco funções.
+4. Postcheck → `WAITLIST_AVISO_POSTCHECK_OK | OK`, mesmas assinatura e contagens do preflight.
+5. **Teste controlado, sem cliente** (opcional; escreve no banco de produção): numa turma esgotada por uma reserva da equipe, inscreva um e-mail da equipe, libere a vaga pelo painel e rode `select public.waitlist_scan_session('<id da turma>', 0, 30);` — só essa turma, **sem ligar a detecção** (`waitlist_scan()` varreria todas as turmas e enfileiraria avisos para clientes reais). Depois do passo 6, chame a rota uma vez com o `CRON_SECRET` e confira o e-mail.
+6. `WAITLIST_NOTIFY_ENABLED=true` em Production e deploy. A rota passa a enviar o que estiver na fila quando chamada.
+7. Detecção: `waitlist_scan_schedule.sql` (fase 5) e `update public.waitlist_settings set detection_enabled = true;`.
+8. Envio: passo A de `waitlist_notify_schedule.sql` (`pg_net` e o segredo no Vault), depois o passo B (agendamento).
+9. Acompanhar: o histórico de cada inscrição no painel e `net._http_response`.
+
+### Para desligar (do mais rápido ao mais completo)
+
+1. `update public.waitlist_settings set detection_enabled = false;` — imediato: nada novo entra na fila.
+2. `waitlist_notify_unschedule.sql` — o banco para de chamar a rota.
+3. Remover `WAITLIST_NOTIFY_ENABLED` e fazer deploy — a rota responde `DISABLED` mesmo se chamada.
+4. Rollback da migration — tira as cinco funções e o agendamento; avisos na fila ficam, sem ninguém para enviá-los.
+
+Opcional, depois do 2: `drop extension pg_net;` e `delete from vault.secrets where name = 'waitlist_cron_secret';`.
 
 ## Publicação da fase 1
 
@@ -348,6 +428,8 @@ Não testar escrita no Preview: ele usa o banco de produção.
 
 - `tests/waitlist-detection.test.ts` (fase 5), 22 testes: interruptor (nasce desligado; desligado não lê nem grava); cada origem de vaga pelo caminho real — cancelamento, Stand-by, troca de turma, pré-reserva vencida, janela de pagamento (sem vaga falsa entre o vencimento e o hold), aumento de capacidade e reabertura; a régua (quantidade, ordem da fila, tamanho da onda); idempotência; ondas com intervalo; oscilação (fecha, descarta, reabre); D3 (12 h e 3 avisos); carência; turma fechada, cancelada, iniciada ou despublicada; expiração e conversão; os avisos ficam na fila e o envio da fase 3 não os pega; nenhuma reserva, pagamento, sessão ou Stand-by alterado; migration, preflight, postcheck, rollback e o script de agendamento.
 - `tests/waitlist-detection-concurrency.test.ts` (fase 5), **sessões reais do Postgres, só no CI**: duas varreduras ao mesmo tempo (a segunda volta na hora), turma travada por uma pré-reserva (pulada em 2 s, aberta na próxima), pré-reserva durante a varredura (espera só até ela terminar e conclui), inscrição e cancelamento durante a varredura (não esperam).
+- `tests/waitlist-spot.test.ts` (fase 6), 23 testes: variável; conteúdo do e-mail (vaga não garantida, pagamento, link da turma e de saída, nome escapado); de ponta a ponta na ordem da fila e por cada origem de vaga; conferência antes do envio (vaga perdida, grupo maior que a sobra, turma fechada ou iniciada, inscrição cancelada, removida, convertida ou expirada, abertura fechada); 12 h e 3 avisos conferidos no envio e contados só no envio; ondas; Resend (resultado desconhecido, recusa, chave recusada duas vezes, janela vencida); sem duplicidade (prazo vencido com outra execução, conclusão repetida); filas separadas; nenhuma reserva, pagamento, sessão ou Stand-by alterado; rota, script de agendamento, migration, preflight, postcheck e rollback.
+- `tests/waitlist-spot-concurrency.test.ts` (fase 6), **sessões reais do Postgres, só no CI**: dois envios ao mesmo tempo (o segundo não espera nem pega o mesmo aviso), cancelamento antes e durante a reivindicação, reserva durante a reivindicação (não espera).
 - `tests/waitlist-admin.test.ts` (fase 4), 20 testes: variável; filtros vindos da URL (inválido vira "sem filtro"); endereço com filtros; recorte das turmas por experiência, base e data no fuso de Brasília; leitura das respostas; validação da remoção; tradução dos erros sem repassar texto do banco; contra o Postgres em memória — permissões (instrutor e desconhecido recusados em leitura e remoção, nada auditado), turmas com capacidade, vagas e interessados, passadas só quando pedidas, inscrições na ordem da fila com contato e status, filtros por base, status e busca, paginação acima de 25 sem repetição, histórico sem token nem mensagem guardada, remoção com auditoria sem dado pessoal, repetição sem efeito, pedido inválido sem tocar no banco, e nenhuma reserva, pagamento, sessão ou Stand-by alterado; e, no código-fonte, a ordem das barreiras da rota, as páginas atrás de `requireAdmin` e da variável, sem logs, e o item do menu.
 - `tests/waitlist-signup.test.ts` (fase 3), 30 testes: variáveis e formato; a migration (aditiva, permissões, preflight, postcheck, rollback); a inscrição pelo fluxo do servidor (grava, responde sem dado pessoal, envia uma confirmação depois da resposta; repetida não envia de novo; campo isca não grava; recusas sem e-mail; banco fora do ar é 503); a fila (resultado desconhecido repete chave e mensagem e o cliente recebe uma vez, recusa comprovada gera chave nova, chave recusada duas vezes e janela vencida param em `UNCERTAIN`, prazo vencido com outra instância assumindo, congelamento só para o e-mail da inscrição, descarte de inscrição encerrada e de turma iniciada ou arquivada, tentativas esgotadas, recuperação sem duplicar, aviso de vaga intocado); o conteúdo do e-mail e o link que tira o cliente da lista; e, no código-fonte, as barreiras das rotas, o botão só com a variável e nenhum caminho de pagamento ou reserva.
 - `tests/waitlist-foundation-concurrency.test.ts` ganhou, para a fase 3: duas instâncias pedindo a mesma confirmação (só uma envia) e cancelamento durante a reivindicação (espera e descarta).
@@ -355,7 +437,6 @@ Não testar escrita no Preview: ele usa o banco de produção.
 
 ## Pendências
 
-- **D1, o agendador do envio**, antes da fase 6. Alternativas e recomendação em [Fase 6](#fase-6--envio-dos-avisos-alternativas-para-o-agendamento).
-- **Painel:** reenvio manual de uma confirmação com entrega não confirmada (`UNCERTAIN`) ou com tentativas esgotadas — precisa de RPC nova, junto com a fase 6.
-- **Fase 6:** aviso de vaga (`SPOT_AVAILABLE`): as funções da fila desta fase operam só `JOINED`.
+- **D1, o agendador do envio**: proposta (pg_cron + pg_net + Vault) em [Fase 6](#agendamento-d1-proposta), aguardando decisão.
+- **Painel:** reenvio manual de uma confirmação ou aviso com entrega não confirmada (`UNCERTAIN`) ou com tentativas esgotadas — precisa de RPC nova.
 - **Fase 7:** agendar `waitlist_anonymize_entries` (90 dias). A expiração e a conversão já rodam dentro da varredura da fase 5.
