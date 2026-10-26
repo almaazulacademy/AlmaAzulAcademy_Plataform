@@ -56,7 +56,7 @@ await db.exec(`update public.waitlist_settings set detection_enabled = true, ope
 let sequence = 0;
 
 function runtime(provider = fakeResend()): WaitlistSpotRuntime & { provider: ReturnType<typeof fakeResend> } {
-  return { queue: createWaitlistSpotQueue({ rpc }), provider, origin: ORIGIN };
+  return { queue: createWaitlistSpotQueue({ rpc }), provider, origin: ORIGIN, pause: async () => undefined };
 }
 
 /** Esvazia a fila de avisos de vaga, em quantas rodadas forem precisas. */
@@ -476,6 +476,33 @@ test("o envio não muda reservas, pagamentos, sessões nem Stand-by", async () =
   const before = await digest();
   await drain(runtime());
   assert.equal(await digest(), before);
+});
+
+test("ritmo: um envio por segundo, lotes de 5 e nenhum lote novo depois do orçamento de tempo", async () => {
+  const { session, booking } = await soldOut(1);
+  const queue: Row[] = [];
+  for (let index = 0; index < 7; index += 1) queue.push(await join(session));
+  await cancel(booking.id);
+  await scan(); // primeira onda: 5 avisos
+
+  const pauses: number[] = [];
+  let clock = 0;
+  const active: WaitlistSpotRuntime & { provider: ReturnType<typeof fakeResend> } = {
+    ...runtime(),
+    pause: async (ms) => { pauses.push(ms); clock += ms; },
+    now: () => clock,
+  };
+  const claimed: number[] = [];
+  const queueApi = active.queue;
+  active.queue = { ...queueApi, claimPending: async (limit) => { const claims = await queueApi.claimPending(limit); claimed.push(claims.length); return claims; } };
+
+  const report = await sendPendingWaitlistSpotEmails(active, { batch: 2, claimBudgetMs: 2500 });
+  // Lotes de 2: 0 s → lote 1 (2 envios, 1 pausa); 1 s → lote 2 (2 envios, 2 pausas); 3 s ≥ 2,5 s → para.
+  assert.deepEqual(claimed, [2, 2]);
+  assert.equal(report.processed, 4);
+  assert.deepEqual(pauses, [1000, 1000, 1000], "uma pausa de 1 s entre envios, nunca antes do primeiro");
+  await drain(active);
+  assert.equal(queue.slice(0, 5).filter((item) => active.provider.deliveredTo(item.email).length === 1).length, 5, "o resto sai na execução seguinte");
 });
 
 // ===========================================================================

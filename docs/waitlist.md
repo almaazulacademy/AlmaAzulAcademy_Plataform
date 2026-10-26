@@ -331,7 +331,9 @@ A reivindicação (`waitlist_spot_take`) confere de novo, no momento em que o av
 
 ### Fila e Resend
 
-O mesmo protocolo da confirmação (fase 3) e do e-mail de reagendamento: reivindicação exclusiva com prazo de 2 min (`for update skip locked`: duas execuções ao mesmo tempo nunca pegam o mesmo aviso), mensagem congelada antes do envio, chave de idempotência `waitlist-spot/<aviso>/<geração>`. Resultado desconhecido (timeout, 5xx) repete chave e mensagem — o Resend não entrega de novo; recusa comprovada abre geração nova; chave recusada duas vezes ou janela de 23 h vencida param em `UNCERTAIN`, sem reenvio às cegas. Seis tentativas, com espera de 3 s, 15 s, 5 min, 30 min e 2 h. Cada execução da rota drena até 3 lotes de 20.
+O mesmo protocolo da confirmação (fase 3) e do e-mail de reagendamento: reivindicação exclusiva com prazo de 2 min (`for update skip locked`: duas execuções ao mesmo tempo nunca pegam o mesmo aviso), mensagem congelada antes do envio, chave de idempotência `waitlist-spot/<aviso>/<geração>`. Resultado desconhecido (timeout, 5xx) repete chave e mensagem — o Resend não entrega de novo; recusa comprovada abre geração nova; chave recusada duas vezes ou janela de 23 h vencida param em `UNCERTAIN`, sem reenvio às cegas. Seis tentativas, com espera de 3 s, 15 s, 5 min, 30 min e 2 h.
+
+**Ritmo.** No máximo um envio por segundo, em lotes de 5, e nenhum lote novo depois de 10 s: o Resend limita a conta inteira (cerca de 2 pedidos por segundo), e metade fica livre para os e-mails de reserva, pagamento e Stand-by, que nunca esbarram numa onda de avisos. Mesmo com o Resend no limite do timeout (8 s por envio), a execução termina em menos de 60 s; o que sobrar sai no minuto seguinte. São ~10 avisos por minuto, mais que uma onda típica (`greatest(5, 3 × vagas)`).
 
 As filas não se misturam: as funções da fase 3 só pegam `JOINED`, as desta fase só `SPOT_AVAILABLE`. Congelar e falhar reaproveitam `freeze_waitlist_email` e `fail_waitlist_email`, sem mudança.
 
@@ -390,16 +392,16 @@ Alternativas, se `pg_net`/Vault não forem aceitos:
 3. Migration, com `begin;` + `set local lock_timeout = '5s';` … `commit;`. Só cria cinco funções.
 4. Postcheck → `WAITLIST_AVISO_POSTCHECK_OK | OK`, mesmas assinatura e contagens do preflight.
 5. **Teste controlado, sem cliente** (opcional; escreve no banco de produção): numa turma esgotada por uma reserva da equipe, inscreva um e-mail da equipe, libere a vaga pelo painel e rode `select public.waitlist_scan_session('<id da turma>', 0, 30);` — só essa turma, **sem ligar a detecção** (`waitlist_scan()` varreria todas as turmas e enfileiraria avisos para clientes reais). Depois do passo 6, chame a rota uma vez com o `CRON_SECRET` e confira o e-mail.
-6. `WAITLIST_NOTIFY_ENABLED=true` em Production e deploy. A rota passa a enviar o que estiver na fila quando chamada.
+6. `WAITLIST_NOTIFY_ENABLED=true` **só no ambiente Production** (nunca Preview: o Preview usa o banco de produção) e deploy. A rota passa a enviar o que estiver na fila quando chamada.
 7. Detecção: `waitlist_scan_schedule.sql` (fase 5) e `update public.waitlist_settings set detection_enabled = true;`.
 8. Envio: passo A de `waitlist_notify_schedule.sql` (`pg_net` e o segredo no Vault), depois o passo B (agendamento).
 9. Acompanhar: o histórico de cada inscrição no painel e `net._http_response`.
 
 ### Para desligar (do mais rápido ao mais completo)
 
-1. `update public.waitlist_settings set detection_enabled = false;` — imediato: nada novo entra na fila.
-2. `waitlist_notify_unschedule.sql` — o banco para de chamar a rota.
-3. Remover `WAITLIST_NOTIFY_ENABLED` e fazer deploy — a rota responde `DISABLED` mesmo se chamada.
+1. **Parar os envios na hora**, no SQL Editor: `select cron.unschedule('waitlist-notify');` (ou `waitlist_notify_unschedule.sql`). O banco para de chamar a rota no mesmo minuto; o que estiver na fila fica parado. Para pausar sem apagar: `select cron.alter_job(jobid, active := false) from cron.job where jobname = 'waitlist-notify';`.
+2. `update public.waitlist_settings set detection_enabled = false;` — imediato: nenhum aviso novo entra na fila. Os avisos parados são conferidos de novo (vaga, turma, limites) se o envio voltar.
+3. Remover `WAITLIST_NOTIFY_ENABLED` e fazer deploy (1–2 min) — a rota responde `DISABLED` mesmo se chamada por qualquer caminho.
 4. Rollback da migration — tira as cinco funções e o agendamento; avisos na fila ficam, sem ninguém para enviá-los.
 
 Opcional, depois do 2: `drop extension pg_net;` e `delete from vault.secrets where name = 'waitlist_cron_secret';`.
