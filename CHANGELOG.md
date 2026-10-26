@@ -1,5 +1,15 @@
 # Changelog
 
+## Lista de espera — envio automático dos avisos de vaga (fase 6 de 7, desligado e sem agendamento)
+
+- **Nada muda em produção ao publicar este código.** O envio só existe com a migration `202610260002`, **não aplicada**, e `WAITLIST_NOTIFY_ENABLED=true`; só há aviso a enviar com a detecção da fase 5 ligada; e nenhum agendamento chama a rota. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-6--envio-automático-dos-avisos-de-vaga).
+- **O aviso**: "Abriu vaga", com a turma, quantas pessoas a inscrição pediu, o valor e o botão **Reservar esta turma** (`/reservar/<turma>`, o fluxo normal). Em destaque, **a vaga não está garantida**: a lista não reserva nem bloqueia (opção A), e a reserva só é confirmada com o pagamento aprovado. Link para sair da lista.
+- **Conferido de novo antes de cada envio**: inscrição ativa; turma aberta, publicada e futura; abertura aberta; vagas (`available_spots`, descontadas as pré-reservas a caminho do pagamento) para o grupo inteiro; 3 avisos no máximo e 12 h entre eles. Falhou, o aviso é descartado com o motivo. O envio é que conta para os limites, uma vez por aviso.
+- **Mesma fila da confirmação**: reivindicação exclusiva, mensagem congelada, chave de idempotência por geração, resultado desconhecido nunca tratado como "não enviado", `UNCERTAIN` em conflito ou janela vencida, seis tentativas. Duas execuções ao mesmo tempo nunca enviam o mesmo aviso.
+- **Rota `/api/cron/waitlist-notifications`**, protegida pelo `CRON_SECRET` (503 sem ele, 401 errado), só contadores na resposta. `vercel.json` não mudou.
+- **Agendamento proposto (D1), não aplicado**: pg_cron + `pg_net` + Vault, a cada minuto, chamando a rota só com aviso pendente. Custos, riscos e alternativas no documento; script em `supabase/maintenance/waitlist_notify_schedule.sql`.
+- Migration: cinco funções, nada para `anon` ou `authenticated`; não cria tabela nem trigger, não muda função existente. Preflight, postcheck e rollback em `supabase/diagnostics/` e `supabase/rollback/`. Reservas, pagamento, cancelamento e Stand-by **não foram alterados**.
+
 ## Lista de espera — detecção automática de vagas (fase 5 de 7, desligada e sem agendamento)
 
 - **Nada muda em produção ao publicar este código**: a fase não tem código de aplicação. A migration `202610260001`, **não aplicada**, nasce com a detecção desligada (`waitlist_settings.detection_enabled = false`), e o agendamento no pg_cron é um script à parte, também não aplicado. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-5--detecção-automática-de-vagas).
