@@ -281,6 +281,8 @@ test("nada de inscrição, e-mail ou agendamento nesta fase; a variável é só 
 
 test("a fase 2 não traz migration: nada no banco muda", () => {
   const migrations = readdirSync(new URL("../supabase/migrations/", import.meta.url)).filter((file) => file.endsWith(".sql")).sort();
-  // Depois da fundação (fase 1), só a fila do e-mail de confirmação (fase 3).
-  assert.deepEqual(migrations.filter((file) => file > "202610250001_waitlist_foundation.sql"), ["202610250002_waitlist_signup_email.sql"]);
+  // As migrations da lista de espera são as das fases que têm banco (1, 3, 5…):
+  // nenhuma delas é da exibição das esgotadas.
+  assert.ok(migrations.includes("202610250001_waitlist_foundation.sql"));
+  assert.ok(!migrations.some((file) => /public_sessions|esgotad|sold_out/i.test(file)));
 });

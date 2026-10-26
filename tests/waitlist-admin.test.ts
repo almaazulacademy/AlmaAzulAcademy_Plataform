@@ -370,7 +370,9 @@ test("remoção pede motivo e confirmação na tela, e o botão não aparece par
 
 test("a fase 4 não traz migration nem toca reservas, pagamento ou Stand-by", () => {
   const migrations = readdirSync(new URL("../supabase/migrations/", import.meta.url)).filter((file) => file.endsWith(".sql")).sort();
-  assert.equal(migrations.at(-1), "202610250002_waitlist_signup_email.sql");
+  // O painel só usa as RPCs da fase 1: nenhuma migration é dele.
+  assert.ok(migrations.includes("202610250001_waitlist_foundation.sql"));
+  assert.ok(!migrations.some((file) => /waitlist_(admin|panel|painel)/i.test(file)));
   for (const path of ["lib/admin/waitlist-data.ts", "app/api/admin/waitlist/[entryId]/remove/route.ts", "app/admin/lista-de-espera/page.tsx", "app/admin/lista-de-espera/[entryId]/page.tsx"]) {
     assert.doesNotMatch(code(path), /admin_cancel_reservation|admin_set_reservation_standby|create_pre_reservation|confirm_reservation_payment|syncReservation/, path);
   }

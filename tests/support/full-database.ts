@@ -23,7 +23,7 @@ export async function fullDatabase(options: { until?: string } = {}) {
     create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
     create schema extensions; create extension pgcrypto with schema extensions;
     create schema cron;
-    create table cron.job (jobid bigint, jobname text);
+    create table cron.job (jobid bigint, jobname text, schedule text, command text, active boolean default true);
     create function cron.schedule(text, text, text) returns bigint language sql as $$ select 1::bigint $$;
     create function cron.unschedule(text) returns boolean language sql as $$ select true $$;
   `);
