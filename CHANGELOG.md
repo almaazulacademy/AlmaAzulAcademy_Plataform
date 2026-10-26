@@ -1,5 +1,14 @@
 # Changelog
 
+## Lista de espera — detecção automática de vagas (fase 5 de 7, desligada e sem agendamento)
+
+- **Nada muda em produção ao publicar este código**: a fase não tem código de aplicação. A migration `202610260001`, **não aplicada**, nasce com a detecção desligada (`waitlist_settings.detection_enabled = false`), e o agendamento no pg_cron é um script à parte, também não aplicado. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-5--detecção-automática-de-vagas).
+- **`waitlist_scan()`**: uma execução por vez; encerra inscrições de turmas passadas e marca as que viraram reserva; turma a turma, abre uma abertura quando aparece vaga (`available_spots`, a fonte oficial), fecha quando some (descartando os avisos parados) e enfileira ondas pela régua aprovada — `greatest(5, 3 × vagas)`, ordem da fila, só quem cabe, 12 h e 3 avisos no máximo, um aviso por inscrição e abertura.
+- **Sem vaga falsa**: a pré-reserva com checkout que venceu mas ainda não entrou na janela de pagamento é descontada, só na leitura; a primeira onda espera 2 min de carência; ondas seguintes, 30 min.
+- **Nada é enviado**: os avisos (`SPOT_AVAILABLE`) ficam na fila; o envio da fase 3 só pega a confirmação da inscrição. A fase 6 decide o envio — alternativas e recomendação (pg_cron + pg_net) no documento.
+- **Não interfere em reservas**: só lê `sessions` e `reservations`; turma presa em outra transação é pulada em 2 s. Testado com sessões reais do Postgres no CI.
+- Migration: uma tabela, uma coluna, três funções, nada pela API; não substitui função nem cria trigger em tabela existente. Preflight, postcheck, rollback, relatório só leitura e scripts de agendamento em `supabase/diagnostics/`, `supabase/rollback/` e `supabase/maintenance/`.
+
 ## Lista de espera — painel administrativo (fase 4 de 7, desligado por padrão)
 
 - **Nada muda em produção ao publicar este código.** O painel só existe com `WAITLIST_ADMIN_ENABLED=true`; sem a variável não há menu, e `/admin/lista-de-espera` e a rota de remoção respondem 404. **Sem migration**: usa as RPCs administrativas da fase 1, já aplicadas. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-4--painel-administrativo).

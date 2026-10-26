@@ -671,8 +671,8 @@ test("rollback: remove só o que a migration criou; inscrições e fila ficam; r
   await database.close();
 });
 
-test("a última migration é a desta fase", () => {
+test("a migration desta fase vem logo depois da fundação", () => {
   const migrations = readdirSync(new URL("../supabase/migrations/", import.meta.url)).filter((file) => file.endsWith(".sql")).sort();
-  assert.equal(migrations.at(-1), MIGRATION);
+  assert.equal(migrations[migrations.indexOf(PREVIOUS) + 1], MIGRATION);
 });
 

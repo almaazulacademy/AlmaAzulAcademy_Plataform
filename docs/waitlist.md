@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md)
 
-**Estado (25/10/2026): migrations `202610250001` e `202610250002` aplicadas em produção, com postcheck OK. Fases 2 e 3 publicadas e desligadas** (`WAITLIST_PUBLIC_ENABLED` e `WAITLIST_SIGNUP_ENABLED` ausentes). **Fase 4 (painel) no repositório**, sem migration, atrás de `WAITLIST_ADMIN_ENABLED`. Nenhum aviso de vaga sai e nada é agendado.
+**Estado (26/10/2026): migrations `202610250001` e `202610250002` aplicadas em produção, com postcheck OK. Fases 2, 3 e 4 publicadas e desligadas** (`WAITLIST_PUBLIC_ENABLED`, `WAITLIST_SIGNUP_ENABLED` e `WAITLIST_ADMIN_ENABLED` ausentes). **Fase 5 (detecção de vagas) no repositório**, com a migration `202610260001` **não aplicada**, o interruptor desligado e nenhum agendamento. Nenhum aviso de vaga sai.
 
 ## O que é
 
@@ -30,8 +30,8 @@ Também valem: uma inscrição ativa por e-mail e turma; o grupo precisa caber n
 | 1. Fundação no banco | Tabelas, funções, limite de tentativas, preflight, postcheck, rollback e testes | Aplicada em produção |
 | 2. "Esgotado" no site | Landing e agenda passam a usar `list_public_sessions`, atrás de variável | Publicada, desligada |
 | 3. Inscrição, confirmação e cancelamento | Formulário, `POST` da inscrição, e-mail `JOINED`, página do link | Publicada, desligada; migration aplicada |
-| 4. Painel | `/admin/lista-de-espera` sobre as funções `admin_*` da fase 1 | No repositório, desligado; sem migration |
-| 5. Detecção de vagas | Abertura e fechamento de `waitlist_openings` e enfileiramento pela régua | — |
+| 4. Painel | `/admin/lista-de-espera` sobre as funções `admin_*` da fase 1 | Publicado, desligado; sem migration |
+| 5. Detecção de vagas | `waitlist_scan()`: aberturas, ondas pela régua e avisos na fila, sem envio | No repositório; migration não aplicada, desligada, sem agendamento |
 | 6. Envio dos avisos | Fila `SPOT_AVAILABLE`, conferência da vaga antes de enviar e gatilhos (D1) | — |
 | 7. Retenção e operação | Rotina de anonimização e diagnósticos | — |
 
@@ -237,6 +237,93 @@ Nada desta fase lê ou escreve reserva, pagamento, cancelamento ou Stand-by.
 
 Desligar a variável e publicar de novo tira o painel do ar sem afetar inscrições nem e-mails.
 
+## Fase 5 — detecção automática de vagas
+
+Migration `202610260001_waitlist_detection.sql` (**não aplicada**). Aditiva: uma tabela de configuração (`waitlist_settings`), a coluna `waitlist_openings.closed_reason` e três funções — `waitlist_detection_spots`, `waitlist_scan_session` e `waitlist_scan`. Não substitui o corpo de nenhuma função (nem de reserva, nem da lista), não cria trigger em tabela existente e só **lê** `sessions` e `reservations`. Nenhuma das três é executável pela API, nem pela service role: quem as chama é o pg_cron, como dono.
+
+### Por que uma varredura, e não triggers
+
+As vagas aparecem por cancelamento, Stand-by, troca de turma, expiração de pré-reserva, fim da janela de pagamento, aumento de capacidade e reabertura de turma. Nem todas gravam alguma coisa: uma pré-reserva vence no instante em que `expires_at` passa, e `available_spots` passa a devolver a vaga sem nenhuma escrita. Uma varredura periódica sobre `available_spots` — a fonte oficial — cobre todos os casos sem depender de nenhum fluxo de reserva avisar nada, e sem tocar neles.
+
+### O que a varredura faz
+
+`waitlist_scan()`, pensada para o pg_cron a cada minuto:
+
+1. **Interruptor.** Com `waitlist_settings.detection_enabled = false` (o padrão), responde `{enabled: false}` e não lê nem grava nada.
+2. **Uma por vez.** Advisory lock da transação; uma segunda execução simultânea volta na hora com `ALREADY_RUNNING`.
+3. **Manutenção.** Grava `EXPIRED` nas inscrições de turmas passadas, canceladas ou arquivadas, e `CONVERTED` nas que viraram reserva paga com o mesmo e-mail (funções da fase 1).
+4. **Turma a turma**, nas que têm inscrição ativa ou abertura aberta (até 200 por execução, a mais próxima primeiro):
+   - turma que não aceita reserva (fechada, cancelada, arquivada, iniciada ou de experiência despublicada) conta como zero vaga;
+   - **sem vaga**: fecha a abertura, se houver (`NO_SPOTS` ou `SESSION_UNAVAILABLE`), e descarta os avisos dela ainda na fila (`SKIPPED`, `OPENING_CLOSED`);
+   - **vaga nova**: abre uma abertura (uma por turma; índice único da fase 1);
+   - **abertura aberta**, passada a carência (2 min) e, a partir da segunda onda, o intervalo (30 min): enfileira a onda pela régua da fase 1 — até `greatest(5, 3 × vagas)` inscrições, na ordem da fila, só quem cabe nas vagas, menos de 3 avisos enviados, o último há 12 h ou mais, nenhum outro aviso pendente. Um aviso por inscrição e abertura.
+   - uma turma presa em outra transação por mais de 2 s é pulada e fica para a próxima execução.
+5. Devolve um relatório só com contagens: inscrições encerradas e convertidas, turmas avaliadas e puladas, aberturas abertas e fechadas, avisos enfileirados e descartados.
+
+Os avisos (`SPOT_AVAILABLE`) ficam `QUEUED`: as funções de envio da fase 3 só operam `JOINED`. **Nada é enviado nesta fase.**
+
+### Oscilação
+
+| Situação | Tratamento |
+| --- | --- |
+| Pré-reserva com checkout vencida, antes de o cron abrir a janela de pagamento (até 1 min) | `waitlist_detection_spots` desconta essas pré-reservas de `available_spots`, só na leitura: a vaga falsa não abre nada |
+| Vaga que some em segundos (alguém reservou na hora) | Carência de 2 min antes da primeira onda: a abertura fecha sem aviso |
+| Vaga que some depois da onda | A abertura fecha e os avisos ainda na fila são descartados |
+| Vaga que volta | Abertura nova; quem já foi avisado espera 12 h e no máximo 3 avisos (D3), e quem tem aviso pendente não recebe outro |
+| Varredura repetida | Nenhuma abertura ou aviso duplicado |
+
+### Concorrência
+
+A varredura não pede lock em sessão nem em reserva. A única espera possível é a da chave estrangeira ao gravar uma abertura (`FOR KEY SHARE` na sessão), que espera uma pré-reserva em curso naquela turma — por no máximo 2 s, depois a turma é pulada — e é esperada por ela até a varredura terminar. Não há ciclo. Testado com sessões reais do Postgres no CI.
+
+### Configuração
+
+| Coluna de `waitlist_settings` | Padrão | Faz |
+| --- | --- | --- |
+| `detection_enabled` | `false` | O interruptor |
+| `opening_grace_seconds` | 120 | Carência antes da primeira onda |
+| `wave_interval_minutes` | 30 | Intervalo entre ondas da mesma abertura |
+| `max_sessions_per_scan` | 200 | Turmas por execução |
+
+Sem acesso pela API (RLS, nenhum privilégio). Mudança só por SQL, no SQL Editor.
+
+### Scripts
+
+| Arquivo | Para quê |
+| --- | --- |
+| `supabase/diagnostics/waitlist_detection_preflight.sql` | Antes da migration: funções que a varredura chama iguais ao repositório, fase 3 aplicada, pg_cron em uso, assinatura e contagens |
+| `supabase/diagnostics/waitlist_detection_postcheck.sql` | Depois: funções novas, nada pela API, configuração fechada e desligada, nenhum agendamento, funções existentes iguais, mesma assinatura e contagens |
+| `supabase/rollback/202610260001_waitlist_detection.rollback.sql` | Tira o agendamento, as funções, a configuração e a coluna; aberturas e avisos ficam |
+| `supabase/maintenance/waitlist_scan_schedule.sql` / `..._unschedule.sql` | Agendar ou tirar a varredura do pg_cron. **Não aplicados.** Agendar não liga a detecção |
+| `supabase/diagnostics/waitlist_detection_report.sql` | Só leitura: por turma com inscrição, vagas oficiais, vagas detectadas, quem cabe e o tamanho da próxima onda |
+
+### Publicação da fase 5 (cada passo com autorização)
+
+1. Merge (nada muda no site: não há código de aplicação nesta fase).
+2. Preflight → `WAITLIST_DETECCAO_PREFLIGHT_OK | OK`.
+3. Migration, com `begin;` + `set local lock_timeout = '5s';` … `commit;`.
+4. Postcheck → `WAITLIST_DETECCAO_POSTCHECK_OK | OK`, com o interruptor desligado e nenhum agendamento.
+5. Opcional, para observar sem enviar: `waitlist_scan_schedule.sql` e depois `update public.waitlist_settings set detection_enabled = true;`. Os avisos se acumulam na fila e aparecem no histórico do painel como "Aviso de vaga — Na fila". Para parar: `detection_enabled = false` (imediato) ou `waitlist_scan_unschedule.sql`.
+
+## Fase 6 — envio dos avisos: alternativas para o agendamento
+
+O que a fase 6 precisa: reivindicar os `SPOT_AVAILABLE` da fila e enviá-los pelo Resend com o mesmo protocolo da fase 3 (prazo, mensagem congelada, chave por geração), conferindo **antes de cada envio** que a turma ainda tem vaga para o grupo; e, ao enviar, somar `notifications_sent` e gravar `last_notified_at` (o que faz valer D3). O envio fica no servidor da aplicação — é onde estão o template, o Resend e a chave —, e o aviso perde valor em minutos: o agendador precisa acionar o servidor com frequência.
+
+| Opção | Frequência | Custo e peças | Riscos |
+| --- | --- | --- | --- |
+| **pg_cron + pg_net** chamando `POST /api/cron/waitlist-notifications` com o `CRON_SECRET` guardado no Vault do Supabase | A cada minuto | Grátis. Extensão `pg_net` (disponível no Supabase, não instalada hoje), o segredo no Vault e uma migration | O segredo passa a existir também no banco. Uma falha de rede é só perdida até o próximo minuto; a fila é idempotente |
+| **GitHub Actions** agendado chamando a mesma rota | A cada 5–15 min, com atrasos | Grátis em repositório público; o `CRON_SECRET` como segredo do GitHub | Atrasa sob carga, é desligado após 60 dias sem atividade no repositório |
+| **Várias entradas diárias no `vercel.json`** | Uma por entrada, ±59 min | Grátis no Hobby (até 100 crons) | Impreciso demais para aviso de vaga; não testado se o deploy aceita várias entradas na mesma rota |
+| **Vercel Pro** | A cada minuto | Custo mensal | Nenhum técnico |
+| **Carona** (`after()` em cancelamento, Stand-by, painel e páginas públicas) | Quando há tráfego | Grátis, só código | Não cobre a expiração de pré-reserva sem tráfego; serve como complemento, não como base |
+
+**Recomendação para a fase 6: pg_cron + pg_net**, com a carona como complemento. O pg_cron já roda a expiração das pré-reservas a cada minuto em produção, e a detecção já mora nele: o mesmo agendador passaria a acionar o envio, sem contratar nada, sem depender do GitHub e com a precisão de um minuto. O desenho:
+
+1. Migration da fase 6: funções da fila para `SPOT_AVAILABLE` (as da fase 3 generalizadas por tipo, ou irmãs delas), com a conferência de vaga no momento da reivindicação (`waitlist_detection_spots ≥ quantidade`, turma ainda aceitando reserva, abertura ainda aberta — senão `SKIPPED`), e a contagem de avisos ao concluir.
+2. Rota `/api/cron/waitlist-notifications`, com `CRON_SECRET` e atrás de `WAITLIST_NOTIFY_ENABLED`, que drena a fila em lotes curtos.
+3. `pg_net` + Vault + um agendamento `waitlist-notify` a cada minuto, logo depois da varredura — cada um em script à parte, como nesta fase.
+4. Texto do aviso: turma, vagas, o link para reservar e, em destaque, "a vaga não está garantida: fica com quem concluir a reserva primeiro".
+
 ## Publicação da fase 1
 
 Cada passo depende de autorização própria. **Nenhum deles liga nada no site.**
@@ -259,6 +346,8 @@ Não testar escrita no Preview: ele usa o banco de produção.
 - `tests/waitlist-foundation.test.ts`: Postgres em memória com todas as migrations, 46 testes. Migration aditiva e idempotente; tabelas e sequência fechadas inclusive para a service role, também com os privilégios padrão do Supabase ligados; permissões de cada função; `list_public_sessions` igual a `list_open_sessions` mais as esgotadas, com as mesmas regras e colunas; esgotamento por pré-reserva válida, vaga devolvida por expiração e por Stand-by; inscrição (D4, turma indisponível, validação, normalização, duplicidade com resposta idêntica, reinscrição, campo isca, tetos por e-mail e por turma contando só quem ainda espera); a lista não escreve em reservas nem trava sessões; limites (origem, e-mail, cancelamento, HMAC, janela); cancelamento (dois passos, sem dado pessoal, idempotente, token não guardado, turma iniciada); painel (autorização, ordem da fila, posição, filtros, busca literal, paginação, totais, remoção com auditoria sem dado pessoal, detalhe); expiração, conversão e anonimização; régua das ondas (D2) e dos limites de aviso (D3); constraints; exclusão de sessão; preflight, postcheck e rollback.
 - `tests/waitlist-foundation-concurrency.test.ts`: **sessões independentes do Postgres**, só no CI (contêiner efêmero do job). O mesmo e-mail em duas abas (com a primeira confirmando ou desistindo), a inscrição ao lado de uma pré-reserva que trava a turma (nas duas ordens: a espera é curta e as duas terminam), rajada de 36 tentativas da mesma origem (exatamente 30 aceitas) e cancelamentos simultâneos, do cliente com o cliente e do cliente com a equipe.
 
+- `tests/waitlist-detection.test.ts` (fase 5), 22 testes: interruptor (nasce desligado; desligado não lê nem grava); cada origem de vaga pelo caminho real — cancelamento, Stand-by, troca de turma, pré-reserva vencida, janela de pagamento (sem vaga falsa entre o vencimento e o hold), aumento de capacidade e reabertura; a régua (quantidade, ordem da fila, tamanho da onda); idempotência; ondas com intervalo; oscilação (fecha, descarta, reabre); D3 (12 h e 3 avisos); carência; turma fechada, cancelada, iniciada ou despublicada; expiração e conversão; os avisos ficam na fila e o envio da fase 3 não os pega; nenhuma reserva, pagamento, sessão ou Stand-by alterado; migration, preflight, postcheck, rollback e o script de agendamento.
+- `tests/waitlist-detection-concurrency.test.ts` (fase 5), **sessões reais do Postgres, só no CI**: duas varreduras ao mesmo tempo (a segunda volta na hora), turma travada por uma pré-reserva (pulada em 2 s, aberta na próxima), pré-reserva durante a varredura (espera só até ela terminar e conclui), inscrição e cancelamento durante a varredura (não esperam).
 - `tests/waitlist-admin.test.ts` (fase 4), 20 testes: variável; filtros vindos da URL (inválido vira "sem filtro"); endereço com filtros; recorte das turmas por experiência, base e data no fuso de Brasília; leitura das respostas; validação da remoção; tradução dos erros sem repassar texto do banco; contra o Postgres em memória — permissões (instrutor e desconhecido recusados em leitura e remoção, nada auditado), turmas com capacidade, vagas e interessados, passadas só quando pedidas, inscrições na ordem da fila com contato e status, filtros por base, status e busca, paginação acima de 25 sem repetição, histórico sem token nem mensagem guardada, remoção com auditoria sem dado pessoal, repetição sem efeito, pedido inválido sem tocar no banco, e nenhuma reserva, pagamento, sessão ou Stand-by alterado; e, no código-fonte, a ordem das barreiras da rota, as páginas atrás de `requireAdmin` e da variável, sem logs, e o item do menu.
 - `tests/waitlist-signup.test.ts` (fase 3), 30 testes: variáveis e formato; a migration (aditiva, permissões, preflight, postcheck, rollback); a inscrição pelo fluxo do servidor (grava, responde sem dado pessoal, envia uma confirmação depois da resposta; repetida não envia de novo; campo isca não grava; recusas sem e-mail; banco fora do ar é 503); a fila (resultado desconhecido repete chave e mensagem e o cliente recebe uma vez, recusa comprovada gera chave nova, chave recusada duas vezes e janela vencida param em `UNCERTAIN`, prazo vencido com outra instância assumindo, congelamento só para o e-mail da inscrição, descarte de inscrição encerrada e de turma iniciada ou arquivada, tentativas esgotadas, recuperação sem duplicar, aviso de vaga intocado); o conteúdo do e-mail e o link que tira o cliente da lista; e, no código-fonte, as barreiras das rotas, o botão só com a variável e nenhum caminho de pagamento ou reserva.
 - `tests/waitlist-foundation-concurrency.test.ts` ganhou, para a fase 3: duas instâncias pedindo a mesma confirmação (só uma envia) e cancelamento durante a reivindicação (espera e descarta).
@@ -266,7 +355,7 @@ Não testar escrita no Preview: ele usa o banco de produção.
 
 ## Pendências
 
-- **D1, o agendador do envio**, antes da fase 6. As opções estão em [reservation-standby.md](reservation-standby.md#recuperação-de-falhas).
+- **D1, o agendador do envio**, antes da fase 6. Alternativas e recomendação em [Fase 6](#fase-6--envio-dos-avisos-alternativas-para-o-agendamento).
 - **Painel:** reenvio manual de uma confirmação com entrega não confirmada (`UNCERTAIN`) ou com tentativas esgotadas — precisa de RPC nova, junto com a fase 6.
 - **Fase 6:** aviso de vaga (`SPOT_AVAILABLE`): as funções da fila desta fase operam só `JOINED`.
-- **Fase 7:** agendar `waitlist_expire_entries`, `waitlist_mark_conversions` e `waitlist_anonymize_entries`.
+- **Fase 7:** agendar `waitlist_anonymize_entries` (90 dias). A expiração e a conversão já rodam dentro da varredura da fase 5.
