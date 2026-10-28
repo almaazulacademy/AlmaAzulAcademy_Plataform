@@ -1,8 +1,8 @@
 # Changelog
 
-## Eventos especiais — banco e segurança (fase 2, migration não aplicada)
+## Eventos especiais — banco e segurança (fase 2)
 
-- **Nada muda em produção ao publicar este código.** A migration `202610280001`, **não aplicada**, só cria estrutura; nenhum evento é cadastrado e o site ainda não lê nada de eventos. O código só traduz três mensagens de erro novas. Detalhes em [docs/special-events.md](docs/special-events.md).
+- **Nada muda em produção ao publicar este código.** A migration `202610280001` (aplicada em 28/10, postcheck OK) só cria estrutura; nenhum evento é cadastrado e o site ainda não lê nada de eventos. O código só traduz três mensagens de erro novas. Detalhes em [docs/special-events.md](docs/special-events.md).
 - **Evento = experiência `kind = 'EVENT'`** com uma sessão por edição, sobre o motor de reservas de sempre (vagas, pré-reserva, InfinitePay, confirmação, planilha, check-in, Stand-by e lista de espera). Toda experiência existente fica `REGULAR` pelo default da coluna, sem reescrever linha.
 - **Publicação travada**: interruptor `special_event_settings.publication_enabled`, desligado. Nenhum caminho publica um evento antes de o site separar as listagens (fase 3).
 - **Nenhuma reserva troca de tipo**: uma trigger em `reservations.session_id` recusa troca de turma, Stand-by pelo painel e autoatendimento entre evento e agenda regular (`EVENT_KIND_MISMATCH`), sem reescrever essas funções.

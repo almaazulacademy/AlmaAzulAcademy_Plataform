@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md) · [Lista de espera](waitlist.md)
 
-**Estado (28/10/2026): fase 2 no repositório, em PR draft.** A migration `202610280001_special_events_foundation.sql` **não está aplicada**. Nenhum evento está cadastrado nem publicado, e o site ainda não lê nada de eventos.
+**Estado (28/10/2026): fase 2 em PR draft; migration `202610280001_special_events_foundation.sql` aplicada em produção**, com preflight e postcheck sem falhas nem pontos de atenção (assinatura das 166 funções existentes igual antes e depois, todas as experiências `REGULAR`, interruptor da publicação desligado). Nenhum evento está cadastrado nem publicado, e o site ainda não lê nada de eventos.
 
 ## O que é
 
@@ -14,7 +14,7 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 
 | Fase | O que entrega | Estado |
 | --- | --- | --- |
-| 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | PR draft; migration não aplicada |
+| 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | PR draft; migration aplicada em produção (28/10), interruptor desligado |
 | 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | — |
 | 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu | — |
 | 5. Reserva e e-mail | Textos da página de reserva e e-mail de confirmação de evento | — |
