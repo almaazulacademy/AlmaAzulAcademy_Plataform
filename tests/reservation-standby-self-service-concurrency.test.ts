@@ -25,6 +25,9 @@ import { handlePublicLookup } from "../lib/reservations/public-lookup.ts";
 import { handleSelfServiceOverview, handleSelfServiceReschedule } from "../lib/reservations/standby-self-service.ts";
 import { ADMIN, rescheduleFixtures, type Booking, type Row } from "./support/reschedule-email-fixtures.ts";
 
+/** Estes testes medem só o limite de tentativas; o tipo das turmas não entra. */
+const noKinds = async () => new Map<string, "REGULAR" | "EVENT">();
+
 const url = realDatabaseUrl();
 const database = url ? await realDatabase(url) : null;
 
@@ -401,9 +404,9 @@ if (!database) {
         case 0:
           return handlePublicLookup({ rpc, lookup: async () => null }, credential, address);
         case 1:
-          return handleSelfServiceOverview({ rpc }, { credential }, address);
+          return handleSelfServiceOverview({ rpc, sessionKinds: noKinds }, { credential }, address);
         default:
-          return handleSelfServiceReschedule({ rpc }, { credential, standbyId, sessionId: target }, address);
+          return handleSelfServiceReschedule({ rpc, sessionKinds: noKinds }, { credential, standbyId, sessionId: target }, address);
       }
     });
     const responses = await Promise.all(attempts);

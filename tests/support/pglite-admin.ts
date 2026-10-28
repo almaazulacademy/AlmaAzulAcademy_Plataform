@@ -68,6 +68,18 @@ export function createPgliteAdmin(db: PGlite) {
               return asError(error);
             }
           },
+          async in(column: string, values: unknown[]): Promise<Result> {
+            calls.from.push(table);
+            const failed = failure(fromFailures, table);
+            if (failed) return failed;
+            if (!IDENTIFIER.test(table) || !IDENTIFIER.test(column) || !COLUMNS.test(columns)) throw new Error(`consulta inválida: ${table}`);
+            try {
+              const result = await db.query(`select ${columns} from public.${table} where ${column}::text = any($1::text[])`, [values.map(String)]);
+              return { data: result.rows, error: null };
+            } catch (error) {
+              return asError(error);
+            }
+          },
         };
       },
     };

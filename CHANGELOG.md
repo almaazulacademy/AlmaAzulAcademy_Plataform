@@ -1,5 +1,12 @@
 # Changelog
 
+## Eventos especiais — separação no site (fase 3)
+
+- **Sem migration e sem mudança visível hoje**: não há evento publicado e o interruptor da publicação segue desligado. Detalhes em [docs/special-events.md](docs/special-events.md#fase-3--separação-no-site).
+- **Áreas regulares só com a agenda regular**: home, vitrine, agenda, bases e sitemap leem `list_public_regular_experiences` e `list_public_regular_catalog`; a landing `/experiencias/[slug]` não mostra um evento publicado. As funções antigas do banco não mudaram.
+- **Turmas de destino do mesmo tipo**: troca de turma do painel, Stand-by do painel e autoatendimento do cliente só oferecem sessões do mesmo tipo da reserva. Preço, vagas e autorização seguem nas RPCs; a trava `EVENT_KIND_MISMATCH` continua no banco.
+- Reservas, InfinitePay, e-mails, lista de espera, check-in, planilha e relatórios não foram alterados.
+
 ## Eventos especiais — banco e segurança (fase 2)
 
 - **Nada muda em produção ao publicar este código.** A migration `202610280001` (aplicada em 28/10, postcheck OK) só cria estrutura; nenhum evento é cadastrado e o site ainda não lê nada de eventos. O código só traduz três mensagens de erro novas. Detalhes em [docs/special-events.md](docs/special-events.md).

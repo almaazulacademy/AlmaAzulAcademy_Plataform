@@ -26,6 +26,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { fullDatabase } from "./support/full-database.ts";
 import { createPgliteAdmin } from "./support/pglite-admin.ts";
 import { ADMIN, rescheduleFixtures, type Row } from "./support/reschedule-email-fixtures.ts";
+import { sessionKindsFrom } from "../lib/events/kind.ts";
 import { isBehindVercelEdge, normalizeClientIp, trustedClientAddress } from "../lib/http/client-address.ts";
 import { ACCESS_ATTEMPT_RPC, registerAccessAttempt } from "../lib/reservations/access-throttle.ts";
 import { handlePublicLookup, LOOKUP_MESSAGES, lookupFailureSymbol, type PublicLookupDeps } from "../lib/reservations/public-lookup.ts";
@@ -83,7 +84,7 @@ async function setup(db: PGlite) {
     lookup,
     logFailure: (symbol) => logged.push(symbol),
   };
-  const selfServiceDeps: SelfServiceDeps = { rpc: (name, args) => admin.client.rpc(name, args) };
+  const selfServiceDeps: SelfServiceDeps = { rpc: (name, args) => admin.client.rpc(name, args), sessionKinds: sessionKindsFrom(admin.client) };
 
   return { admin, fx, book, lookup, lookupDeps, selfServiceDeps, logged };
 }

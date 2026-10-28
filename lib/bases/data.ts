@@ -3,6 +3,7 @@ import { cache } from "react";
 import { catalogFromComingSoonRow, catalogFromPublishedExperience, FALLBACK_BASES, fallbackCatalog, mapPublicBase } from "@/lib/bases/catalog";
 import type { CatalogExperience, PublicBase } from "@/lib/bases/types";
 import { listPublishedExperiences, mapPublicExperience } from "@/lib/editorial/data";
+import { rpcWithLegacyFallback } from "@/lib/supabase/rpc-fallback";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 type Row = Record<string, unknown>;
@@ -38,12 +39,13 @@ export async function getPublicBase(slug: string) {
 
 /**
  * Catálogo multi-base: experiências publicadas (com landing e agenda) e
- * experiências "em breve", cada uma com a sua base.
+ * experiências "em breve", cada uma com a sua base. Só a agenda regular:
+ * eventos especiais não entram na vitrine, nas bases nem na agenda.
  */
 export const listCatalogExperiences = cache(async (): Promise<CatalogExperience[]> => {
   const client = getSupabaseServerClient();
   if (client) {
-    const result = await client.rpc("list_public_catalog");
+    const result = await rpcWithLegacyFallback(client, "list_public_regular_catalog", "list_public_catalog");
     if (!result.error) {
       return rows(result.data)
         .map((row) => {
