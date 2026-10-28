@@ -12,7 +12,7 @@ export type AgendaSession = PublicSession & { location: string };
 
 /**
  * Agenda geral: reúne as sessões abertas de todas as experiências publicadas.
- * Reaproveita list_public_experiences e list_open_sessions — as mesmas regras de
+ * Reaproveita list_public_regular_experiences e list_open_sessions — as mesmas regras de
  * publicação, status OPEN, data futura e vagas disponíveis já aplicadas no banco.
  * Com a lista de espera pública ligada, as turmas vêm de list_public_sessions,
  * que aplica as mesmas regras sem esconder as esgotadas.

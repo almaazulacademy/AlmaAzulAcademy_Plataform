@@ -7,6 +7,7 @@
 import { after, NextResponse } from "next/server";
 
 import { isSameOriginRequest } from "@/lib/admin/http";
+import { sessionKindsFromSupabase } from "@/lib/events/kind";
 import { trustedClientAddress } from "@/lib/http/client-address";
 import { syncReservationSessionChange } from "@/lib/integrations/google-sheets/service";
 import { followUpRescheduleConfirmationEmail, sendRescheduleConfirmationEmail } from "@/lib/reservations/reschedule-email-service";
@@ -41,6 +42,7 @@ export function selfServiceGate(request: Request): { deps: SelfServiceDeps; resp
     response: null,
     deps: {
       rpc: (name, args) => admin.rpc(name, args),
+      sessionKinds: sessionKindsFromSupabase(admin),
       sendConfirmationEmail: sendRescheduleConfirmationEmail,
       followUpConfirmationEmail: followUpRescheduleConfirmationEmail,
       syncSheet: syncReservationSessionChange,

@@ -15,7 +15,7 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 | Fase | O que entrega | Estado |
 | --- | --- | --- |
 | 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | PR draft; migration aplicada em produção (28/10), interruptor desligado |
-| 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | — |
+| 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | PR draft sobre o da fase 2; sem migration |
 | 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu | — |
 | 5. Reserva e e-mail | Textos da página de reserva e e-mail de confirmação de evento | — |
 | 6. Painel | `/admin/eventos` com formulário estruturado | — |
@@ -58,7 +58,7 @@ Cobre, sem reescrever nenhuma delas, todas as operações que mudam a turma de u
 
 Dentro do mesmo tipo nada muda: regular ↔ regular como antes, e evento ↔ outra sessão de evento (uma nova data da mesma edição, por exemplo) é permitido.
 
-O painel e o autoatendimento traduzem a recusa (`lib/admin/mutation-errors.ts`, `lib/reservations/standby-self-service.ts`). **As listas de turmas de destino ainda mostram sessões do outro tipo** quando o preço coincide; escolher uma delas é recusado com a mensagem acima. O filtro dessas listas entra na fase 3, antes de qualquer evento publicado.
+O painel e o autoatendimento traduzem a recusa (`lib/admin/mutation-errors.ts`, `lib/reservations/standby-self-service.ts`). Desde a fase 3, as listas de turmas de destino nem oferecem sessões do outro tipo (ver abaixo).
 
 ### Capacidade
 
@@ -103,6 +103,40 @@ Auditoria: `EVENT_CREATED`, `EVENT_UPDATED`, `EVENT_DUPLICATED`, além dos regis
 - **Lista de espera**: sem mudança. Uma sessão de evento esgotada aceita inscrição como qualquer turma (testado).
 - **Stand-by**: sem mudança, a não ser a trava entre tipos.
 - **Check-in e área do instrutor**: sem mudança; a sessão do evento aparece no dia, como qualquer turma.
+
+## Fase 3 — separação no site
+
+Só código; nenhuma migration. Usa as funções e a trava da fase 2.
+
+### Listagens públicas
+
+| Área | Leitura |
+| --- | --- |
+| Home, vitrine `/experiencias`, `/bases`, `/bases/[slug]` | `listCatalogExperiences` (`lib/bases/data.ts`) → `list_public_regular_catalog` |
+| Home (cards), agenda `/agenda`, sitemap | `listPublishedExperiences` (`lib/editorial/data.ts`) → `list_public_regular_experiences` |
+| Landing `/experiencias/[slug]` | `get_public_experience`, e devolve "não encontrada" quando `get_public_event` reconhece o slug como evento publicado |
+
+As funções regulares devolvem exatamente o que as antigas devolviam, menos os eventos. Se a função nova não existir no banco (`PGRST202`/`42883` — banco de teste antigo ou rollback da migration, que só roda sem nenhum evento), o site volta para a antiga, que nesse caso dá o mesmo resultado (`lib/supabase/rpc-fallback.ts`). Qualquer outra falha segue o tratamento de sempre, sem cair na antiga.
+
+Páginas por sessão (`/reservar/[sessionId]`, `/lista-de-espera/[sessionId]`) e a grade de datas de cada landing continuam iguais: dependem da sessão ou do slug, não de uma listagem geral.
+
+### Turmas de destino
+
+As três listas passam, no servidor, pelo filtro de tipo de `lib/events/kind.ts` (`sessions.experience_id` → `experiences.kind`, com a service role):
+
+| Lista | Onde |
+| --- | --- |
+| Troca de turma do painel | `getAdminReservationSessionOptions` (`lib/admin/data.ts`), origem = turma atual |
+| Stand-by do painel | `getStandbyOptions` (`lib/admin/standby-data.ts`), origem = turma original |
+| Autoatendimento do cliente | `handleSelfServiceOverview` (`lib/reservations/standby-self-service.ts`), origem = turma original |
+
+Reserva regular vê só turmas regulares; reserva de evento vê só sessões de evento (outra edição do mesmo evento ou outro evento). Preço, vagas, status, base e autorização continuam decididos pelas RPCs de opções, sem mudança. Sem saber o tipo, o painel mostra erro e o autoatendimento responde "indisponível" — nunca uma lista sem filtro. A trava `EVENT_KIND_MISMATCH` continua no banco para qualquer escolha forjada.
+
+A leitura dos tipos vai em lotes de 100 sessões: a troca de turma do painel lista a agenda inteira, e um filtro `in` único passaria de 8 KB de URL.
+
+O contador "turmas sem vagas para o grupo" vem da RPC e ainda conta sessões do outro tipo sem vaga; só a explicação ao lado da lista é afetada. No Stand-by e no autoatendimento ele só conta turmas do mesmo valor pago por pessoa, então um evento a R$ 150 só entra na conta de uma reserva regular paga a R$ 150 por pessoa; na troca de turma do painel, um evento esgotado soma 1.
+
+Testes: `tests/special-events-separation.test.ts`.
 
 ## Aplicação segura (quando autorizada)
 

@@ -21,6 +21,7 @@
  */
 
 import { parseStandbyResolution } from "../admin/standby.ts";
+import { filterSameKind, type SessionKinds } from "../events/kind.ts";
 import { registerAccessAttempt, TOO_MANY_ATTEMPTS_MESSAGE } from "./access-throttle.ts";
 import { digitsOnly, isValidCpf } from "./validation.ts";
 
@@ -284,6 +285,11 @@ type RpcResult = { data: unknown; error: { message: string; code?: string } | nu
 
 export type SelfServiceDeps = {
   rpc(name: string, args: Record<string, unknown>): PromiseLike<RpcResult>;
+  /**
+   * Tipo de cada sessão (agenda regular ou evento especial). A tela só mostra
+   * turmas do mesmo tipo da original; o banco recusa o resto.
+   */
+  sessionKinds: SessionKinds;
   /** A tentativa imediata do e-mail da etapa 4. Nunca lança. */
   sendConfirmationEmail?(changeId: string): Promise<{ outcome: string; retryable?: boolean }>;
   /** O que roda depois da resposta: planilha e novas tentativas do e-mail. */
@@ -336,7 +342,18 @@ export async function handleSelfServiceOverview(deps: SelfServiceDeps, body: unk
   }
   if (result.error) return failure({ status: 503, code: "UNAVAILABLE", message: SELF_SERVICE_MESSAGES.UNAVAILABLE });
 
-  const overview = parseOverview(result.data);
+  let data = result.data;
+  if (isRecord(data) && data.state === "OPEN" && Array.isArray(data.options)) {
+    const original = isRecord(data.original) ? text(data.original.sessionId) : "";
+    try {
+      const options = await filterSameKind(deps.sessionKinds, original, data.options.filter(isRecord), (option) => text(option.sessionId));
+      data = { ...data, options };
+    } catch {
+      return failure({ status: 503, code: "UNAVAILABLE", message: SELF_SERVICE_MESSAGES.UNAVAILABLE });
+    }
+  }
+
+  const overview = parseOverview(data);
   if (!overview) return failure(notFound(credential));
   return { status: 200, body: { overview } };
 }

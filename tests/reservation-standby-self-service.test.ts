@@ -22,6 +22,7 @@ import test from "node:test";
 import { applyMigration, fullDatabase } from "./support/full-database.ts";
 import { createPgliteAdmin } from "./support/pglite-admin.ts";
 import { ADMIN, rescheduleFixtures, type Row } from "./support/reschedule-email-fixtures.ts";
+import { sessionKindsFrom } from "../lib/events/kind.ts";
 import {
   credentialArgs,
   handleSelfServiceOverview,
@@ -108,6 +109,7 @@ function harness(emailOutcome: { outcome: string; retryable?: boolean } = { outc
   const synced: Array<[string, string]> = [];
   return {
     rpc: (name, args) => admin.client.rpc(name, args),
+    sessionKinds: sessionKindsFrom(admin.client),
     sendConfirmationEmail: async (changeId) => { sent.push(changeId); return emailOutcome; },
     followUpConfirmationEmail: async () => ({ outcome: "PENDING" }),
     afterResponse: (task) => { after.push(task); },

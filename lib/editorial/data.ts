@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { imersaoParanoaFallback } from "./imersao-paranoa.ts";
 import { validateExperienceEditorial, type PublicExperience } from "./experience.ts";
+import { isMissingFunction, rpcWithLegacyFallback } from "@/lib/supabase/rpc-fallback";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { refinePublicExperience } from "./refine.ts";
 
@@ -35,10 +36,29 @@ async function publicClient(): Promise<SupabaseClient | null> {
   return getSupabaseServerClient();
 }
 
+/**
+ * Um evento especial publicado não é uma experiência da agenda regular: a
+ * landing `/experiencias/[slug]` não o mostra (a página dele é outra). Sem a
+ * função de eventos no banco não existe evento; numa falha passageira dela, a
+ * página segue como sempre, porque `get_public_experience` já exige publicação.
+ */
+async function isPublishedEvent(client: SupabaseClient, slug: string) {
+  const result = await client.rpc("get_public_event", { p_slug: slug });
+  if (result.error) {
+    if (!isMissingFunction(result.error)) console.error("Erro ao conferir evento especial:", result.error.message);
+    return false;
+  }
+  return rows(result.data).length > 0;
+}
+
 export async function getPublishedExperience(slug: string, fallback = false): Promise<PublicExperience | null> {
   const client = await publicClient();
   if (client) {
-    const result = await client.rpc("get_public_experience", { p_slug: slug });
+    const [result, event] = await Promise.all([
+      client.rpc("get_public_experience", { p_slug: slug }),
+      isPublishedEvent(client, slug),
+    ]);
+    if (event) return null;
     if (!result.error) {
       const experience = mapPublicExperience(result.data);
       if (experience) return experience;
@@ -53,7 +73,8 @@ export async function getPublishedExperience(slug: string, fallback = false): Pr
 export async function listPublishedExperiences(): Promise<PublicExperience[]> {
   const client = await publicClient();
   if (client) {
-    const result = await client.rpc("list_public_experiences");
+    // Só a agenda regular: eventos especiais têm a sua própria listagem.
+    const result = await rpcWithLegacyFallback(client, "list_public_regular_experiences", "list_public_experiences");
     if (!result.error) {
       const mapped = rows(result.data).map(mapPublicExperience).filter((item): item is PublicExperience => item !== null);
       return mapped;

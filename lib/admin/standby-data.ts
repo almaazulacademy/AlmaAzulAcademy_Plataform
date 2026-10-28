@@ -32,6 +32,7 @@ import {
   type StandbyOptions,
   type StandbyResolution,
 } from "@/lib/admin/standby";
+import { filterSameKind, sessionKindsFromSupabase } from "@/lib/events/kind";
 import { syncReservationAfterChange, syncReservationSessionChange } from "@/lib/integrations/google-sheets/service";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
@@ -68,7 +69,12 @@ export async function getStandbyOptions(actorUserId: string, reservationId: stri
     p_reservation_id: reservationId,
   });
   if (result.error) throw new Error(result.error.message);
-  return parseStandbyOptions(result.data);
+  const parsed = parseStandbyOptions(result.data);
+  if (!parsed) return null;
+  // Só turmas do mesmo tipo da original: evento especial com evento, agenda
+  // regular com agenda regular. O banco recusa o resto (EVENT_KIND_MISMATCH).
+  const options = await filterSameKind(sessionKindsFromSupabase(adminClient()), parsed.original.sessionId, parsed.options, (option) => option.sessionId);
+  return { ...parsed, options };
 }
 
 /** Trilha interna do Stand-by da reserva. Nunca é pública. */

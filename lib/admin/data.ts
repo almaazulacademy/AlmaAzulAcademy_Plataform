@@ -23,6 +23,7 @@ import { isReservationStatus, type ReservationStatus } from "@/lib/reservations/
 import { experienceBaseMap } from "@/lib/admin/base-filter";
 import { applySessionFilters, sessionListFilterFor } from "@/lib/admin/session-filters";
 import { FALLBACK_BASES } from "@/lib/bases/catalog";
+import { filterSameKind, sessionKindsFromSupabase } from "@/lib/events/kind";
 import { syncReservationAfterChange, syncReservationSessionChange } from "@/lib/integrations/google-sheets/service";
 import { sendReservationConfirmationEmail } from "@/lib/reservations/confirmation-email-service";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
@@ -567,7 +568,12 @@ export async function getAdminReservationSessionOptions(
     p_reservation_id: reservationId,
   });
   if (result.error) throw new Error(result.error.message);
-  return parseReservationSessionOptions(result.data);
+  const parsed = parseReservationSessionOptions(result.data);
+  if (!parsed) return null;
+  // Evento especial e agenda regular não se misturam: o banco recusa a troca
+  // (EVENT_KIND_MISMATCH) e a lista nem oferece turmas do outro tipo.
+  const options = await filterSameKind(sessionKindsFromSupabase(adminClient()), parsed.current?.sessionId, parsed.options, (option) => option.sessionId);
+  return { ...parsed, options };
 }
 
 /**
