@@ -27,6 +27,9 @@ export type KindQueryClient = {
 
 export type SessionKinds = (sessionIds: string[]) => Promise<Map<string, ExperienceKind>>;
 
+/** Ids por consulta: ~3,7 KB de URL, longe dos ~8 KB em que proxies começam a recusar. */
+export const SESSION_BATCH = 100;
+
 function rows(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object") : [];
 }
@@ -42,9 +45,15 @@ export function sessionKindsFrom(client: KindQueryClient): SessionKinds {
     const ids = [...new Set(sessionIds.filter(Boolean))];
     if (!ids.length) return kinds;
 
-    const sessions = await client.from("sessions").select("id, experience_id").in("id", ids);
-    if (sessions.error) throw new Error(`SESSION_KIND_LOOKUP_FAILED: ${sessions.error.message}`);
-    const experienceOf = new Map(rows(sessions.data).map((row) => [String(row.id), String(row.experience_id)]));
+    // A troca de turma do painel lista a agenda inteira (centenas de turmas). O
+    // filtro `in` vai na URL do PostgREST: em lotes, ela fica bem abaixo do
+    // limite dos proxies.
+    const experienceOf = new Map<string, string>();
+    for (let start = 0; start < ids.length; start += SESSION_BATCH) {
+      const sessions = await client.from("sessions").select("id, experience_id").in("id", ids.slice(start, start + SESSION_BATCH));
+      if (sessions.error) throw new Error(`SESSION_KIND_LOOKUP_FAILED: ${sessions.error.message}`);
+      for (const row of rows(sessions.data)) experienceOf.set(String(row.id), String(row.experience_id));
+    }
 
     const experienceIds = [...new Set(experienceOf.values())];
     const experiences = experienceIds.length

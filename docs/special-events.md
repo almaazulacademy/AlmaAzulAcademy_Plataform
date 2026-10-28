@@ -132,7 +132,9 @@ As três listas passam, no servidor, pelo filtro de tipo de `lib/events/kind.ts`
 
 Reserva regular vê só turmas regulares; reserva de evento vê só sessões de evento (outra edição do mesmo evento ou outro evento). Preço, vagas, status, base e autorização continuam decididos pelas RPCs de opções, sem mudança. Sem saber o tipo, o painel mostra erro e o autoatendimento responde "indisponível" — nunca uma lista sem filtro. A trava `EVENT_KIND_MISMATCH` continua no banco para qualquer escolha forjada.
 
-O contador "turmas sem vagas para o grupo" vem da RPC e ainda conta sessões do outro tipo sem vaga; só a explicação ao lado da lista é afetada.
+A leitura dos tipos vai em lotes de 100 sessões: a troca de turma do painel lista a agenda inteira, e um filtro `in` único passaria de 8 KB de URL.
+
+O contador "turmas sem vagas para o grupo" vem da RPC e ainda conta sessões do outro tipo sem vaga; só a explicação ao lado da lista é afetada. No Stand-by e no autoatendimento ele só conta turmas do mesmo valor pago por pessoa, então um evento a R$ 150 só entra na conta de uma reserva regular paga a R$ 150 por pessoa; na troca de turma do painel, um evento esgotado soma 1.
 
 Testes: `tests/special-events-separation.test.ts`.
 

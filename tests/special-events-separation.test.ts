@@ -18,7 +18,7 @@ import test from "node:test";
 
 import { parseStandbyOptions } from "../lib/admin/standby.ts";
 import { parseReservationSessionOptions } from "../lib/admin/session-change.ts";
-import { filterSameKind, keepSameKind, sessionKindsFrom, type KindQueryClient } from "../lib/events/kind.ts";
+import { filterSameKind, keepSameKind, SESSION_BATCH, sessionKindsFrom, type KindQueryClient } from "../lib/events/kind.ts";
 import { handleSelfServiceOverview, type SelfServiceDeps } from "../lib/reservations/standby-self-service.ts";
 import { isMissingFunction, rpcWithLegacyFallback } from "../lib/supabase/rpc-fallback.ts";
 import { fullDatabase } from "./support/full-database.ts";
@@ -173,6 +173,30 @@ test("tipo da sessão: banco sem a coluna kind trata tudo como regular; outra fa
       };
     },
   });
+  // A agenda inteira (centenas de turmas) vai em lotes, para a URL do PostgREST
+  // não passar do limite dos proxies.
+  const batches: number[] = [];
+  const counting: KindQueryClient = {
+    from(table: string) {
+      return {
+        select() {
+          return {
+            in: async (_column: string, values: string[]) => {
+              if (table === "sessions") batches.push(values.length);
+              return table === "sessions"
+                ? { data: values.map((id) => ({ id, experience_id: "e1" })), error: null }
+                : { data: [{ id: "e1", kind: "REGULAR" }], error: null };
+            },
+          };
+        },
+      };
+    },
+  };
+  const many = Array.from({ length: 250 }, (_, index) => `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
+  const read = await sessionKindsFrom(counting)(many);
+  assert.equal(read.size, 250);
+  assert.deepEqual(batches, [SESSION_BATCH, SESSION_BATCH, 50]);
+
   const legacy = await sessionKindsFrom(fake({ message: 'column experiences.kind does not exist', code: "42703" }))([sessionA, sessionB]);
   assert.deepEqual([...legacy.values()], ["REGULAR", "REGULAR"]);
   await assert.rejects(sessionKindsFrom(fake({ message: "fetch failed" }))([sessionA]), /SESSION_KIND_LOOKUP_FAILED/);
