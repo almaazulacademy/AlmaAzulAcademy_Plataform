@@ -1,5 +1,15 @@
 # Changelog
 
+## Eventos especiais — banco e segurança (fase 2)
+
+- **Nada muda em produção ao publicar este código.** A migration `202610280001` (aplicada em 28/10, postcheck OK) só cria estrutura; nenhum evento é cadastrado e o site ainda não lê nada de eventos. O código só traduz três mensagens de erro novas. Detalhes em [docs/special-events.md](docs/special-events.md).
+- **Evento = experiência `kind = 'EVENT'`** com uma sessão por edição, sobre o motor de reservas de sempre (vagas, pré-reserva, InfinitePay, confirmação, planilha, check-in, Stand-by e lista de espera). Toda experiência existente fica `REGULAR` pelo default da coluna, sem reescrever linha.
+- **Publicação travada**: interruptor `special_event_settings.publication_enabled`, desligado. Nenhum caminho publica um evento antes de o site separar as listagens (fase 3).
+- **Nenhuma reserva troca de tipo**: uma trigger em `reservations.session_id` recusa troca de turma, Stand-by pelo painel e autoatendimento entre evento e agenda regular (`EVENT_KIND_MISMATCH`), sem reescrever essas funções.
+- **Leitura pública nova** (`list_public_events`, `get_public_event`, `list_public_event_sessions`) com a situação de cada sessão, e versões da vitrine e do catálogo só com a agenda regular. As listagens atuais ficam intactas.
+- **Painel**: criar (rascunho, sessão fechada), editar, duplicar, listar e relatório por evento, só para ADMIN e OPERATOR, reaproveitando as RPCs de experiência e de sessão.
+- Testes em PGlite e de concorrência com Postgres real (16 compras simultâneas → exatamente 12 vagas). Preflight, postcheck e rollback em `supabase/diagnostics/` e `supabase/rollback/`.
+
 ## Lista de espera — envio automático dos avisos de vaga (fase 6 de 7, desligado e sem agendamento)
 
 - **Nada muda em produção ao publicar este código.** O envio só existe com a migration `202610260002`, **não aplicada**, e `WAITLIST_NOTIFY_ENABLED=true`; só há aviso a enviar com a detecção da fase 5 ligada; e nenhum agendamento chama a rota. Detalhes em [docs/waitlist.md](docs/waitlist.md#fase-6--envio-automático-dos-avisos-de-vaga).
