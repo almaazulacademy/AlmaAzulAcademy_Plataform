@@ -245,6 +245,9 @@ const SESSION_UNAVAILABLE = [
   "EXPERIENCE_NOT_AVAILABLE",
   "EXPERIENCE_NOT_FOUND",
   "BASE_NOT_AVAILABLE",
+  // Turma de outro tipo (evento especial × agenda regular): para o cliente, é
+  // só uma turma que não serve para esta reserva.
+  "EVENT_KIND_MISMATCH",
 ];
 
 /**

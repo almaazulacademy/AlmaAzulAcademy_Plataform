@@ -59,6 +59,20 @@ export function adminMutationError(error: unknown) {
   if (message.includes("EXPERIENCE_NOT_FOUND")) {
     return { status: 404, message: "A experiência da turma escolhida não existe mais." };
   }
+  // Trava do banco entre evento especial e agenda regular: nenhuma reserva
+  // troca de tipo, por nenhum caminho (troca de turma, Stand-by, autoatendimento).
+  if (message.includes("EVENT_KIND_MISMATCH")) {
+    return {
+      status: 409,
+      message: "Reservas de evento especial e de experiência regular não podem ser transferidas entre si. Nada foi alterado.",
+    };
+  }
+  if (message.includes("EVENT_PUBLICATION_DISABLED")) {
+    return { status: 409, message: "A publicação de eventos especiais ainda não está liberada. O evento continua como rascunho." };
+  }
+  if (message.includes("EXPERIENCE_KIND_LOCKED")) {
+    return { status: 409, message: "O tipo da experiência não pode mudar depois que ela tem sessões." };
+  }
   if (message.includes("RESERVATION_EXPERIENCE_DESYNC")) {
     return { status: 409, message: "A reserva ficaria vinculada a uma experiência diferente da turma. Nada foi alterado." };
   }
