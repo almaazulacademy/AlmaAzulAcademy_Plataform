@@ -43,11 +43,29 @@ Tabela `special_event_settings` (uma linha, `publication_enabled = false`), com 
 update public.special_event_settings set publication_enabled = true, updated_at = now();
 ```
 
-**O interruptor só trava o ato de publicar; ele não esconde evento já publicado.** `list_public_events`, `get_public_event` e `list_public_event_sessions` filtram por `kind = 'EVENT'` e `status = 'PUBLISHED'`, sem olhar `publication_enabled`; `create_pre_reservation` e `waitlist_join` olham o status da experiência. Desligar o interruptor depois de publicar **não** tira o evento do site, da venda nem da lista de espera (achado de 29/10/2026, conferido no teste da 5C-1). As experiências regulares não são afetadas: desde a fase 3 elas leem as listagens por tipo.
+**Com a migration `202610310001`, o interruptor também esconde o evento já publicado.** Antes dela ele só travava o ato de publicar: `list_public_events`, `get_public_event` e `list_public_event_sessions` filtravam por `kind = 'EVENT'` e `status = 'PUBLISHED'`, sem olhar `publication_enabled` (achado de 29/10/2026).
 
-Para tirar um evento do ar, do mais rápido ao mais completo: remover `EVENTS_PUBLIC_ENABLED` (ou `EVENT_BOOKING_OPEN` / `EVENTS_WAITLIST_ENABLED`) e publicar de novo — páginas em 404, venda e inscrição recusadas no servidor; ou mudar o status da experiência para rascunho pelo painel — some das leituras públicas e o banco recusa reserva e inscrição.
+| Interruptor desligado | O que acontece |
+| --- | --- |
+| Leituras públicas | `list_public_events` e `list_public_event_sessions` (corpo novo) e `get_public_event` (lê da primeira) não devolvem evento: página em 404, menu, home, sitemap e redirecionamento somem |
+| Reserva (`POST /api/reservations`) | Recusa com `409 EVENT_NOT_PUBLIC` antes de qualquer pré-reserva, mesmo com `EVENT_BOOKING_OPEN` e o id da sessão: `loadSessionBookingRules` confere a sessão em `list_public_event_sessions` (`visible`) |
+| Página `/reservar/[id]` | Lê o tipo real da sessão no banco; sessão de evento escondido mostra "Reservas indisponíveis" — nunca a tela regular |
+| Inscrição na lista de espera | Recusada (`SESSION_UNAVAILABLE`): o escopo confere o evento em `get_public_event` |
+| Aviso de vaga | Não é reivindicado (`claim_pending_waitlist_spot_emails_by_kind` exige o interruptor para `EVENT`): sem tentativa, sem envio contado, segue na fila. Segunda barreira no envio (`eventPublic`) |
+| Experiências regulares | Nada muda: leituras próprias, mesmas listagens (teste compara ligado × desligado) |
 
-Correção proposta, **fora do PR da 5C-1** e só com autorização: uma migration pequena que acrescenta `and exists (select 1 from public.special_event_settings where publication_enabled)` às três leituras públicas de eventos (corpo novo só nelas, com preflight comparando as definições atuais, postcheck e rollback), tornando o interruptor também um botão de emergência de leitura. Ela não muda reserva nem lista de espera por si: as duas rotas do site já exigem o evento visível (`get_public_event`) antes de mostrar o formulário, e a inscrição confere o mesmo no servidor. Aplicar antes de ligar `EVENTS_PUBLIC_ENABLED` em produção.
+Religado, volta só o que continua elegível: evento em rascunho continua fora, sessão fechada continua fechada, e a venda e a lista seguem dependendo das variáveis.
+
+**Ordem das migrations (ainda não aplicadas).** `202610300001_waitlist_event_scope.sql` (lista de espera por tipo, já com o filtro do interruptor na reivindicação dos avisos — editada antes de ser aplicada, para nenhuma migration posterior recriar função que ainda não existe em produção) e `202610310001_special_events_publication_switch.sql` (leituras públicas) são **independentes**: cada uma depende só da fundação `202610280001`, já aplicada, e as duas podem ser aplicadas em qualquer ordem (teste aplica nas duas). Ordem recomendada:
+
+1. `special_events_publication_switch_preflight.sql` → `EVENTOS_INTERRUPTOR_PREFLIGHT_OK | OK`; `202610310001` (com `begin;` + `set local lock_timeout = '5s';` … `commit;`); `..._postcheck.sql` → `EVENTOS_INTERRUPTOR_POSTCHECK_OK | OK`, mesmas assinatura e contagens.
+2. `waitlist_event_scope_preflight.sql` → `202610300001` → `waitlist_event_scope_postcheck.sql`.
+
+Rollback na ordem inversa da aplicação: `supabase/rollback/202610300001_waitlist_event_scope.rollback.sql` (remove as duas funções da lista) e `supabase/rollback/202610310001_special_events_publication_switch.rollback.sql` (devolve às duas leituras o corpo da fundação). Depois do rollback da `202610310001`, o postcheck da fundação volta a aprovar; antes dele, ele aponta as duas leituras como diferentes — esperado.
+
+Sem a `202610310001` aplicada, para tirar um evento do ar: remover `EVENTS_PUBLIC_ENABLED` (ou `EVENT_BOOKING_OPEN` / `EVENTS_WAITLIST_ENABLED`) e publicar de novo, ou voltar o evento a rascunho pelo painel. **Aplicar antes de ligar `EVENTS_PUBLIC_ENABLED` em produção.**
+
+Testes: `tests/special-events-publication-switch.test.ts` e, com sessões reais do Postgres (CI), `tests/waitlist-spot-concurrency.test.ts`.
 
 ### Nenhuma reserva troca de tipo
 

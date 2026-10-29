@@ -6,7 +6,7 @@
 -- fica OK quando nenhuma linha FALHOU.
 
 with expected(fn, norm) as (values
-    ('claim_pending_waitlist_spot_emails_by_kind', '679c9daa24a718919b749d7d42b709ee'),
+    ('claim_pending_waitlist_spot_emails_by_kind', '65a6294ea0053666f44786106c5ff417'),
     ('waitlist_cancel_overview_with_kind', 'faf34d42b9ae3e1638caff5bfb8c9d61')
 ),
 prod as (

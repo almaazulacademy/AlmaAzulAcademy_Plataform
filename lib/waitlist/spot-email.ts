@@ -93,6 +93,11 @@ export type WaitlistSpotRuntime = {
   kinds?: readonly WaitlistSpotKind[];
   /** Tipo da sessão e conteúdo do evento, antes de montar a mensagem. Falha lança. */
   enrich?: (payload: unknown) => Promise<unknown>;
+  /**
+   * A sessão do evento está no site (publicado, interruptor ligado)? Segunda
+   * barreira: a reivindicação por tipo já deixa de fora o evento escondido.
+   */
+  eventPublic?: (slug: string, sessionId: string) => Promise<boolean>;
 };
 
 const sleep = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
@@ -187,6 +192,11 @@ async function deliverClaimed(runtime: WaitlistSpotRuntime, claim: WaitlistEmail
     // Só alcançado sem a migration 202610300001 (reivindicação por tipo): aviso
     // de evento com a venda fechada nunca sai.
     if (event && runtime.kinds && !runtime.kinds.includes("EVENT")) return failed("EVENT_SALES_CLOSED", "REJECTED", true);
+    if (event && runtime.eventPublic) {
+      const visible = await runtime.eventPublic(event.slug, data.sessionId).catch(() => null);
+      if (visible === null) return failed(EVENT_CONTEXT_UNAVAILABLE, "REJECTED", true);
+      if (!visible) return failed("EVENT_NOT_PUBLIC", "REJECTED", true);
+    }
     message = event ? buildEventWaitlistSpotEmail(data, event, runtime.origin) : buildWaitlistSpotEmail(data, runtime.origin);
     const frozen = await runtime.queue.freeze(claim, message).catch(() => false);
     if (!frozen) return failed("FREEZE_FAILED", "REJECTED", true);

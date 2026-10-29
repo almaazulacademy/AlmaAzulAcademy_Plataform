@@ -33,7 +33,7 @@ if (!database) {
   const [A, B] = pool;
 
   const fx = await rescheduleFixtures(async (sql, params = []) => (await setup.query(sql, params)).rows as Row[]);
-  const { one, call, IMERSAO, makeSession, reserve, uniquePrice } = fx;
+  const { one, call, IMERSAO, SUNSET_CONCHA, makeSession, reserve, uniquePrice } = fx;
 
   await setup.query(`update public.waitlist_settings set detection_enabled = true, opening_grace_seconds = 0, wave_interval_minutes = 30`);
 
@@ -170,5 +170,35 @@ if (!database) {
     await A.query("commit");
     const attempts = (await one(`select attempts from public.waitlist_notifications where id = $1::uuid`, [notice])).attempts;
     assert.equal(attempts, 1, "uma tentativa só");
+  });
+
+  // Interruptor de publicação (202610310001 + 202610300001): evento escondido não tem aviso reivindicado.
+  test("interruptor desligado: reivindicações simultâneas não tocam o aviso do evento; religado, uma só o pega", async () => {
+    sequence += 1;
+    const created = await call(
+      `public.admin_create_event($1::uuid, $2::uuid, $3, 'Evento Paralelo', 'x', '{}'::jsonb, null, now() + interval '10 days', 210, 15000, 1)`,
+      [ADMIN, SUNSET_CONCHA.base_id, `evento-paralelo-${sequence}`],
+    );
+    await setup.query(`update public.special_event_settings set publication_enabled = true`);
+    await setup.query(`update public.experiences set status = 'PUBLISHED' where id = $1::uuid`, [created.experienceId]);
+    await setup.query(`update public.sessions set status = 'OPEN' where id = $1::uuid`, [created.sessionId]);
+    const booking = await reserve(created.sessionId, 1);
+    await call(`public.waitlist_join($1::uuid, $2, $3, $4, 1, null, '')`, [created.sessionId, `Pessoa Evento ${sequence}`, `paralela-evento${sequence}@teste.local`, `+5561${String(930000000 + sequence)}`]);
+    await call(`public.admin_cancel_reservation($1::uuid, $2::uuid, 'Libera a vaga')`, [ADMIN, booking.id]);
+    await call(`public.waitlist_scan()`);
+    const notice = (await one(
+      `select n.id from public.waitlist_notifications n join public.waitlist_entries we on we.id = n.entry_id
+       where we.session_id = $1::uuid and n.kind = 'SPOT_AVAILABLE' and n.status = 'QUEUED'`, [created.sessionId],
+    )).id as string;
+
+    await setup.query(`update public.special_event_settings set publication_enabled = false`);
+    const [a, b] = await Promise.all([claimByKindOn(A, ["REGULAR", "EVENT"]), claimByKindOn(B, ["REGULAR", "EVENT"])]);
+    assert.equal(claimed(a, notice) || claimed(b, notice), false, "escondido: ninguém pega");
+    assert.equal((await one(`select attempts from public.waitlist_notifications where id = $1::uuid`, [notice])).attempts, 0);
+
+    await setup.query(`update public.special_event_settings set publication_enabled = true`);
+    const [c, d] = await Promise.all([claimByKindOn(A, ["REGULAR", "EVENT"]), claimByKindOn(B, ["REGULAR", "EVENT"])]);
+    assert.equal(Number(claimed(c, notice)) + Number(claimed(d, notice)), 1, "religado: exatamente uma execução pega");
+    assert.equal((await one(`select attempts from public.waitlist_notifications where id = $1::uuid`, [notice])).attempts, 1);
   });
 }

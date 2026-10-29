@@ -12,7 +12,7 @@
 import { getEmailProvider } from "@/lib/email";
 import { sanitizeEmailErrorCode } from "@/lib/email/email-provider";
 import { logEmail } from "@/lib/email/observability";
-import type { RulesQueryClient } from "@/lib/events/booking";
+import { isEventSessionPublic, type RulesQueryClient } from "@/lib/events/booking";
 import { isEventsWaitlistEnabled } from "@/lib/events/flags";
 import { withWaitlistEventContext } from "@/lib/events/waitlist-email";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
@@ -31,6 +31,7 @@ export async function sendPendingWaitlistSpotNotices(): Promise<WaitlistRetryRep
       log: logEmail,
       kinds: isEventsWaitlistEnabled() ? ["REGULAR", "EVENT"] : ["REGULAR"],
       enrich: (payload) => withWaitlistEventContext(admin as unknown as RulesQueryClient, payload),
+      eventPublic: (slug, sessionId) => isEventSessionPublic(admin as unknown as RulesQueryClient, slug, sessionId),
     });
   } catch (error) {
     const errorCode = sanitizeEmailErrorCode(error);

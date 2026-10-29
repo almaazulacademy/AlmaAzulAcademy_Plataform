@@ -290,7 +290,7 @@ test("banco: reserva paga do evento → payload da RPC → contexto do evento �
   incomplete.event.info.items = incomplete.event.info.items.filter((item) => item.id !== "alimentacao");
   await db.query(`update public.experiences set editorial_content = $1::jsonb where id = $2::uuid`, [JSON.stringify(incomplete), created.experienceId]);
   const rules = await loadSessionBookingRules(admin.client as unknown as RulesQueryClient, created.sessionId);
-  assert.deepEqual(rules, { kind: "EVENT", maxPerOrder: 6, emailReady: false });
+  assert.deepEqual(rules, { kind: "EVENT", maxPerOrder: 6, emailReady: false, visible: true });
   assert.equal(eventBookingRejection(rules, 1, true)?.code, "EVENT_EMAIL_NOT_READY");
   await db.close();
 });

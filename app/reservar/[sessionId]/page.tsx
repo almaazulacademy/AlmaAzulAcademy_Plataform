@@ -15,9 +15,10 @@ import { baseLocation } from "@/lib/bases/location";
 import { eventBookingContext } from "@/lib/events/booking";
 import { getPublicEvent } from "@/lib/events/data";
 import { isEventBookingOpen, isEventsWaitlistEnabled } from "@/lib/events/flags";
-import { EVENT_WAITLIST_CTA, EVENT_WAITLIST_INVITE } from "@/lib/events/waitlist";
+import type { RulesQueryClient } from "@/lib/events/booking";
+import { EVENT_WAITLIST_CTA, EVENT_WAITLIST_INVITE, loadWaitlistTarget } from "@/lib/events/waitlist";
 import { getBookingSession, listPublicSessions } from "@/lib/reservations/data";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSessionBookable, isWaitlistPublicEnabled, type PublicSession } from "@/lib/waitlist/public";
 import { isWaitlistSignupEnabled } from "@/lib/waitlist/signup";
 
@@ -50,6 +51,15 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
   // API recusa do mesmo jeito (`POST /api/reservations`).
   const eventSlug = session?.experienceSlug ?? upcoming?.experienceSlug ?? null;
   const event = eventSlug ? await getPublicEvent(eventSlug).catch(() => null) : null;
+  // O tipo real da sessão, pelo banco: uma sessão de evento que não está no site
+  // (despublicado, interruptor de publicação desligado) nunca cai na tela de
+  // reserva regular. A API recusa do mesmo jeito (`EVENT_NOT_PUBLIC`) — e, sem
+  // conseguir ler o tipo, responde 503: uma falha passageira dessa leitura não
+  // tira a tela das experiências regulares do ar.
+  const admin = !event && /^[0-9a-f-]{36}$/i.test(sessionId) ? getSupabaseAdminClient() : null;
+  const kind = admin ? await loadWaitlistTarget(admin as unknown as RulesQueryClient, sessionId).catch(() => null) : null;
+  const hiddenEvent = !event && kind?.kind === "EVENT";
+  if (hiddenEvent) session = null;
   const bookingOpen = isEventBookingOpen();
   // Evento esgotado, venda aberta e lista de espera dos eventos ligada: o botão
   // leva à lista desta edição. Nunca abre o formulário de reserva.
@@ -70,7 +80,13 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
         {event
           ? <Link href={`/eventos/${event.slug}`} className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-forest"><ArrowLeft className="size-4" />Voltar para o evento</Link>
           : <Link href="/agenda" className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-forest"><ArrowLeft className="size-4" />Voltar para as datas</Link>}
-        {event ? (
+        {hiddenEvent ? (
+          <div className="rounded-4xl bg-white p-10 text-center sm:p-16" role="status">
+            <h1 className="text-4xl font-medium tracking-[-0.05em]">Reservas indisponíveis</h1>
+            <p className="mx-auto mt-4 max-w-lg leading-7 text-ink/55">Esta data não está disponível para reserva no momento. Confira as próximas datas.</p>
+            <Link href="/agenda" className="mt-7 inline-flex font-semibold text-forest">Ver próximas datas</Link>
+          </div>
+        ) : event ? (
           session && bookingOpen ? (
             <>
               <SessionTurma
