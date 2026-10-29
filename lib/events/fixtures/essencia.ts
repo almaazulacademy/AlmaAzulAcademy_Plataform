@@ -191,7 +191,7 @@ export const ESSENCIA_EDITORIAL = {
         {
           id: "cancelamento",
           title: "Política de cancelamento",
-          body: "Você poderá solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (meio-dia), horário de Brasília, escolhendo entre o reembolso do valor pago ou uma vaga para a próxima edição do ESSÊNCIA.\n\nApós esse prazo, entre em contato com nossa equipe para verificar as possibilidades de atendimento.",
+          body: "Você pode solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (horário de Brasília), escolhendo entre crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe.\n\nApós esse prazo, entre em contato conosco para avaliação do seu caso.",
         },
       ],
     },
@@ -199,10 +199,11 @@ export const ESSENCIA_EDITORIAL = {
     arrival: { startTime: "05:30", toleranceUntil: "05:50" },
     /**
      * Prazo inclusivo: pedidos até 05/11/2026 12h00 de Brasília (UTC−3) estão
-     * dentro. Nada é automático — reembolso ou vaga na próxima edição são
-     * tratados pela equipe; a vaga não vira reserva sozinha.
+     * dentro. Nada é automático nesta fase: o crédito para outras experiências
+     * chega na fase 5, e o reembolso é pedido pelo WhatsApp oficial e devolvido
+     * manualmente pela equipe.
      */
-    cancellation: { deadline: "2026-11-05T12:00:00-03:00", timeZone: "America/Sao_Paulo", summary: "reembolso ou vaga na próxima edição" },
+    cancellation: { deadline: "2026-11-05T12:00:00-03:00", timeZone: "America/Sao_Paulo", summary: "crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe" },
     reservation: {
       eyebrow: "Sua próxima pausa tem data marcada",
       title: "Garanta a sua vaga",

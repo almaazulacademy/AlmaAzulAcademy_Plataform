@@ -137,9 +137,13 @@ test("informações do ESSÊNCIA: os sete textos aprovados, todos publicáveis",
   assert.match(byId("alimentacao"), /Nutre Congelados Saudáveis/);
   assert.match(byId("clima"), /o evento será reagendado e os participantes serão comunicados pela organização/);
   assert.deepEqual(infoParagraphs(byId("cancelamento")), [
-    "Você poderá solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (meio-dia), horário de Brasília, escolhendo entre o reembolso do valor pago ou uma vaga para a próxima edição do ESSÊNCIA.",
-    "Após esse prazo, entre em contato com nossa equipe para verificar as possibilidades de atendimento.",
+    "Você pode solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (horário de Brasília), escolhendo entre crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe.",
+    "Após esse prazo, entre em contato conosco para avaliação do seu caso.",
   ]);
+  // A política não fala mais em vaga na próxima edição e não promete nada automático.
+  const policyTexts = JSON.stringify([byId("cancelamento"), result.data.event.cancellation]);
+  assert.doesNotMatch(policyTexts, /próxima edição/i);
+  assert.doesNotMatch(policyTexts, /automátic|imediat|instantâne|na hora/i);
 
   // Nenhuma referência à antiga chegada às 05h15, em nenhum texto do evento.
   assert.doesNotMatch(JSON.stringify(ESSENCIA_EDITORIAL), /0?5h15|0?5:15/);
@@ -164,7 +168,7 @@ test("cancelamento: prazo inequívoco de 05/11/2026 às 12h00 de Brasília, incl
   assert.ok(result.success);
   if (!result.success) return;
   const cancellation = result.data.event.cancellation!;
-  assert.deepEqual(cancellation, { deadline: "2026-11-05T12:00:00-03:00", timeZone: "America/Sao_Paulo", summary: "reembolso ou vaga na próxima edição" });
+  assert.deepEqual(cancellation, { deadline: "2026-11-05T12:00:00-03:00", timeZone: "America/Sao_Paulo", summary: "crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe" });
   assert.equal(new Date(cancellation.deadline).toISOString(), "2026-11-05T15:00:00.000Z");
   assert.equal(deadlineDayText(cancellation.deadline), "5 de novembro de 2026");
   assert.equal(deadlineTimeText(cancellation.deadline), "12h00");

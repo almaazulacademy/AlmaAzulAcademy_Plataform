@@ -9,10 +9,10 @@
  * (`America/Sao_Paulo`). O prazo é **inclusivo**: um pedido recebido
  * exatamente no instante limite ainda está dentro dele.
  *
- * Esta fase só informa. Não há cancelamento, reembolso, transferência nem
- * reagendamento automáticos: a equipe usa os fluxos de sempre do painel
- * (cancelamento e Stand-by), e a vaga para a próxima edição é um direito a
- * organizar quando ela existir, nunca uma reserva criada sozinha.
+ * Esta fase só informa. Não há cancelamento, crédito, reembolso nem
+ * reagendamento automáticos: o crédito para outras experiências é
+ * implementado na fase 5, e o reembolso é pedido pelo atendimento oficial no
+ * WhatsApp e devolvido manualmente pela equipe.
  *
  * Módulo puro, sem imports de aplicação: é lido pelo Next e pelos testes.
  */
@@ -34,7 +34,7 @@ export type EventCancellation = {
   /** Instante limite, ISO com deslocamento. Inclusivo. */
   deadline: string;
   timeZone: typeof POLICY_TIME_ZONE;
-  /** Resumo curto ao lado do botão de reserva, ex.: "reembolso ou vaga na próxima edição". */
+  /** Resumo curto ao lado do botão de reserva, ex.: "crédito para outras experiências ou reembolso". */
   summary: string;
 };
 

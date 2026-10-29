@@ -211,23 +211,26 @@ Textos definitivos aprovados em 29/10/2026, em `info.items` da fixture: horário
 | Regra | Valor guardado | Onde aparece |
 | --- | --- | --- |
 | Início e tolerância | `arrival: { startTime: "05:30", toleranceUntil: "05:50" }` | Texto "Horário e chegada" e a linha "Chegada · tolerância até 05H50" no bloco de reserva |
-| Prazo de cancelamento | `cancellation.deadline = "2026-11-05T12:00:00-03:00"` (`= 2026-11-05T15:00:00Z`), `timeZone: "America/Sao_Paulo"` | Texto "Política de cancelamento" e, junto ao botão de reserva, "Cancelamento até 05/11/2026 às 12h00 (horário de Brasília): reembolso ou vaga na próxima edição", com link para a política completa |
+| Prazo de cancelamento | `cancellation.deadline = "2026-11-05T12:00:00-03:00"` (`= 2026-11-05T15:00:00Z`), `timeZone: "America/Sao_Paulo"` | Texto "Política de cancelamento" e, junto ao botão de reserva, "Cancelamento até 05/11/2026 às 12h00 (horário de Brasília): crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe.", com link para a política completa |
 
 O validador recusa prazo sem deslocamento, fuso diferente de `America/Sao_Paulo` e texto que diga outro dia ou hora que a regra — mudar uma sem a outra não passa. `arrivalMatchesSession` confere a chegada com a sessão cadastrada (início igual, tolerância entre o início e o fim).
 
 **Prazo inclusivo** (`cancellationWindow`, `lib/events/policy.ts`): pedido até `2026-11-05T12:00:00.000-03:00`, inclusive, é `WITHIN_DEADLINE`; um milissegundo depois, `AFTER_DEADLINE` — análise da equipe, sem promessa automática.
 
-**Nada é automático nesta fase**, e os fluxos existentes cobrem a política sem mudança:
+**Nada é automático nesta fase.** A política definitiva (decisão de 29/10/2026) dá duas escolhas dentro do prazo, e a parte financeira e operacional fica para a **fase 5**:
 
-- **Reembolso**: a equipe cancela pelo painel (`admin_cancel_reservation`, com motivo e auditoria) e devolve o valor fora da plataforma, como hoje. Nenhum reembolso é disparado pelo site.
-- **Vaga na próxima edição**: o direito fica registrado com o **Stand-by** — a reserva paga sai da turma, mantém pagamento, valor e código, não ocupa vaga e não expira. Quando a próxima edição existir (`admin_duplicate_event`), a equipe ou o cliente escolhem a nova sessão; a trava de tipo permite evento → evento, e a régua de mesmo valor por pessoa vale como sempre (edição com outro preço exige tratamento manual). Nenhuma reserva nova é criada sozinha.
+- **Crédito para outras experiências da Alma Azul**: o valor elegível da reserva vira crédito para usar em outras experiências, nas condições de uso que a fase 5 vai implementar. Hoje a plataforma não tem crédito: nada é gerado nem prometido como automático.
+- **Reembolso**: pedido pelo atendimento oficial da Alma Azul no WhatsApp; a devolução é feita manualmente pela equipe, como hoje. Nenhum reembolso é disparado pelo site.
+- **Depois do prazo**: avaliação caso a caso pela equipe, sem promessa automática.
 - **Clima**: reagendar o evento é mudar a data da sessão pelo painel; o aviso aos participantes é feito pela organização (não há e-mail automático de mudança de data).
 - **Antes da confirmação**: a política fica visível na página do evento, ao lado do botão. Na fase 5, a página de reserva e o e-mail de confirmação do evento devem repetir o prazo a partir do mesmo `cancellation`.
+
+Stand-by, reservas, cancelamento pelo painel e reembolsos **não mudam** nesta fase. O texto deixou de falar em "vaga na próxima edição"; o Stand-by continua existindo para a equipe, sem ser parte da política comunicada.
 
 ### Pendente antes de publicar
 
 - Confirmação dos parceiros quanto ao uso dos logos; logo do Rapha Dantas, se houver.
-- Fase 5: botão de reserva (`EVENT_BOOKING_OPEN`), política na página de reserva e e-mail de evento.
+- Fase 5: botão de reserva (`EVENT_BOOKING_OPEN`), política na página de reserva, e-mail de evento e o **crédito para outras experiências** (regras de uso, saldo e registro) — com o reembolso seguindo manual pelo WhatsApp.
 - **Fase 5, obrigatório antes de vender**: o e-mail de confirmação atual (`lib/reservations/confirmation-email.ts`) vale para qualquer base e traria a uma reserva do ESSÊNCIA textos de remada que contradizem o evento — "cancelamento até 1 dia antes" (`CANCELLATION_NOTE`) e "roupa de banho"/"chinelo" (`PREPARATION_ITEMS`). A tolerância de 20 minutos (`MEETING_TOLERANCE_NOTE`) coincide com 05h50. O e-mail de evento deve usar `event.cancellation`, `event.arrival` e os textos de `info.items`. Hoje nada disso chega a cliente: a reserva do evento não está aberta.
 - O slug `demonstracao` fica reservado para a prévia: um evento com esse slug não teria página.
 

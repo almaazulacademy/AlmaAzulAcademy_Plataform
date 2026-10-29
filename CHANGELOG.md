@@ -7,7 +7,7 @@
 - **Item "Eventos" no menu e destaque na home** só com a seção ligada e evento publicado. `/experiencias/[slug]` de um evento leva à página do evento.
 - **Botão "Garantir minha vaga" sem checkout** nesta fase (`EVENT_BOOKING_OPEN = false`), respeitando vagas, esgotado, encerrado e realizado.
 - **Prévia com o ESSÊNCIA de demonstração** em `/eventos/demonstracao`, só no desenvolvimento e no Preview, sem banco, `noindex`. Fotos reais do repositório e do Cápsula Bar; logos fornecidos; informações operacionais pendentes só na prévia.
-- **Informações operacionais definitivas do ESSÊNCIA**: chegada às 05h30 com tolerância até 05h50, o que levar (materiais de Superioga fornecidos pela equipe), experiência, segurança, alimentação, clima e cancelamento até 05/11/2026 às 12h00 de Brasília (`2026-11-05T12:00:00-03:00`, inclusivo), configuráveis em `editorial_content` e conferidos contra os textos. Nada de reembolso ou transferência automáticos.
+- **Informações operacionais definitivas do ESSÊNCIA**: chegada às 05h30 com tolerância até 05h50, o que levar (materiais de Superioga fornecidos pela equipe), experiência, segurança, alimentação, clima e cancelamento até 05/11/2026 às 12h00 de Brasília (`2026-11-05T12:00:00-03:00`, inclusivo) com escolha entre crédito para outras experiências da Alma Azul (implementado na fase 5) ou reembolso pedido pelo WhatsApp e devolvido manualmente, configuráveis em `editorial_content` e conferidos contra os textos. Nada automático nesta fase.
 - Reservas, pagamentos, e-mails, planilha, Stand-by, lista de espera e check-in não foram alterados.
 
 ## Eventos especiais — separação no site (fase 3)
