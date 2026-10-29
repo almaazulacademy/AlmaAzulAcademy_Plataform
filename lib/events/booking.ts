@@ -8,6 +8,9 @@
  *
  *   - sessão de evento com a venda fechada (`isEventBookingOpen`) é recusada
  *     no servidor, mesmo com o id da sessão em mãos;
+ *   - sessão de evento que não está no site — evento despublicado, interruptor
+ *     de publicação desligado, sessão arquivada — também é recusada, mesmo com
+ *     a venda aberta (`visible`, pela mesma leitura pública da página);
  *   - o pedido respeita o máximo de participantes do evento
  *     (`event.reservation.maxPerOrder`), além do limite geral de 20.
  *
@@ -24,9 +27,9 @@ import type { PublicEvent } from "./public.ts";
 
 export type SessionBookingRules =
   | { kind: "REGULAR" }
-  | { kind: "EVENT"; maxPerOrder: number; emailReady: boolean };
+  | { kind: "EVENT"; maxPerOrder: number; emailReady: boolean; visible: boolean };
 
-export type BookingRejection = { status: number; code: "EVENT_BOOKING_CLOSED" | "EVENT_EMAIL_NOT_READY" | "EVENT_ORDER_LIMIT"; message: string; field?: "quantity" };
+export type BookingRejection = { status: number; code: "EVENT_BOOKING_CLOSED" | "EVENT_NOT_PUBLIC" | "EVENT_EMAIL_NOT_READY" | "EVENT_ORDER_LIMIT"; message: string; field?: "quantity" };
 
 export const EVENT_BOOKING_CLOSED_MESSAGE = "As reservas deste evento ainda não estão abertas.";
 
@@ -38,6 +41,9 @@ export function eventOrderLimitMessage(max: number) {
 export function eventBookingRejection(rules: SessionBookingRules | null, quantity: number, bookingOpen: boolean): BookingRejection | null {
   if (!rules || rules.kind === "REGULAR") return null;
   if (!bookingOpen) return { status: 409, code: "EVENT_BOOKING_CLOSED", message: EVENT_BOOKING_CLOSED_MESSAGE };
+  // Evento fora do site (despublicado ou com o interruptor de publicação
+  // desligado): nada de venda, mesmo com a variável ligada e o id em mãos.
+  if (!rules.visible) return { status: 409, code: "EVENT_NOT_PUBLIC", message: EVENT_BOOKING_CLOSED_MESSAGE };
   // Sem o conteúdo do e-mail de evento completo, a venda não abre: o cliente
   // receberia um e-mail incompleto (ou nenhum). Mesmo com a variável ligada.
   if (!rules.emailReady) return { status: 409, code: "EVENT_EMAIL_NOT_READY", message: EVENT_BOOKING_CLOSED_MESSAGE };
@@ -49,10 +55,23 @@ export function eventBookingRejection(rules: SessionBookingRules | null, quantit
 
 type QueryResult = { data: unknown; error: { message: string; code?: string } | null };
 
-/** O pedaço do supabase-js usado aqui: `from(t).select(c).eq(col, valor)`. */
+/** O pedaço do supabase-js usado aqui: `from(t).select(c).eq(col, valor)` e, para a visibilidade do evento, `rpc`. */
 export type RulesQueryClient = {
   from(table: string): { select(columns: string): { eq(column: string, value: string): PromiseLike<QueryResult> } };
+  rpc?: (name: string, args: Record<string, unknown>) => PromiseLike<QueryResult>;
 };
+
+/**
+ * A sessão está no site? A mesma leitura pública da página do evento
+ * (`list_public_event_sessions`): evento publicado, interruptor de publicação
+ * ligado, sessão não arquivada. Sem `rpc`, não (falha fechada). Erro lança.
+ */
+export async function isEventSessionPublic(client: RulesQueryClient, slug: string, sessionId: string) {
+  if (!client.rpc || !slug) return false;
+  const result = await client.rpc("list_public_event_sessions", { p_slug: slug });
+  if (result.error) throw new Error(`BOOKING_RULES_FAILED: ${result.error.message}`);
+  return Array.isArray(result.data) && result.data.some((row) => row && typeof row === "object" && (row as Record<string, unknown>).id === sessionId);
+}
 
 function firstRow(data: unknown): Record<string, unknown> | null {
   const row = Array.isArray(data) ? data[0] : data;
@@ -75,7 +94,7 @@ export async function loadSessionBookingRules(client: RulesQueryClient, sessionI
   const experienceId = firstRow(session.data)?.experience_id;
   if (typeof experienceId !== "string" || !experienceId) return null;
 
-  const experience = await client.from("experiences").select("kind, editorial_content").eq("id", experienceId);
+  const experience = await client.from("experiences").select("kind, slug, editorial_content").eq("id", experienceId);
   if (experience.error) {
     if (isMissingKindColumn(experience.error)) return { kind: "REGULAR" };
     throw new Error(`BOOKING_RULES_FAILED: ${experience.error.message}`);
@@ -84,9 +103,10 @@ export async function loadSessionBookingRules(client: RulesQueryClient, sessionI
   if (row?.kind !== "EVENT") return { kind: "REGULAR" };
   // Evento sem conteúdo válido fica com o limite geral; de todo modo, ele não
   // aparece no site e só vende publicado.
+  const visible = await isEventSessionPublic(client, String(row.slug ?? ""), sessionId);
   const editorial = validateEventEditorial(row.editorial_content);
-  if (!editorial.success) return { kind: "EVENT", maxPerOrder: 20, emailReady: false };
-  return { kind: "EVENT", maxPerOrder: editorial.data.event.reservation.maxPerOrder, emailReady: isEventEmailReady(editorial.data.event) };
+  if (!editorial.success) return { kind: "EVENT", maxPerOrder: 20, emailReady: false, visible };
+  return { kind: "EVENT", maxPerOrder: editorial.data.event.reservation.maxPerOrder, emailReady: isEventEmailReady(editorial.data.event), visible };
 }
 
 /** O que a página de reserva mostra de um evento, já pronto para o cliente. */

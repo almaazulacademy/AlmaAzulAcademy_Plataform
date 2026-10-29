@@ -1,5 +1,12 @@
 # Changelog
 
+## Eventos especiais — interruptor de publicação também nas leituras (correção de segurança)
+
+- **Nada muda em produção ao publicar este código**: o interruptor está desligado e nenhum evento está publicado; migrations não aplicadas. Detalhes em [docs/special-events.md](docs/special-events.md#interruptor-da-publicação).
+- **Migration `202610310001`**: `list_public_events` e `list_public_event_sessions` (e, por elas, `get_public_event`) passam a exigir `publication_enabled`; mesmas assinaturas e permissões; leituras regulares intocadas.
+- **Reserva**: `POST /api/reservations` recusa sessão de evento fora do site (`EVENT_NOT_PUBLIC`) mesmo com a venda aberta; `/reservar` reconhece a sessão de evento escondido e não cai na tela regular.
+- **Lista de espera**: inscrição recusada e aviso de vaga não reivindicado com o evento escondido — sem gastar tentativa. A `202610300001` (ainda não aplicada) ganhou esse filtro; as duas migrations são independentes.
+
 ## Eventos especiais — e-mails e saída da lista de espera (etapa 5C-2, desligada)
 
 - **Nada muda em produção ao publicar este código**: `EVENTS_WAITLIST_ENABLED`, `EVENTS_PUBLIC_ENABLED` e `EVENT_BOOKING_OPEN` ausentes; nenhum agendamento. Migration `202610300001` **não aplicada** (aditiva, duas funções novas). Detalhes em [docs/special-events.md](docs/special-events.md#5c-2--e-mails-e-saída-da-lista-do-evento).

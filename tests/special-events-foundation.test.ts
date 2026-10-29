@@ -74,13 +74,10 @@ function updateEvent(event: EventRef, status: string, editorial: unknown = EDITO
 }
 
 /** Publica com o interruptor ligado só durante a publicação. */
+/** Publica com o interruptor ligado — e o deixa ligado: desligado, o evento sai das leituras públicas (202610310001). */
 async function publish(event: EventRef) {
   await setPublication(true);
-  try {
-    await updateEvent(event, "PUBLISHED");
-  } finally {
-    await setPublication(false);
-  }
+  await updateEvent(event, "PUBLISHED");
 }
 
 /** Abre ou fecha a sessão pela RPC de sessão do painel, a de sempre. */
@@ -204,6 +201,7 @@ test("permissões: só ADMIN ou OPERATOR ativo opera eventos; instrutor e descon
 });
 
 test("publicação: bloqueada com o interruptor desligado, por qualquer caminho", async () => {
+  await setPublication(false);
   const event = await createEvent();
   await rejects(updateEvent(event, "PUBLISHED"), /EVENT_PUBLICATION_DISABLED/);
   // O painel atual de experiências também não publica um evento.
@@ -220,9 +218,12 @@ test("publicação: bloqueada com o interruptor desligado, por qualquer caminho"
   assert.equal(await updateEvent(event, "PUBLISHED"), true);
   await setPublication(false);
 
-  // Desligado de novo: o evento já publicado continua editável e publicado.
+  // Desligado de novo: o evento já publicado continua editável e publicado no
+  // banco, mas sai das leituras públicas (202610310001); religado, volta.
   assert.equal(await updateEvent(event, "PUBLISHED"), true);
   assert.equal((await one(`select status from public.experiences where id = $1::uuid`, [event.experienceId])).status, "PUBLISHED");
+  assert.equal((await rows(`select 1 from public.list_public_events() where slug = $1`, [event.slug])).length, 0);
+  await setPublication(true);
   assert.equal((await rows(`select 1 from public.list_public_events() where slug = $1`, [event.slug])).length, 1);
   assert.equal((await rows(`select 1 from public.admin_audit_log where entity_id = $1::uuid and action = 'EVENT_UPDATED'`, [event.experienceId])).length, 2);
 

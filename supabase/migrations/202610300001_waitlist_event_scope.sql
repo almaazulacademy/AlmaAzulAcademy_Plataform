@@ -18,6 +18,9 @@
 --     a lista dos eventos abertas: com a venda fechada, o aviso do evento nem é
 --     reivindicado — não gasta tentativa, não conta envio e continua na fila,
 --     conferido de novo (vaga, turma, abertura, limites) quando a venda abrir.
+--     Do mesmo jeito, aviso de evento com o interruptor de publicação
+--     (`special_event_settings.publication_enabled`) desligado não é
+--     reivindicado: evento escondido não recebe aviso, e nada é consumido.
 --
 -- A lista continua sem reservar nem bloquear vaga: nada aqui escreve em
 -- `reservations` ou `sessions`. Nenhum agendamento é criado.
@@ -82,6 +85,7 @@ begin
     join public.experiences e on e.id = s.experience_id
     where n.kind = 'SPOT_AVAILABLE'
       and e.kind = any(coalesce(p_kinds, array[]::text[]))
+      and (e.kind <> 'EVENT' or coalesce((select ses.publication_enabled from public.special_event_settings ses where ses.singleton), false))
       and (
         n.status = 'QUEUED'
         or (n.status = 'FAILED' and n.attempts < max_attempts and n.next_attempt_at <= now())

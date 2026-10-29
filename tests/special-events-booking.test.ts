@@ -53,7 +53,7 @@ async function essencia() {
   );
   await rows(`update public.special_event_settings set publication_enabled = true`);
   await rows(`update public.experiences set status = 'PUBLISHED' where id = $1::uuid`, [created.experienceId]);
-  await rows(`update public.special_event_settings set publication_enabled = false`);
+  // O interruptor fica ligado: desligado, o evento sai do site e da venda (202610310001).
   await rows(`update public.sessions set status = 'OPEN' where id = $1::uuid`, [created.sessionId]);
   return created.sessionId as string;
 }
@@ -91,7 +91,7 @@ test("interruptor: a venda de eventos nasce fechada e exige a seção pública l
 });
 
 test("regra: evento com venda fechada é recusado; experiência regular nunca é afetada", () => {
-  const event: SessionBookingRules = { kind: "EVENT", maxPerOrder: 6, emailReady: true };
+  const event: SessionBookingRules = { kind: "EVENT", maxPerOrder: 6, emailReady: true, visible: true };
   assert.deepEqual(eventBookingRejection({ ...event, emailReady: false }, 1, true), { status: 409, code: "EVENT_EMAIL_NOT_READY", message: EVENT_BOOKING_CLOSED_MESSAGE }, "sem o e-mail de evento pronto, a venda não abre");
   assert.deepEqual(eventBookingRejection(event, 1, false), { status: 409, code: "EVENT_BOOKING_CLOSED", message: EVENT_BOOKING_CLOSED_MESSAGE });
   assert.deepEqual(eventBookingRejection(event, 7, true), { status: 400, code: "EVENT_ORDER_LIMIT", message: "Cada pedido deste evento aceita até 6 participantes.", field: "quantity" });
@@ -105,7 +105,7 @@ test("regra: evento com venda fechada é recusado; experiência regular nunca é
 
 test("acesso direto: com a venda fechada, nem o id da sessão abre uma reserva de evento", async () => {
   const session = await essencia();
-  assert.deepEqual(await loadSessionBookingRules(rulesClient, session), { kind: "EVENT", maxPerOrder: 6, emailReady: true });
+  assert.deepEqual(await loadSessionBookingRules(rulesClient, session), { kind: "EVENT", maxPerOrder: 6, emailReady: true, visible: true });
   assert.deepEqual(await startReservation(session, 1, false), { rejected: "EVENT_BOOKING_CLOSED" });
   assert.equal((await rows(`select 1 from public.reservations where session_id = $1::uuid`, [session])).length, 0, "nenhuma vaga bloqueada");
 
