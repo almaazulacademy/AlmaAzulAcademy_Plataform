@@ -17,7 +17,7 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 | 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | Na `main` (#42); migration aplicada em produção (28/10), interruptor desligado |
 | 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | Na `main` e em produção (#43, 28/10); sem migration |
 | 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu, atrás de `EVENTS_PUBLIC_ENABLED`; conteúdo operacional do ESSÊNCIA | Concluída: na `main` e em produção (#44, 29/10); desligada; sem migration |
-| 5. Reserva, e-mail, cancelamento e crédito | 5A reservas e pagamentos; 5B e-mail de evento; 5C lista de espera; 5D reembolso pelo WhatsApp; 5E crédito | 5A em PR draft, desligada; demais aguardam autorização |
+| 5. Reserva, e-mail, cancelamento e crédito | 5A reservas e pagamentos; 5B e-mail de evento; 5C lista de espera; 5D reembolso pelo WhatsApp; 5E crédito | 5A na `main` (#46), desligada; 5B em PR draft; demais aguardam autorização |
 | 6. Painel | `/admin/eventos` com formulário estruturado | — |
 | 7. Relatórios | Painéis separados por tipo | — |
 | 8. Lançamento do ESSÊNCIA | Cadastro, publicação e interruptor ligado | — |
@@ -261,9 +261,37 @@ Só código; nenhuma migration. O evento usa o fluxo de sempre — `/reservar/[s
 
 Experiência regular: textos, quantidade e links de sempre.
 
-**Ainda não cobre (próximas etapas):** a consulta por CPF + código (`/acompanhar-reserva`) ainda mostra "turma" numa pré-reserva de evento retomada (fica para a 5D, que mexe nessa tela); e-mails de evento (5B); lista de espera do evento (5C).
+**Ainda não cobre (próximas etapas):** a consulta por CPF + código (`/acompanhar-reserva`) ainda mostra "turma" numa pré-reserva de evento retomada (fica para a 5D, que mexe nessa tela); lista de espera do evento (5C).
 
 Testes: `tests/special-events-booking.test.ts`.
+
+## Fase 5B — e-mail do evento
+
+Só código; nenhuma migration, nenhum e-mail novo na fila. A reserva de evento usa a mesma fila, reivindicação (idempotência), tentativas e reconciliação de sempre; só o **conteúdo** muda.
+
+**Como o envio sabe que é evento.** Antes de montar a mensagem, os quatro envios — confirmação, lembrete do QR (individual e em lote) e reagendamento — passam o payload por `withEventEmailContext` (`lib/reservations/event-email-context.ts`), que lê `reservations.experience_id` → `experiences.kind` e `editorial_content` com a service role. As RPCs de payload não mudaram. Sem conseguir ler, lança `EVENT_CONTEXT_UNAVAILABLE` e o e-mail fica pendente para nova tentativa — nunca sai o genérico. Banco sem a coluna `kind`: regular, como antes.
+
+**Conteúdo vindo do evento** (`lib/reservations/event-email.ts`): assunto "Ingresso confirmado — {evento} · {código}", nome completo, data, início, tolerância de chegada (só quando `event.arrival` combina com o horário da sessão), encerramento previsto (início + duração), participantes, ingresso único, QR Code de check-in, local e Google Maps, programação, o que levar (roupas confortáveis, água, protetor solar, materiais de Superioga fornecidos), segurança (colete obrigatório), lanche, clima e a política de cancelamento do evento com o prazo (`event.cancellation`) — crédito ou reembolso. Nunca a política genérica "até 1 dia antes", a tolerância de 20 minutos nem a lista de remada. Horários sempre em `America/Sao_Paulo`.
+
+| E-mail | Evento | Regular |
+| --- | --- | --- |
+| Confirmação | "Ingresso confirmado", conteúdo completo | igual |
+| Lembrete do QR | "Seu ingresso está pronto", início/tolerância e QR | igual |
+| Reagendamento | "Nova data confirmada", pagamento válido, programação; sem antecipar a política | igual |
+
+**Conteúdo incompleto não vende e não envia.** `lib/events/email-readiness.ts` exige programação, `event.arrival`, `event.cancellation` e os textos confirmados `o-que-levar`, `seguranca`, `alimentacao` e `cancelamento`. Faltando algo: `POST /api/reservations` recusa a reserva do evento (`409 EVENT_EMAIL_NOT_READY`) mesmo com a venda aberta; um envio já na fila fica pendente (`EVENT_EMAIL_NOT_READY`), o lembrete é pulado e o reagendamento falha para nova tentativa.
+
+**Prévia e demonstração** (`scripts/email/event-preview.ts`, só fixture, sem Supabase):
+
+```bash
+pnpm email:preview:evento
+```
+
+gera `.preview/evento-essencia-{confirmacao,lembrete-qr,reagendamento}.{html,txt}` e não envia nada. **Somente com autorização**, `pnpm email:preview:evento --enviar --confirmo` (com `RESEND_API_KEY` e `EMAIL_FROM` no ambiente) envia os três modelos **apenas** para o e-mail oficial da equipe, com "[DEMONSTRAÇÃO]" no assunto e chave de idempotência fixa.
+
+**Antes de abrir a venda:** gerar a prévia e revisar; enviar a demonstração autorizada e conferir no Gmail (celular e computador); cadastrar o ESSÊNCIA com o `editorial_content` revisado; só então, com autorização, ligar as variáveis.
+
+Testes: `tests/special-events-email.test.ts`.
 
 ## Aplicação segura (quando autorizada)
 

@@ -3,6 +3,7 @@ import { sanitizeEmailErrorCode } from "@/lib/email/email-provider";
 import { logEmail } from "@/lib/email/observability";
 import { runQrBulk, type QrBulkReport } from "@/lib/checkin/qr-bulk";
 import { buildCheckinReminderEmail, parseReservationConfirmationData } from "@/lib/reservations/confirmation-email";
+import { withEventEmailContext, type EventEmailQueryClient } from "@/lib/reservations/event-email-context";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
 /** Máximo de reservas por chamada: mantém cada requisição curta. O painel repete até acabar. */
@@ -52,7 +53,7 @@ export async function sendQrBulkChunk(actorUserId: string, exclude: string[]): P
     },
     send: async (payload) => {
       // Mesmo template e mesmo token do botão "Reenviar QR Code".
-      const data = parseReservationConfirmationData(payload);
+      const data = parseReservationConfirmationData(await withEventEmailContext(admin as unknown as EventEmailQueryClient, payload));
       const message = data ? buildCheckinReminderEmail(data) : null;
       if (!message) throw new Error("PAYLOAD_EMPTY");
       await provider.send(message);

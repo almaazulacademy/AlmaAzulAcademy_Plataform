@@ -13,6 +13,7 @@
  * confirmada; o envio fica na fila e é retentado depois.
  */
 
+import { withEventEmailContext, type EventEmailQueryClient } from "@/lib/reservations/event-email-context";
 import { getEmailProvider } from "@/lib/email";
 import { sanitizeEmailErrorCode } from "@/lib/email/email-provider";
 import { logEmail } from "@/lib/email/observability";
@@ -46,6 +47,7 @@ function runtime(): RescheduleEmailRuntime | null {
 
   return {
     queue: createRescheduleEmailQueue({ rpc: (name, args) => admin.rpc(name, args) }),
+    enrich: (payload) => withEventEmailContext(admin as unknown as EventEmailQueryClient, payload),
     provider,
     log: logEmail,
   };

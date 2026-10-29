@@ -187,6 +187,11 @@ export type RescheduleEmailQueue = {
 
 export type RescheduleEmailRuntime = {
   queue: RescheduleEmailQueue;
+  /**
+   * Completa o payload com o conteúdo do evento especial
+   * (`withEventEmailContext`). Ausente nos testes antigos: payload de sempre.
+   */
+  enrich?: (payload: unknown) => Promise<unknown>;
   provider: { name: string; send(message: EmailMessage): Promise<void> };
   /** Espera entre as tentativas em segundo plano. Os testes trocam por uma que não dorme. */
   wait?: (milliseconds: number) => Promise<void>;
@@ -541,10 +546,21 @@ async function deliverClaimed(
   if (!message) {
     // Reserva sem e-mail utilizável: fica visível como erro até alguém corrigir
     // o cadastro e pedir o reenvio.
-    const data = parseReservationConfirmationData(claim.payload);
+    let payload: unknown = claim.payload;
+    try {
+      payload = runtime.enrich ? await runtime.enrich(claim.payload) : claim.payload;
+    } catch {
+      return failed("EVENT_CONTEXT_UNAVAILABLE", "REJECTED", true);
+    }
+    const data = parseReservationConfirmationData(payload);
     if (!data) return failed("PAYLOAD_EMPTY", "REJECTED", false);
 
-    message = buildReservationRescheduleEmail(data);
+    try {
+      message = buildReservationRescheduleEmail(data);
+    } catch {
+      // Ingresso de evento sem conteúdo de e-mail: nunca o e-mail genérico.
+      return failed("EVENT_EMAIL_NOT_READY", "REJECTED", true);
+    }
     const frozen = await runtime.queue.freeze(claim, message).catch(() => false);
     // Sem a mensagem gravada não há como repetir este envio com segurança.
     if (!frozen) return failed("FREEZE_FAILED", "REJECTED", true);

@@ -29,6 +29,9 @@ import { checkinQrImageUrl, checkinUrl, isCheckinToken } from "../checkin/token.
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE, INSTAGRAM_LINK, WHATSAPP_NUMBER } from "../contact.ts";
 import { formatSessionDate, formatSessionTime } from "../sessions/date-time.ts";
 import { SITE_NAME, SITE_URL } from "../site.ts";
+import { validateEventEditorial, type EventContent } from "../events/editorial.ts";
+import { isEventEmailReady } from "../events/email-readiness.ts";
+import { buildEventCheckinReminderEmail, buildEventConfirmationEmail, buildEventRescheduleEmail } from "./event-email.ts";
 
 /**
  * Endereço do Lago Norte, a base de origem.
@@ -114,7 +117,20 @@ export type ReservationConfirmationData = {
    * devolve a base; nesse caso toda reserva é do Lago Norte.
    */
   location?: BaseLocation;
+  /**
+   * Evento especial: o conteúdo do e-mail de evento, já validado. Ausente =
+   * experiência regular, e os e-mails são exatamente os de sempre.
+   */
+  event?: EventContent;
+  /**
+   * A reserva é de um evento, mas o conteúdo não serve para o e-mail. Nada é
+   * enviado — nem o e-mail genérico de remada: o envio fica pendente.
+   */
+  eventContentInvalid?: boolean;
 };
+
+/** Reserva de evento sem conteúdo de e-mail utilizável: o envio não sai. */
+export const EVENT_EMAIL_NOT_READY = "EVENT_EMAIL_NOT_READY";
 
 /** Seção do QR de check-in. Constantes exportadas para o teste ler o mesmo texto. */
 export const CHECKIN_TITLE = "Seu QR Code de check-in";
@@ -195,7 +211,7 @@ function locationLabel(data: ReservationConfirmationData) {
 }
 
 /** Local de encontro em texto puro: ponto de encontro, endereço e link do mapa. */
-function locationText(data: ReservationConfirmationData) {
+export function locationText(data: ReservationConfirmationData) {
   const location = locationOf(data);
   const address = locationAddressLine(location);
   return [
@@ -330,7 +346,7 @@ function mapsButton(url: string) {
 }
 
 /** Cartão do local de encontro, montado a partir da base da reserva. */
-function locationCard(data: ReservationConfirmationData) {
+export function locationCard(data: ReservationConfirmationData) {
   const location = locationOf(data);
   const address = locationAddressLine(location);
   const headline = usesOriginTemplate(data) ? locationHeadline(location) : `${locationHeadline(location)}.`;
@@ -360,7 +376,7 @@ export function paragraph(text: string) {
 }
 
 /** Lista com marcador em célula própria: é o que sobrevive ao Outlook. */
-function bulletList(items: readonly string[]) {
+export function bulletList(items: readonly string[]) {
   const rows = items
     .map((item, index) => `
                       <tr>
@@ -519,6 +535,8 @@ ${closing}
 }
 
 export function buildReservationConfirmationEmail(data: ReservationConfirmationData): ConfirmationEmail {
+  if (data.eventContentInvalid) throw new Error(EVENT_EMAIL_NOT_READY);
+  if (data.event) return buildEventConfirmationEmail(data, data.event);
   return {
     to: data.email,
     subject: reservationConfirmationSubject(data.publicCode, locationOf(data)),
@@ -539,6 +557,8 @@ export function checkinReminderSubject(experienceTitle: string) {
  */
 export function buildCheckinReminderEmail(data: ReservationConfirmationData): ConfirmationEmail | null {
   if (!data.checkinToken) return null;
+  if (data.eventContentInvalid) return null;
+  if (data.event) return buildEventCheckinReminderEmail(data, data.event);
   const greeting = `Olá, ${firstName(data.fullName)}!`;
   const intro = "Passando para confirmar sua experiência na Alma Azul Academy.";
   const summary: Array<[string, string]> = [
@@ -653,6 +673,8 @@ function rescheduleRows(data: ReservationConfirmationData): Array<[string, strin
  * reserva reagendada é decisão da operação, e este e-mail não a antecipa.
  */
 export function buildReservationRescheduleEmail(data: ReservationConfirmationData): ConfirmationEmail {
+  if (data.eventContentInvalid) throw new Error(EVENT_EMAIL_NOT_READY);
+  if (data.event) return buildEventRescheduleEmail(data, data.event);
   const subject = rescheduleConfirmationSubject(data.publicCode);
   const greeting = `Olá, ${firstName(data.fullName)}!`;
   const rows = rescheduleRows(data);
@@ -779,6 +801,14 @@ export function parseReservationConfirmationData(value: unknown): ReservationCon
     // lançamento da segunda base, quando toda reserva é do Lago Norte.
     location: parseBaseLocation(row) ?? LAGO_NORTE_LOCATION,
   };
+
+  // Evento especial (`withEventEmailContext`): o e-mail sai do conteúdo do
+  // evento, e só se ele tiver tudo o que o e-mail precisa.
+  if (row.experienceKind === "EVENT") {
+    const editorial = validateEventEditorial(row.eventEditorial);
+    if (editorial.success && isEventEmailReady(editorial.data.event)) data.event = editorial.data.event;
+    else data.eventContentInvalid = true;
+  }
 
   if (!data.reservationId || !data.publicCode || !data.fullName || !data.startsAt) return null;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return null;
