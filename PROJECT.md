@@ -113,6 +113,7 @@ Experiências diferentes devem compartilhar contratos e componentes. Adicionar u
 | InfinitePay | Camada implementada; credenciais e operação em produção não confirmadas |
 | Acompanhamento por CPF + código | Implementado no código; depende do banco configurado |
 | Painel administrativo | Implementado no código; exige migration, Supabase Auth e administrador ativo |
+| Eventos especiais | Fases 2 a 4 em produção (banco, separação no site e páginas públicas), publicação desativada; fase 5 (reserva, e-mail, cancelamento e crédito) pendente. Ver [docs/special-events.md](docs/special-events.md) |
 
 ## Visão de longo prazo
 
