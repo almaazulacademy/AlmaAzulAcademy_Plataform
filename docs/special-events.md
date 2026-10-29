@@ -6,7 +6,7 @@
 
 ## O que é
 
-Eventos especiais são experiências realizadas em datas específicas, muitas vezes em parceria com outras marcas, com programação, preço e capacidade próprios. O primeiro é o **ESSÊNCIA — Corpo, Mente e Natureza** (07/11/2026, 05h30 às 09h, Cápsula Bar / Base Concha Acústica, 12 vagas, R$ 150 por pessoa, ingresso único).
+Eventos especiais são experiências realizadas em datas específicas, muitas vezes em parceria com outras marcas, com programação, preço e capacidade próprios. O primeiro é o **ESSÊNCIA — Corpo, Mente e Natureza** (07/11/2026, 05h30 às 09h, Cápsula Bar / Base Concha Acústica, 24 vagas, R$ 150 por pessoa, até 6 por pedido, ingresso único).
 
 **Não existe um segundo sistema de reservas.** Um evento é uma linha de `experiences` com `kind = 'EVENT'` e uma sessão por edição. Vagas, pré-reserva, pagamento pela InfinitePay, confirmação, e-mail, planilha, check-in, Stand-by e lista de espera são os de sempre.
 
@@ -62,7 +62,7 @@ O painel e o autoatendimento traduzem a recusa (`lib/admin/mutation-errors.ts`, 
 
 ### Capacidade
 
-A de sempre: `create_pre_reservation` trava a sessão (`FOR UPDATE`) e soma confirmadas e pré-reservas válidas antes de aceitar. Para o ESSÊNCIA, a sessão tem `capacity = 12` e `price_cents = 15000`: no máximo 12 participantes e R$ 1.800 de receita bruta. O teste de concorrência prova, com 16 conexões reais comprando ao mesmo tempo, que exatamente 12 entram.
+A de sempre: `create_pre_reservation` trava a sessão (`FOR UPDATE`) e soma confirmadas e pré-reservas válidas antes de aceitar. Para o ESSÊNCIA, a sessão será cadastrada com `capacity = 24` e `price_cents = 15000`: no máximo 24 participantes e R$ 3.600 de receita bruta. As vagas exibidas vêm sempre de `sessions.capacity`, nunca de número fixo no site; `ESSENCIA_CAPACITY` (24) existe só para a prévia e os testes. O teste de concorrência prova, com 16 conexões reais comprando ao mesmo tempo, que exatamente 12 entram numa sessão genérica de 12 vagas e 24 na do ESSÊNCIA. (Capacidade decidida em 29/10/2026, antes 12; o banco aceita de 1 a 500.)
 
 ### Leitura pública
 
@@ -211,6 +211,8 @@ Textos definitivos aprovados em 29/10/2026, em `info.items` da fixture: horário
 | Regra | Valor guardado | Onde aparece |
 | --- | --- | --- |
 | Início e tolerância | `arrival: { startTime: "05:30", toleranceUntil: "05:50" }` | Texto "Horário e chegada" e a linha "Chegada · tolerância até 05H50" no bloco de reserva |
+| Tapete do Superioga | Texto "o-que-levar": cada participante leva o próprio tapete; a organização não disponibiliza (ajuste de 29/10/2026, antes "materiais fornecidos pela equipe") | Página do evento, e-mail de confirmação (seção "O que levar") e prévia |
+| Aviso no resumo da reserva | `reservation.notice`: "Traga seu próprio tapete para a prática de Superioga. A organização não disponibilizará tapetes." (opcional, até 200 caracteres) | Resumo do ingresso, antes do pagamento, depois de "Importante:". Evento sem `notice` não mostra aviso; o resumo das experiências regulares não muda |
 | Prazo de cancelamento | `cancellation.deadline = "2026-11-05T12:00:00-03:00"` (`= 2026-11-05T15:00:00Z`), `timeZone: "America/Sao_Paulo"` | Texto "Política de cancelamento" e, junto ao botão de reserva, "Cancelamento até 05/11/2026 às 12h00 (horário de Brasília): crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe.", com link para a política completa |
 
 O validador recusa prazo sem deslocamento, fuso diferente de `America/Sao_Paulo` e texto que diga outro dia ou hora que a regra — mudar uma sem a outra não passa. `arrivalMatchesSession` confere a chegada com a sessão cadastrada (início igual, tolerância entre o início e o fim).
@@ -271,7 +273,7 @@ Só código; nenhuma migration, nenhum e-mail novo na fila. A reserva de evento 
 
 **Como o envio sabe que é evento.** Antes de montar a mensagem, os quatro envios — confirmação, lembrete do QR (individual e em lote) e reagendamento — passam o payload por `withEventEmailContext` (`lib/reservations/event-email-context.ts`), que lê `reservations.experience_id` → `experiences.kind` e `editorial_content` com a service role. As RPCs de payload não mudaram. Sem conseguir ler, lança `EVENT_CONTEXT_UNAVAILABLE` e o e-mail fica pendente para nova tentativa — nunca sai o genérico. Banco sem a coluna `kind`: regular, como antes.
 
-**Conteúdo vindo do evento** (`lib/reservations/event-email.ts`): assunto "Ingresso confirmado — {evento} · {código}", nome completo, data, início, tolerância de chegada (só quando `event.arrival` combina com o horário da sessão), encerramento previsto (início + duração), participantes, ingresso único, QR Code de check-in, local e Google Maps, programação, o que levar (roupas confortáveis, água, protetor solar, materiais de Superioga fornecidos), segurança (colete obrigatório), lanche, clima e a política de cancelamento do evento com o prazo (`event.cancellation`) — crédito ou reembolso. Nunca a política genérica "até 1 dia antes", a tolerância de 20 minutos nem a lista de remada. Horários sempre em `America/Sao_Paulo`.
+**Conteúdo vindo do evento** (`lib/reservations/event-email.ts`): assunto "Ingresso confirmado — {evento} · {código}", nome completo, data, início, tolerância de chegada (só quando `event.arrival` combina com o horário da sessão), encerramento previsto (início + duração), participantes, ingresso único, QR Code de check-in, local e Google Maps, programação, o que levar (roupas confortáveis, água, protetor solar, tapete próprio para o Superioga), segurança (colete obrigatório), lanche, clima e a política de cancelamento do evento com o prazo (`event.cancellation`) — crédito ou reembolso. Nunca a política genérica "até 1 dia antes", a tolerância de 20 minutos nem a lista de remada. Horários sempre em `America/Sao_Paulo`.
 
 | E-mail | Evento | Regular |
 | --- | --- | --- |

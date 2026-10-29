@@ -166,7 +166,7 @@ export const ESSENCIA_EDITORIAL = {
         {
           id: "o-que-levar",
           title: "O que levar",
-          body: "Venha com roupas confortáveis, adequadas para atividades físicas. Recomendamos trazer garrafa de água, protetor solar e seus itens pessoais.\n\nOs materiais necessários para a prática de Superioga serão fornecidos pela equipe.",
+          body: "Venha com roupas confortáveis, adequadas para atividades físicas. Recomendamos trazer garrafa de água, protetor solar e seus itens pessoais.\n\nPara participar da prática de Superioga, traga seu próprio tapete. A organização não disponibilizará tapetes para essa atividade.",
         },
         {
           id: "experiencia",
@@ -209,6 +209,7 @@ export const ESSENCIA_EDITORIAL = {
       title: "Garanta a sua vaga",
       ctaLabel: "Garantir minha vaga",
       maxPerOrder: 6,
+      notice: "Traga seu próprio tapete para a prática de Superioga. A organização não disponibilizará tapetes.",
       image: {
         src: "/images/eventos/essencia/capsula-pier-amanhecer.jpg",
         alt: "Píer do Cápsula Bar avançando sobre o Lago Paranoá ao amanhecer",
@@ -226,13 +227,19 @@ export const CONCHA_ACUSTICA_LOCATION: BaseLocation = {
   mapsUrl: "https://maps.app.goo.gl/ueSCiLvHAggrzuAX7",
 };
 
+/**
+ * Vagas previstas para o cadastro do ESSÊNCIA. Só a prévia e os testes usam este
+ * número: no site, as vagas vêm sempre de `sessions.capacity` no banco.
+ */
+export const ESSENCIA_CAPACITY = 24;
+
 /** 07/11/2026, 05h30 em Brasília (UTC−3). */
 export const ESSENCIA_STARTS_AT = "2026-11-07T08:30:00.000Z";
 
 export const DEMO_AVAILABILITIES = ["AVAILABLE", "SOLD_OUT", "CLOSED", "ENDED"] as const satisfies readonly EventAvailability[];
 
 /** O ESSÊNCIA como a página o recebe, em qualquer situação de vagas, para a prévia. */
-export function essenciaDemoEvent(availability: EventAvailability = "AVAILABLE", remainingSpots = 12): PublicEvent {
+export function essenciaDemoEvent(availability: EventAvailability = "AVAILABLE", remainingSpots = ESSENCIA_CAPACITY): PublicEvent {
   const editorial = validateEventEditorial(ESSENCIA_EDITORIAL);
   if (!editorial.success) throw new Error(`Fixture do ESSÊNCIA inválida: ${editorial.errors.join("; ")}`);
   return {

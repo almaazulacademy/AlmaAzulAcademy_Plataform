@@ -99,6 +99,12 @@ function EventSummary({ session, quantity, event }: { session: BookingSession; q
         </div>
       ) : null}
 
+      {event.notice ? (
+        <p className="mt-7 rounded-2xl border border-sand/40 bg-sand/10 px-4 py-3 text-sm leading-6 text-white/85">
+          <strong className="font-semibold text-sand">Importante:</strong> {event.notice}
+        </p>
+      ) : null}
+
       <div className="mt-7 space-y-4 border-t border-white/15 pt-7 text-sm text-white/75">
         <p className="flex items-center gap-3">
           <Ticket aria-hidden="true" className="size-4 shrink-0 text-sand" />

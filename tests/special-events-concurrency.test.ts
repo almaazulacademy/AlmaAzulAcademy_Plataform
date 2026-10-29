@@ -1,11 +1,11 @@
 /**
- * Eventos especiais — fase 2: as 12 vagas sob disputa, com sessões
- * independentes do Postgres.
+ * Eventos especiais — vagas sob disputa, com sessões independentes do Postgres:
+ * um evento genérico de 12 vagas (fase 2) e o ESSÊNCIA com as suas 24.
  *
  * O evento não tem motor próprio: a capacidade é a de sempre, decidida por
  * `create_pre_reservation` com `FOR UPDATE` na sessão. Aqui cada conexão é uma
  * sessão de verdade, e os testes provam que várias pessoas comprando ao mesmo
- * tempo nunca passam de 12 participantes, e que quem chega durante uma compra
+ * tempo nunca passam da capacidade da sessão, e que quem chega durante uma compra
  * em curso espera e decide com a ocupação já atualizada.
  *
  * Precisa de `TEST_DATABASE_URL` apontando para um Postgres local e
@@ -19,6 +19,7 @@ import test, { after, beforeEach } from "node:test";
 
 import type pg from "pg";
 
+import { ESSENCIA_CAPACITY } from "../lib/events/fixtures/essencia.ts";
 import { realDatabase, realDatabaseUrl } from "./support/real-database.ts";
 import { ADMIN, rescheduleFixtures, type Row } from "./support/reschedule-email-fixtures.ts";
 
@@ -46,7 +47,7 @@ if (!database) {
 
   let sequence = 0;
 
-  /** Evento publicado com a sessão de 12 vagas aberta: o ESSÊNCIA, à venda. */
+  /** Evento publicado com a sessão aberta (12 vagas, se nada for dito), à venda. */
   async function onSaleEvent(capacity = 12) {
     sequence += 1;
     const created = await call(
@@ -109,6 +110,27 @@ if (!database) {
     // Toda recusa foi justa: o grupo recusado não cabia no que sobrou.
     const smallestRefused = Math.min(...outcomes.map((item, index) => (item.ok ? Infinity : sizes[index])));
     if (Number.isFinite(smallestRefused)) assert.ok(12 - accepted < smallestRefused);
+  });
+
+  test("ESSÊNCIA, 24 vagas: 16 pessoas compram 2 ao mesmo tempo — exatamente 12 pedidos (24 vagas) entram", async () => {
+    const session = await onSaleEvent(ESSENCIA_CAPACITY);
+    const outcomes = await Promise.all(pool.map((client) => preReserveOn(client, session, 2)));
+    assert.equal(outcomes.filter((item) => item.ok).length, 12);
+    for (const item of outcomes) if (!item.ok) assert.match(item.error, /INSUFFICIENT_SPOTS/);
+    assert.equal(await occupied(session), 24);
+    assert.equal(Number((await one(`select public.available_spots($1::uuid) as n`, [session])).n), 0);
+  });
+
+  test("ESSÊNCIA, 24 vagas: pedidos de até 6 ao mesmo tempo nunca passam de 24", async () => {
+    const session = await onSaleEvent(ESSENCIA_CAPACITY);
+    const sizes = [6, 6, 6, 5, 4, 3, 2, 1, 1];
+    const outcomes = await Promise.all(sizes.map((size, index) => preReserveOn(pool[index], session, size)));
+    const accepted = outcomes.reduce((sum, item) => sum + (item.ok ? item.quantity : 0), 0);
+    assert.ok(accepted <= 24, `aceitou ${accepted}`);
+    for (const item of outcomes) if (!item.ok) assert.match(item.error, /INSUFFICIENT_SPOTS/);
+    assert.equal(await occupied(session), accepted);
+    const smallestRefused = Math.min(...outcomes.map((item, index) => (item.ok ? Infinity : sizes[index])));
+    if (Number.isFinite(smallestRefused)) assert.ok(24 - accepted < smallestRefused);
   });
 
   test("compra em curso: quem chega espera a trava da sessão e decide com a ocupação atualizada", async () => {
