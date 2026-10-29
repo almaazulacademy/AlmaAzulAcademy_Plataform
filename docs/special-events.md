@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md) · [Lista de espera](waitlist.md)
 
-**Estado (29/10/2026): fases 2, 3 e 4 concluídas, na `main` e em produção, com a publicação desativada.** PR #42 (squash `8aa7677`), PR #43 (squash `34dec78`) e PR #44 (squash `56dbc47`, 29/10). Migration `202610280001_special_events_foundation.sql` aplicada, com preflight e postcheck sem falhas. A interface pública (`/eventos`, `/eventos/[slug]`) e o conteúdo operacional do ESSÊNCIA estão aprovados, mas **desligados**: `EVENTS_PUBLIC_ENABLED` ausente (as rotas respondem 404) e `special_event_settings.publication_enabled` desligado. Nenhum evento cadastrado nem publicado, nenhuma reserva de evento. **Próxima etapa: fase 5**, que depende de autorização.
+**Estado (30/10/2026): fases 2, 3 e 4, 5A, 5B, 5C-1, 5C-2 e a correção do interruptor na `main` e em produção, com tudo desligado.** PRs #42–#51. Migrations aplicadas em produção, todas com preflight e postcheck sem falhas nem pontos de atenção: `202610280001_special_events_foundation.sql` (28/10), `202610310001_special_events_publication_switch.sql` (29/10: leituras públicas com o interruptor — 3 de 3, assinatura das outras 177 funções e contagens idênticas antes e depois) e `202610300001_waitlist_event_scope.sql` (30/10: duas funções novas só para a service role — 2 de 2, assinatura das outras 179 funções e contagens idênticas, nenhum agendamento novo). `special_event_settings.publication_enabled` **desligado**; **nenhum evento cadastrado**; `EVENTS_PUBLIC_ENABLED`, `EVENT_BOOKING_OPEN` e `EVENTS_WAITLIST_ENABLED` ausentes (as rotas de evento respondem 404); **nenhum agendamento da lista de espera ativo** (detecção desligada). Próximas etapas, cada uma com autorização: cadastro do ESSÊNCIA em estado fechado, abertura e a 5C-3.
 
 ## O que é
 
@@ -17,7 +17,7 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 | 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | Na `main` (#42); migration aplicada em produção (28/10), interruptor desligado |
 | 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | Na `main` e em produção (#43, 28/10); sem migration |
 | 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu, atrás de `EVENTS_PUBLIC_ENABLED`; conteúdo operacional do ESSÊNCIA | Concluída: na `main` e em produção (#44, 29/10); desligada; sem migration |
-| 5. Reserva, e-mail, cancelamento e crédito | 5A reservas e pagamentos; 5B e-mail de evento; 5C lista de espera; 5D reembolso pelo WhatsApp; 5E crédito | 5A (#46), 5B (#47) e o ajuste de 24 vagas (#48) na `main`, desligados; 5C-1 em PR draft; demais aguardam autorização |
+| 5. Reserva, e-mail, cancelamento e crédito | 5A reservas e pagamentos; 5B e-mail de evento; 5C lista de espera; 5D reembolso pelo WhatsApp; 5E crédito | 5A (#46), 5B (#47), 24 vagas (#48), 5C-1 (#49), 5C-2 (#50) e interruptor (#51) na `main`, desligados; migrations da 5C aplicadas; 5C-3, 5D e 5E aguardam autorização |
 | 6. Painel | `/admin/eventos` com formulário estruturado | — |
 | 7. Relatórios | Painéis separados por tipo | — |
 | 8. Lançamento do ESSÊNCIA | Cadastro, publicação e interruptor ligado | — |
@@ -56,7 +56,7 @@ update public.special_event_settings set publication_enabled = true, updated_at 
 
 Religado, volta só o que continua elegível: evento em rascunho continua fora, sessão fechada continua fechada, e a venda e a lista seguem dependendo das variáveis.
 
-**Ordem das migrations (ainda não aplicadas).** `202610300001_waitlist_event_scope.sql` (lista de espera por tipo, já com o filtro do interruptor na reivindicação dos avisos — editada antes de ser aplicada, para nenhuma migration posterior recriar função que ainda não existe em produção) e `202610310001_special_events_publication_switch.sql` (leituras públicas) são **independentes**: cada uma depende só da fundação `202610280001`, já aplicada, e as duas podem ser aplicadas em qualquer ordem (teste aplica nas duas). Ordem recomendada:
+**Ordem das migrations (aplicadas em 29–30/10/2026, nesta ordem, com preflight e postcheck OK).** `202610300001_waitlist_event_scope.sql` (lista de espera por tipo, já com o filtro do interruptor na reivindicação dos avisos — editada antes de ser aplicada, para nenhuma migration posterior recriar função que ainda não existe em produção) e `202610310001_special_events_publication_switch.sql` (leituras públicas) são **independentes**: cada uma depende só da fundação `202610280001`, já aplicada, e as duas podem ser aplicadas em qualquer ordem (teste aplica nas duas). Ordem recomendada:
 
 1. `special_events_publication_switch_preflight.sql` → `EVENTOS_INTERRUPTOR_PREFLIGHT_OK | OK`; `202610310001` (com `begin;` + `set local lock_timeout = '5s';` … `commit;`); `..._postcheck.sql` → `EVENTOS_INTERRUPTOR_POSTCHECK_OK | OK`, mesmas assinatura e contagens.
 2. `waitlist_event_scope_preflight.sql` → `202610300001` → `waitlist_event_scope_postcheck.sql`.
@@ -326,7 +326,7 @@ Não há segunda lista. O evento usa as tabelas, funções, fila, limites, audit
 | Etapa | O que entrega | Estado |
 | --- | --- | --- |
 | 5C-1 | Interface pública, `EVENTS_WAITLIST_ENABLED` e escopo no servidor | Na `main` (#49), desligada |
-| 5C-2 | Confirmação e aviso de vaga com textos de evento; link para a página do evento; aviso só com venda aberta; página de saída; trava da 5C-1 retirada | PR draft; migration `202610300001` não aplicada |
+| 5C-2 | Confirmação e aviso de vaga com textos de evento; link para a página do evento; aviso só com venda aberta; página de saída; trava da 5C-1 retirada | Na `main` (#50), desligada; migration `202610300001` aplicada em 30/10 |
 | 5C-3 | Agendador (detecção + envio), monitoramento, ativação e rollback | Aguarda autorização |
 
 ### 5C-1 — inscrição com escopo próprio
@@ -373,7 +373,7 @@ Mesma fila, mesma reivindicação exclusiva, mesma mensagem congelada antes do e
 
 **Página de saída** (`/lista-de-espera#t=…`): a visão do link passa a vir de `waitlist_cancel_overview_with_kind`; para evento, "lista de espera deste evento", "participantes", "Nenhum ingresso ou pagamento é afetado" e "Voltar para o evento". Regular, os textos de sempre.
 
-**Migration `202610300001_waitlist_event_scope.sql` (não aplicada).** Aditiva: duas funções novas, só para a service role; nenhuma função existente muda (teste compara o corpo de todas antes e depois), nada escreve em tabela, nenhum agendamento.
+**Migration `202610300001_waitlist_event_scope.sql` (aplicada em produção em 30/10/2026; postcheck OK).** Aditiva: duas funções novas, só para a service role; nenhuma função existente muda (teste compara o corpo de todas antes e depois), nada escreve em tabela, nenhum agendamento.
 
 | Função | Faz |
 | --- | --- |
@@ -388,9 +388,9 @@ Scripts: `supabase/diagnostics/waitlist_event_scope_preflight.sql` (`WAITLIST_EV
 
 ### Ativação da lista do evento (cada passo com autorização)
 
-1. Merge e deploy da 5C-2: nada muda (variáveis ausentes).
-2. Correção do interruptor de publicação (PR próprio, ver "Interruptor da publicação") — obrigatória antes de abrir o ESSÊNCIA.
-3. Preflight → migration `202610300001` (com `begin;` + `set local lock_timeout = '5s';` … `commit;`) → postcheck.
+1. ~~Merge e deploy da 5C-2~~ — feito (#50).
+2. ~~Correção do interruptor de publicação~~ — feita (#51) e migration `202610310001` aplicada (29/10).
+3. ~~Preflight → migration `202610300001` → postcheck~~ — aplicada (30/10).
 4. Cadastro do ESSÊNCIA e abertura da venda (`EVENTS_PUBLIC_ENABLED`, `EVENT_BOOKING_OPEN`), já autorizados à parte.
 5. `EVENTS_WAITLIST_ENABLED=true` só em Production + deploy: botão e inscrição no evento esgotado, confirmação por e-mail.
 6. Avisos de vaga automáticos: agendador e escopo do envio, na 5C-3.
