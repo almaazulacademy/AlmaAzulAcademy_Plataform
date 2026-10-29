@@ -33,6 +33,8 @@ import {
 } from "@/lib/reservations/confirmation-email";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
+import { withEventEmailContext, type EventEmailQueryClient } from "@/lib/reservations/event-email-context";
+
 type PendingJob = { id: string; reservation_id: string; attempts: number };
 
 /** Nome da integração na fila `integration_sync_jobs`. */
@@ -84,7 +86,8 @@ async function deliver(
     load: async () => {
       const payload = await admin.rpc("reservation_confirmation_email", { p_reservation_id: reservationId });
       if (payload.error) throw new Error("PAYLOAD_UNAVAILABLE");
-      return payload.data;
+      // Ingresso de evento: o e-mail sai do conteúdo do evento.
+      return withEventEmailContext(admin as unknown as EventEmailQueryClient, payload.data);
     },
     send: (message) => provider.send(message),
     complete: async (jobId) => {
@@ -268,7 +271,7 @@ export async function sendCheckinReminderEmail(actorUserId: string, reservationI
     load: async () => {
       const payload = await admin.rpc("admin_reservation_qr_email_payload", { p_actor_id: actorUserId, p_reservation_id: reservationId });
       if (payload.error) throw new Error(payload.error.message);
-      return payload.data;
+      return withEventEmailContext(admin as unknown as EventEmailQueryClient, payload.data);
     },
     build: (payload) => {
       const data = parseReservationConfirmationData(payload);

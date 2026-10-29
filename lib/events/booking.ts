@@ -17,15 +17,16 @@
  */
 
 import { infoParagraphs, validateEventEditorial, type EventEditorial } from "./editorial.ts";
+import { isEventEmailReady } from "./email-readiness.ts";
 import { deadlineShortText, clockText } from "./policy.ts";
 import { eventDayLabel, eventTimeRange, programTimeLabel } from "./presentation.ts";
 import type { PublicEvent } from "./public.ts";
 
 export type SessionBookingRules =
   | { kind: "REGULAR" }
-  | { kind: "EVENT"; maxPerOrder: number };
+  | { kind: "EVENT"; maxPerOrder: number; emailReady: boolean };
 
-export type BookingRejection = { status: number; code: "EVENT_BOOKING_CLOSED" | "EVENT_ORDER_LIMIT"; message: string; field?: "quantity" };
+export type BookingRejection = { status: number; code: "EVENT_BOOKING_CLOSED" | "EVENT_EMAIL_NOT_READY" | "EVENT_ORDER_LIMIT"; message: string; field?: "quantity" };
 
 export const EVENT_BOOKING_CLOSED_MESSAGE = "As reservas deste evento ainda não estão abertas.";
 
@@ -37,6 +38,9 @@ export function eventOrderLimitMessage(max: number) {
 export function eventBookingRejection(rules: SessionBookingRules | null, quantity: number, bookingOpen: boolean): BookingRejection | null {
   if (!rules || rules.kind === "REGULAR") return null;
   if (!bookingOpen) return { status: 409, code: "EVENT_BOOKING_CLOSED", message: EVENT_BOOKING_CLOSED_MESSAGE };
+  // Sem o conteúdo do e-mail de evento completo, a venda não abre: o cliente
+  // receberia um e-mail incompleto (ou nenhum). Mesmo com a variável ligada.
+  if (!rules.emailReady) return { status: 409, code: "EVENT_EMAIL_NOT_READY", message: EVENT_BOOKING_CLOSED_MESSAGE };
   if (quantity > rules.maxPerOrder) {
     return { status: 400, code: "EVENT_ORDER_LIMIT", message: eventOrderLimitMessage(rules.maxPerOrder), field: "quantity" };
   }
@@ -81,7 +85,8 @@ export async function loadSessionBookingRules(client: RulesQueryClient, sessionI
   // Evento sem conteúdo válido fica com o limite geral; de todo modo, ele não
   // aparece no site e só vende publicado.
   const editorial = validateEventEditorial(row.editorial_content);
-  return { kind: "EVENT", maxPerOrder: editorial.success ? editorial.data.event.reservation.maxPerOrder : 20 };
+  if (!editorial.success) return { kind: "EVENT", maxPerOrder: 20, emailReady: false };
+  return { kind: "EVENT", maxPerOrder: editorial.data.event.reservation.maxPerOrder, emailReady: isEventEmailReady(editorial.data.event) };
 }
 
 /** O que a página de reserva mostra de um evento, já pronto para o cliente. */

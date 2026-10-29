@@ -1,7 +1,16 @@
 # Changelog
 
+## Eventos especiais — e-mail do evento (etapa 5B, desligada)
+
+- **Nada muda em produção ao publicar este código**: não há evento cadastrado e a venda segue fechada. Sem migration. Detalhes em [docs/special-events.md](docs/special-events.md#fase-5b--e-mail-do-evento).
+- **Confirmação, lembrete do QR e reagendamento próprios do evento**, montados do `editorial_content` (programação, chegada, o que levar, segurança, lanche, clima e cancelamento com prazo), pela mesma fila, idempotência e tentativas. Nunca o texto genérico de remada.
+- **Falha fechada**: sem ler o tipo da experiência ou com conteúdo incompleto, o e-mail fica pendente e a reserva do evento é recusada (`EVENT_EMAIL_NOT_READY`).
+- **Prévia** `pnpm email:preview:evento`; envio de demonstração só com `--enviar --confirmo`, para a equipe.
+- E-mails das experiências regulares não mudaram.
+
 ## Eventos especiais — reservas e pagamentos (etapa 5A, desligada)
 
+- **Na `main` em 29/10/2026** (PR #46, `446084f`), deploy de produção concluído com as variáveis ausentes.
 - **Nada muda em produção ao publicar este código**: a venda de eventos só abre com `EVENT_BOOKING_OPEN=true` e `EVENTS_PUBLIC_ENABLED=true`, ambas ausentes. Sem migration. Detalhes em [docs/special-events.md](docs/special-events.md#fase-5a--reservas-e-pagamentos-do-evento).
 - **Bloqueio no servidor**: com a venda fechada, `POST /api/reservations` recusa sessão de evento antes de bloquear vaga (`EVENT_BOOKING_CLOSED`), mesmo com o id da sessão. Experiência regular segue igual.
 - **Até 6 participantes por pedido** no ESSÊNCIA (`event.reservation.maxPerOrder`), no servidor e no formulário; capacidade de 12 e preço de R$ 150 continuam decididos pelo banco.
