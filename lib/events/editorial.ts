@@ -80,6 +80,11 @@ export type EventContent = {
     image: EditorialImage | null;
     /** Máximo de participantes por pedido, de 1 a 20. Sem ele, o limite geral (20). */
     maxPerOrder: number;
+    /**
+     * Orientação curta do resumo antes do pagamento, depois de "Importante:".
+     * Opcional: sem ela, o resumo não mostra aviso nenhum.
+     */
+    notice: string | null;
   };
 };
 
@@ -235,8 +240,10 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
       ctaLabel: text(reservation?.ctaLabel) || "Garantir minha vaga",
       image: image(reservation?.image),
       maxPerOrder: RESERVATION_MAX_QUANTITY,
+      notice: text(reservation?.notice) || null,
     },
   };
+  if (content.reservation.notice && content.reservation.notice.length > 200) errors.push("A orientação do resumo da reserva deve ter até 200 caracteres.");
   if (reservation?.maxPerOrder !== undefined) {
     const max = Number(reservation.maxPerOrder);
     if (!Number.isInteger(max) || max < 1 || max > RESERVATION_MAX_QUANTITY) errors.push(`O máximo de participantes por pedido deve ser de 1 a ${RESERVATION_MAX_QUANTITY}.`);

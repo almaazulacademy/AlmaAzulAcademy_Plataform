@@ -227,6 +227,29 @@ test("resumo do ingresso: programação, incluso, chegada e política exata ante
     "Você pode solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (horário de Brasília), escolhendo entre crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe.",
     "Após esse prazo, entre em contato conosco para avaliação do seu caso.",
   ]);
+  assert.equal(context.notice, "Traga seu próprio tapete para a prática de Superioga. A organização não disponibilizará tapetes.");
+});
+
+test("aviso do resumo: vem do conteúdo do evento; sem ele, nenhum aviso; texto longo é recusado", () => {
+  const withoutNotice = JSON.parse(JSON.stringify(ESSENCIA_EDITORIAL)) as { event: { reservation: Record<string, unknown> } };
+  delete withoutNotice.event.reservation.notice;
+  const parsed = validateEventEditorial(withoutNotice);
+  assert.ok(parsed.success);
+  if (parsed.success) assert.equal(parsed.data.event.reservation.notice, null, "evento sem exigência não mostra aviso");
+
+  const tooLong = JSON.parse(JSON.stringify(ESSENCIA_EDITORIAL)) as { event: { reservation: Record<string, unknown> } };
+  tooLong.event.reservation.notice = "x".repeat(201);
+  const refused = validateEventEditorial(tooLong);
+  assert.equal(refused.success, false);
+
+  // O texto não está fixo no componente: o resumo só repete o que o evento manda.
+  const summary = source("components/reservation/reservation-summary.tsx");
+  assert.match(summary, /\{event\.notice \? \(/);
+  assert.match(summary, /<strong className="font-semibold text-sand">Importante:<\/strong> \{event\.notice\}/);
+  assert.doesNotMatch(summary, /tapete/i);
+  // O resumo das experiências regulares não ganhou aviso.
+  const regular = summary.slice(summary.indexOf("export function ReservationSummary"), summary.indexOf("function EventSummary"));
+  assert.doesNotMatch(regular, /notice|Importante/);
 });
 
 test("formulário do evento: ingresso, política antes do botão e nada de turma", () => {

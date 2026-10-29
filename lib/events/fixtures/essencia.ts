@@ -209,6 +209,7 @@ export const ESSENCIA_EDITORIAL = {
       title: "Garanta a sua vaga",
       ctaLabel: "Garantir minha vaga",
       maxPerOrder: 6,
+      notice: "Traga seu próprio tapete para a prática de Superioga. A organização não disponibilizará tapetes.",
       image: {
         src: "/images/eventos/essencia/capsula-pier-amanhecer.jpg",
         alt: "Píer do Cápsula Bar avançando sobre o Lago Paranoá ao amanhecer",

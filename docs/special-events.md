@@ -212,6 +212,7 @@ Textos definitivos aprovados em 29/10/2026, em `info.items` da fixture: horário
 | --- | --- | --- |
 | Início e tolerância | `arrival: { startTime: "05:30", toleranceUntil: "05:50" }` | Texto "Horário e chegada" e a linha "Chegada · tolerância até 05H50" no bloco de reserva |
 | Tapete do Superioga | Texto "o-que-levar": cada participante leva o próprio tapete; a organização não disponibiliza (ajuste de 29/10/2026, antes "materiais fornecidos pela equipe") | Página do evento, e-mail de confirmação (seção "O que levar") e prévia |
+| Aviso no resumo da reserva | `reservation.notice`: "Traga seu próprio tapete para a prática de Superioga. A organização não disponibilizará tapetes." (opcional, até 200 caracteres) | Resumo do ingresso, antes do pagamento, depois de "Importante:". Evento sem `notice` não mostra aviso; o resumo das experiências regulares não muda |
 | Prazo de cancelamento | `cancellation.deadline = "2026-11-05T12:00:00-03:00"` (`= 2026-11-05T15:00:00Z`), `timeZone: "America/Sao_Paulo"` | Texto "Política de cancelamento" e, junto ao botão de reserva, "Cancelamento até 05/11/2026 às 12h00 (horário de Brasília): crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe.", com link para a política completa |
 
 O validador recusa prazo sem deslocamento, fuso diferente de `America/Sao_Paulo` e texto que diga outro dia ou hora que a regra — mudar uma sem a outra não passa. `arrivalMatchesSession` confere a chegada com a sessão cadastrada (início igual, tolerância entre o início e o fim).

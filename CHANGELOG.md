@@ -3,6 +3,7 @@
 ## ESSÊNCIA — tapete próprio no Superioga e 24 vagas
 
 - **Superioga**: cada participante leva o próprio tapete; a organização não disponibiliza tapetes. Texto único em `info.items["o-que-levar"]` do conteúdo do evento, lido pela página, pelo e-mail de confirmação e pela prévia. Saiu a regra antiga ("materiais fornecidos pela equipe").
+- **Aviso no resumo antes do pagamento**: "Importante: traga seu próprio tapete…", vindo de `event.reservation.notice` (opcional). Só aparece no evento que tem o aviso; o resumo das experiências regulares não muda.
 - **Capacidade prevista: 24 vagas** (antes 12), para o cadastro do ESSÊNCIA. As vagas do site continuam vindo de `sessions.capacity`; `ESSENCIA_CAPACITY` serve só à prévia e aos testes. Limite de 6 por pedido e R$ 150 por pessoa mantidos.
 - Sem migration e sem mudança no banco de produção; o ESSÊNCIA segue não cadastrado e a venda fechada.
 

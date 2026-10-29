@@ -102,6 +102,8 @@ export type EventBookingContext = {
   cancellationShort: string | null;
   cancellationParagraphs: string[];
   maxPerOrder: number;
+  /** `event.reservation.notice`: só o evento que exige algo mostra o aviso. */
+  notice: string | null;
 };
 
 export function eventBookingContext(event: PublicEvent): EventBookingContext {
@@ -120,6 +122,7 @@ export function eventBookingContext(event: PublicEvent): EventBookingContext {
     cancellationShort: extra.cancellation ? `Cancelamento até ${deadlineShortText(extra.cancellation.deadline)}: ${extra.cancellation.summary}.` : null,
     cancellationParagraphs: infoParagraphs(policy?.body ?? null),
     maxPerOrder: extra.reservation.maxPerOrder,
+    notice: extra.reservation.notice,
   };
 }
 
