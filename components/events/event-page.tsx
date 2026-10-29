@@ -23,11 +23,15 @@ function joinHosts(hosts: string[]) {
  * editorial, sessão e base —; nada é específico de um evento. `preview` mostra
  * a faixa de demonstração e as informações ainda pendentes.
  */
-export function EventPage({ event, preview = false, bookingOpen = false }: { event: PublicEvent; preview?: boolean; bookingOpen?: boolean }) {
+export function EventPage({ event, preview = false, bookingOpen = false, waitlistOpen = false }: { event: PublicEvent; preview?: boolean; bookingOpen?: boolean; waitlistOpen?: boolean }) {
   const content = event.editorial;
   const extra = content.event;
   const { session } = event;
-  const cta = eventCta({ availability: session.availability, sessionId: session.id, ctaLabel: extra.reservation.ctaLabel, bookingOpen });
+  // A prévia (sem sessão de verdade) mostra o botão da lista sem levar a lugar nenhum.
+  const waitlistHref = !waitlistOpen ? null : preview ? "#reserva" : session.id ? `/lista-de-espera/${session.id}` : null;
+  const cta = eventCta({ availability: session.availability, sessionId: session.id, ctaLabel: extra.reservation.ctaLabel, bookingOpen, waitlistHref });
+  // Hero e barra do celular levam à seção de reserva; com a lista, dizem "Evento esgotado".
+  const anchorLabel = cta.kind === "WAITLIST" ? cta.title : cta.label;
   const info = visibleInfoItems(extra, preview);
   const spots = spotsLabel(session.availability, session.remainingSpots);
   const day = session.startsAt ? eventDayLabel(session.startsAt) : null;
@@ -63,8 +67,8 @@ export function EventPage({ event, preview = false, bookingOpen = false }: { eve
               <span className="flex items-center gap-2"><MapPin aria-hidden="true" className="size-4 text-ember" />{place}</span>
             </div>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <a href="#reserva" className={cn("inline-flex h-14 items-center justify-center rounded-full px-8 font-event text-sm font-bold uppercase tracking-[0.08em] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white", cta.kind === "UNAVAILABLE" ? "border border-white/40 text-white" : "bg-ember text-night")}>
-                {cta.label}
+              <a href="#reserva" className={cn("inline-flex h-14 items-center justify-center rounded-full px-8 font-event text-sm font-bold uppercase tracking-[0.08em] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white", cta.kind === "UNAVAILABLE" || cta.kind === "WAITLIST" ? "border border-white/40 text-white" : "bg-ember text-night")}>
+                {anchorLabel}
               </a>
               <a href="#programacao" className="inline-flex h-14 items-center justify-center rounded-full border border-white/40 px-8 text-sm font-semibold text-white transition-colors hover:bg-white hover:text-night focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
                 Ver a programação
@@ -246,7 +250,9 @@ export function EventPage({ event, preview = false, bookingOpen = false }: { eve
             ) : null}
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
               <EventCtaButton cta={cta} />
-              {cta.kind !== "BOOK" ? <p className="text-sm text-white/70">{cta.note}</p> : null}
+              {cta.kind === "WAITLIST" ? (
+                <p className="max-w-md text-sm leading-6 text-white/75"><span className="block font-event font-bold uppercase tracking-[0.08em] text-white">{cta.title}</span>{cta.note}</p>
+              ) : cta.kind !== "BOOK" ? <p className="text-sm text-white/70">{cta.note}</p> : null}
             </div>
           </div>
         </div>
@@ -263,7 +269,7 @@ export function EventPage({ event, preview = false, bookingOpen = false }: { eve
           </div>
           {cta.kind === "BOOK" ? <EventCtaButton cta={cta} compact /> : (
             <a href="#reserva" className={cn("inline-flex h-12 shrink-0 items-center rounded-full px-5 font-event text-xs font-bold uppercase tracking-[0.08em]", cta.kind === "SOON" ? "bg-ember text-night" : "border border-white/25 text-white/80")}>
-              {cta.label}
+              {anchorLabel}
             </a>
           )}
         </div>

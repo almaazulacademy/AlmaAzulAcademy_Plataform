@@ -14,7 +14,8 @@ import { getExperiencePlacement, getSessionAvailabilityContext } from "@/lib/bas
 import { baseLocation } from "@/lib/bases/location";
 import { eventBookingContext } from "@/lib/events/booking";
 import { getPublicEvent } from "@/lib/events/data";
-import { isEventBookingOpen } from "@/lib/events/flags";
+import { isEventBookingOpen, isEventsWaitlistEnabled } from "@/lib/events/flags";
+import { EVENT_WAITLIST_CTA, EVENT_WAITLIST_INVITE } from "@/lib/events/waitlist";
 import { getBookingSession, listPublicSessions } from "@/lib/reservations/data";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSessionBookable, isWaitlistPublicEnabled, type PublicSession } from "@/lib/waitlist/public";
@@ -50,6 +51,9 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
   const eventSlug = session?.experienceSlug ?? upcoming?.experienceSlug ?? null;
   const event = eventSlug ? await getPublicEvent(eventSlug).catch(() => null) : null;
   const bookingOpen = isEventBookingOpen();
+  // Evento esgotado, venda aberta e lista de espera dos eventos ligada: o botão
+  // leva à lista desta edição. Nunca abre o formulário de reserva.
+  const eventWaitlist = Boolean(event && bookingOpen && isEventsWaitlistEnabled() && event.session.availability === "SOLD_OUT" && event.session.id === sessionId);
   // Turma publicada, aberta e futura, mas sem vaga: com a lista de espera
   // pública ligada, a página diz "Esgotado" em vez de "Sessão indisponível".
   // Só leitura, pela mesma função da agenda; nunca abre o formulário.
@@ -89,10 +93,13 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
                 {!bookingOpen
                   ? "As reservas deste evento ainda não estão abertas. Nenhuma reserva pode ser feita por enquanto."
                   : event.session.availability === "SOLD_OUT"
-                    ? "Todas as vagas desta edição foram preenchidas."
+                    ? eventWaitlist ? EVENT_WAITLIST_INVITE : "Todas as vagas desta edição foram preenchidas."
                     : "Este ingresso não está disponível para reserva agora."}
               </p>
-              <Link href={`/eventos/${event.slug}`} className="mt-7 inline-flex font-semibold text-forest">Voltar ao evento</Link>
+              {eventWaitlist && event.session.id ? (
+                <Link href={`/lista-de-espera/${event.session.id}`} className="mt-7 inline-flex h-12 items-center rounded-full bg-forest px-6 font-semibold text-white">{EVENT_WAITLIST_CTA}</Link>
+              ) : null}
+              <Link href={`/eventos/${event.slug}`} className={eventWaitlist ? "mt-4 block font-semibold text-forest" : "mt-7 inline-flex font-semibold text-forest"}>Voltar ao evento</Link>
             </div>
           )
         ) : session ? (

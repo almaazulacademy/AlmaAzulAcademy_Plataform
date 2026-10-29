@@ -6,6 +6,9 @@
 import { after, NextResponse } from "next/server";
 
 import { isSameOriginRequest } from "@/lib/admin/http";
+import type { RulesQueryClient } from "@/lib/events/booking";
+import { isEventsWaitlistEnabled } from "@/lib/events/flags";
+import { isEventWaitlistVisible, loadWaitlistTarget, resolveWaitlistScope } from "@/lib/events/waitlist";
 import { trustedClientAddress } from "@/lib/http/client-address";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import { followUpWaitlistConfirmationEmail, sendWaitlistConfirmationEmail } from "@/lib/waitlist/joined-email-service";
@@ -27,19 +30,33 @@ function rpcOf(admin: NonNullable<ReturnType<typeof getSupabaseAdminClient>>) {
 /**
  * Inscrição, nesta ordem: recurso ligado (senão 404, como se não existisse),
  * origem do próprio site (senão 403) e banco configurado (senão 503).
+ *
+ * "Ligado" é por tipo: a inscrição regular (`isWaitlistSignupEnabled()`) e a
+ * dos eventos (`isEventsWaitlistEnabled()`). Com as duas desligadas, 404 sem
+ * tocar no banco. Com uma delas, o `scope` lê o tipo da sessão no banco e
+ * recusa com 404 a do tipo desligado — o navegador nunca decide o tipo.
  */
 export function waitlistSignupGate(request: Request): Gate<WaitlistSignupDeps> {
-  if (!isWaitlistSignupEnabled()) return { deps: null, response: refuse(404, { message: "Recurso não disponível." }) };
+  const regularEnabled = isWaitlistSignupEnabled();
+  const eventsEnabled = isEventsWaitlistEnabled();
+  if (!regularEnabled && !eventsEnabled) return { deps: null, response: refuse(404, { message: "Recurso não disponível." }) };
   if (!isSameOriginRequest(request)) return { deps: null, response: refuse(403, { message: "Origem da solicitação inválida." }) };
   const admin = getSupabaseAdminClient();
   if (!admin) return { deps: null, response: refuse(503, { code: "UNAVAILABLE", message: WAITLIST_MESSAGES.UNAVAILABLE }) };
+  const rpc = rpcOf(admin);
   return {
     response: null,
     deps: {
-      rpc: rpcOf(admin),
+      rpc,
       sendConfirmation: sendWaitlistConfirmationEmail,
       followUpConfirmation: followUpWaitlistConfirmationEmail,
       afterResponse: (task) => after(task),
+      scope: (sessionId) => resolveWaitlistScope({
+        loadTarget: (id) => loadWaitlistTarget(admin as unknown as RulesQueryClient, id),
+        eventVisible: (slug, id) => isEventWaitlistVisible(rpc, slug, id),
+        regularEnabled,
+        eventsEnabled,
+      }, sessionId),
     },
   };
 }

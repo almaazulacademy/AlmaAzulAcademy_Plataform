@@ -1,5 +1,12 @@
 # Changelog
 
+## Eventos especiais — lista de espera, inscrição e escopo (etapa 5C-1, desligada)
+
+- **Nada muda em produção ao publicar este código**: `EVENTS_WAITLIST_ENABLED` ausente e, nesta etapa, fechada também no código (`EVENT_WAITLIST_EMAILS_READY = false`) até os e-mails do evento (5C-2). Sem migration. Detalhes em [docs/special-events.md](docs/special-events.md#fase-5c--lista-de-espera-do-evento).
+- **Escopo no servidor**: a inscrição (`POST /api/waitlist`) lê o tipo da sessão no banco; a variável dos eventos não abre a lista regular e a regular não abre a dos eventos; evento fora do site é recusado; até 6 por pedido no ESSÊNCIA.
+- **Evento esgotado**: "Evento esgotado", convite e botão **Entrar na lista de espera** na página do evento e em `/reservar`; `/lista-de-espera/[id]` com textos de evento e volta para o evento.
+- Lista regular, fila, e-mails, detecção, painel e agendamentos não foram alterados.
+
 ## ESSÊNCIA — tapete próprio no Superioga e 24 vagas
 
 - **Superioga**: cada participante leva o próprio tapete; a organização não disponibiliza tapetes. Texto único em `info.items["o-que-levar"]` do conteúdo do evento, lido pela página, pelo e-mail de confirmação e pela prévia. Saiu a regra antiga ("materiais fornecidos pela equipe").

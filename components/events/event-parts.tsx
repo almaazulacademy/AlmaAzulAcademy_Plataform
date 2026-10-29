@@ -33,7 +33,7 @@ export function EventCtaButton({ cta, className, compact = false }: { cta: Event
     compact ? "h-12 px-5 text-xs" : "h-14 px-8 text-sm",
     className,
   );
-  if (cta.kind === "BOOK") {
+  if (cta.kind === "BOOK" || cta.kind === "WAITLIST") {
     return (
       <Link href={cta.href} className={cn(base, "bg-ember text-night hover:-translate-y-0.5 hover:bg-[#eaa962]")}>
         {cta.label}
