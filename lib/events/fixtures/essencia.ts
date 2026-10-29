@@ -208,6 +208,7 @@ export const ESSENCIA_EDITORIAL = {
       eyebrow: "Sua próxima pausa tem data marcada",
       title: "Garanta a sua vaga",
       ctaLabel: "Garantir minha vaga",
+      maxPerOrder: 6,
       image: {
         src: "/images/eventos/essencia/capsula-pier-amanhecer.jpg",
         alt: "Píer do Cápsula Bar avançando sobre o Lago Paranoá ao amanhecer",

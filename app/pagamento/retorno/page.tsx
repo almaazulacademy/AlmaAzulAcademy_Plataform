@@ -105,7 +105,7 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
                 <SessionTurma
                   startsAt={summary.startsAt}
                   experienceTitle={summary.experienceTitle || "Experiência Alma Azul Academy"}
-                  label="Turma confirmada"
+                  label={summary.eventSlug ? "Ingresso confirmado" : "Turma confirmada"}
                   className="mx-auto mt-8 max-w-lg text-left"
                 />
               ) : null}
@@ -132,6 +132,12 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
               <p className="mx-auto mt-6 max-w-lg leading-7 text-ink/65">
                 Caso tenha qualquer dúvida antes disso, estamos à disposição para ajudar.
               </p>
+              {summary.eventSlug ? (
+                <p className="mx-auto mt-4 max-w-lg leading-7 text-ink/65">
+                  A programação completa, o que levar e a política de cancelamento estão na{" "}
+                  <Link href={`/eventos/${summary.eventSlug}`} className="font-semibold text-forest underline-offset-4 hover:underline">página do evento</Link>.
+                </p>
+              ) : null}
             </>
           ) : awaitingReschedule ? (
             <p className="mx-auto mt-5 max-w-lg leading-7 text-ink/60">

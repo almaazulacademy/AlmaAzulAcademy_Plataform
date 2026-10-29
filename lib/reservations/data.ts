@@ -105,7 +105,13 @@ async function getExperienceLocation(client: SupabaseClient, experienceId: strin
   return baseId ? getBaseLocation(client, baseId) : null;
 }
 
-export type ReservationConfirmationSummary = { experienceTitle: string; startsAt: string; location: BaseLocation | null };
+export type ReservationConfirmationSummary = {
+  experienceTitle: string;
+  startsAt: string;
+  location: BaseLocation | null;
+  /** Evento especial: a página do evento, para os textos de ingresso. null = experiência regular. */
+  eventSlug?: string | null;
+};
 
 /**
  * Experiência e horário de uma reserva, para a tela de retorno do pagamento.
@@ -146,10 +152,16 @@ export async function getReservationConfirmationSummary(
 
   const baseId = experience && !experience.error ? asString(experience.data?.base_id) : "";
 
+  // Leitura à parte: sem a coluna `kind` (banco anterior aos eventos), a
+  // reserva é regular e a tela segue como sempre.
+  const kind = experienceId ? await client.from("experiences").select("slug, kind").eq("id", experienceId).maybeSingle() : null;
+  const eventSlug = kind && !kind.error && kind.data?.kind === "EVENT" ? asString(kind.data?.slug) || null : null;
+
   return {
     experienceTitle: experience && !experience.error ? asString(experience.data?.title) : "",
     startsAt: session && !session.error ? asString(session.data?.starts_at) : "",
     location: baseId ? await getBaseLocation(client, baseId) : null,
+    eventSlug,
   };
 }
 

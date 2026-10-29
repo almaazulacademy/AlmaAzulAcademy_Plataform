@@ -6,9 +6,11 @@
  * nada de evento aparece. Mesmo ligada, só aparece evento publicado no banco —
  * e publicar exige o interruptor `special_event_settings.publication_enabled`.
  *
- * `BOOKING_OPEN` é o botão de reserva da página do evento. Fica desligado até
- * a fase 5 integrar o fluxo de reserva: o botão aparece, mas não leva ao
- * checkout.
+ * `EVENT_BOOKING_OPEN=true` abre a venda de ingressos de eventos: o botão da
+ * página leva a `/reservar/[sessionId]` e `POST /api/reservations` aceita
+ * sessões de evento. Só vale junto com `EVENTS_PUBLIC_ENABLED`. Desligada (o
+ * padrão), nenhum caminho público inicia uma reserva de evento — nem com o id
+ * da sessão em mãos. Não ligar antes do e-mail de evento (etapa 5B) validado.
  *
  * A prévia com dados de demonstração (`/eventos/demonstracao`) existe só no
  * desenvolvimento local e no Preview da Vercel, nunca em Production, e não
@@ -24,5 +26,6 @@ export function isEventsDemoEnabled(env: Record<string, string | undefined> = pr
   return env.NODE_ENV === "development";
 }
 
-/** Fase 4: o botão "Garantir minha vaga" ainda não leva ao checkout. */
-export const EVENT_BOOKING_OPEN = false;
+export function isEventBookingOpen(env: Record<string, string | undefined> = process.env) {
+  return env.EVENT_BOOKING_OPEN === "true" && isEventsPublicEnabled(env);
+}

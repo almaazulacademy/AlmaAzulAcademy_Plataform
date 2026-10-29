@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { EventPage } from "@/components/events/event-page";
 import { getPublicEvent } from "@/lib/events/data";
-import { EVENT_BOOKING_OPEN, isEventsPublicEnabled } from "@/lib/events/flags";
+import { isEventBookingOpen, isEventsPublicEnabled } from "@/lib/events/flags";
 
 export const dynamic = "force-dynamic";
 
@@ -28,5 +28,5 @@ export default async function SpecialEventPage({ params }: Props) {
   if (!isEventsPublicEnabled()) notFound();
   const event = await getPublicEvent((await params).slug);
   if (!event) notFound();
-  return <EventPage event={event} bookingOpen={EVENT_BOOKING_OPEN} />;
+  return <EventPage event={event} bookingOpen={isEventBookingOpen()} />;
 }
