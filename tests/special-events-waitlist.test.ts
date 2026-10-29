@@ -106,11 +106,13 @@ async function resetThrottle() {
 // 1. Variáveis: cada tipo com a sua
 // ===========================================================================
 
-test("variável: desligada por padrão, fechada no código até os e-mails do evento, e independente da regular", () => {
+test("variável: desligada por padrão, a trava do código ainda fecha, e independente da regular", () => {
   const all = { EVENTS_PUBLIC_ENABLED: "true", EVENT_BOOKING_OPEN: "true", EVENTS_WAITLIST_ENABLED: "true" };
   assert.equal(isEventsWaitlistEnabled({}), false);
-  assert.equal(EVENT_WAITLIST_EMAILS_READY, false, "5C-1: sem os e-mails do evento (5C-2), a variável sozinha não abre");
-  assert.equal(isEventsWaitlistEnabled(all), false);
+  // 5C-2: os e-mails do evento existem e a trava saiu; voltar a `false` fecha tudo de novo.
+  assert.equal(EVENT_WAITLIST_EMAILS_READY, true);
+  assert.equal(isEventsWaitlistEnabled(all), true);
+  assert.equal(isEventsWaitlistEnabled(all, false), false);
   assert.equal(isEventsWaitlistEnabled(all, true), true);
   // Exige a venda do evento aberta.
   assert.equal(isEventsWaitlistEnabled({ ...all, EVENT_BOOKING_OPEN: undefined }, true), false);

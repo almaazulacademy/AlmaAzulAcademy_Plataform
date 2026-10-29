@@ -307,13 +307,13 @@ Não há segunda lista. O evento usa as tabelas, funções, fila, limites, audit
 
 | Etapa | O que entrega | Estado |
 | --- | --- | --- |
-| 5C-1 | Interface pública, `EVENTS_WAITLIST_ENABLED` e escopo no servidor | PR draft, desligada |
-| 5C-2 | Confirmação e aviso de vaga com textos de evento; link para a página do evento; aviso só com venda aberta | Aguarda autorização |
+| 5C-1 | Interface pública, `EVENTS_WAITLIST_ENABLED` e escopo no servidor | Na `main` (#49), desligada |
+| 5C-2 | Confirmação e aviso de vaga com textos de evento; link para a página do evento; aviso só com venda aberta; página de saída; trava da 5C-1 retirada | PR draft; migration `202610300001` não aplicada |
 | 5C-3 | Agendador (detecção + envio), monitoramento, ativação e rollback | Aguarda autorização |
 
 ### 5C-1 — inscrição com escopo próprio
 
-**Variável própria.** `EVENTS_WAITLIST_ENABLED=true` abre a lista **só dos eventos**, e só com a venda do evento aberta (`EVENT_BOOKING_OPEN` + `EVENTS_PUBLIC_ENABLED`). As variáveis da lista regular (`WAITLIST_PUBLIC_ENABLED`, `WAITLIST_SIGNUP_ENABLED`) continuam valendo só para as experiências regulares: uma não liga a outra. **Na 5C-1 a variável sozinha não abre nada**: `EVENT_WAITLIST_EMAILS_READY = false` (`lib/events/flags.ts`) mantém a inscrição do evento fechada no código até a 5C-2, porque a confirmação e o aviso ainda sairiam com o texto de "turma" — inclusive pela rotina diária que recupera confirmações pendentes.
+**Variável própria.** `EVENTS_WAITLIST_ENABLED=true` abre a lista **só dos eventos**, e só com a venda do evento aberta (`EVENT_BOOKING_OPEN` + `EVENTS_PUBLIC_ENABLED`). As variáveis da lista regular (`WAITLIST_PUBLIC_ENABLED`, `WAITLIST_SIGNUP_ENABLED`) continuam valendo só para as experiências regulares: uma não liga a outra. **Trava da 5C-1, retirada na 5C-2**: `EVENT_WAITLIST_EMAILS_READY` (`lib/events/flags.ts`) manteve a inscrição do evento fechada no código enquanto a confirmação e o aviso só existiam com o texto de "turma". Com os modelos do evento prontos (5C-2), ela passou a `true`; quem decide são as variáveis, todas ausentes em produção. Voltar a `false` fecha a inscrição do evento de novo.
 
 **No servidor, antes do banco** (`lib/events/waitlist.ts`, chamado por `POST /api/waitlist`):
 
@@ -338,7 +338,48 @@ O tipo vem de `experiences.kind`, lido com a service role; a visibilidade, de `g
 | `/lista-de-espera/[id]` do evento | Formulário de sempre com "Participantes" (até 6), textos de evento, cartão do evento e local; "Voltar para o evento". Com vaga, manda para o evento; fora do site, "lista de espera indisponível". Sessão regular nunca cai aqui, nem sessão de evento na tela regular |
 | Prévia `/eventos/demonstracao/essencia?estado=SOLD_OUT&lista=1` | O botão, sem destino |
 
-Saída da lista: o link de sempre (`/lista-de-espera#t=…`). A página do link ainda diz "turma" (a RPC não informa o tipo) — vai para a 5C-2, junto com os e-mails.
+Saída da lista: o link de sempre (`/lista-de-espera#t=…`), com textos de evento a partir da 5C-2.
+
+### 5C-2 — e-mails e saída da lista do evento
+
+Mesma fila, mesma reivindicação exclusiva, mesma mensagem congelada antes do envio, mesma chave de idempotência por geração, mesmas 6 tentativas, mesmo ritmo (1 envio/s, lotes de 5), mesmas ondas e limites (3 avisos, 12 h). O que muda é **qual modelo** sai e **quando o aviso do evento pode ser reivindicado**.
+
+**Tipo pelo banco, antes de montar.** Os dois serviços (`joined-email-service.ts`, `spot-email-service.ts`) passam o payload por `withWaitlistEventContext` (`lib/events/waitlist-email.ts`): `sessions.experience_id` → `experiences.kind`, conteúdo e base. Sessão de evento recebe o modelo do evento; regular, o de sempre (sem mudança de texto). Sem conseguir ler o tipo: `EVENT_CONTEXT_UNAVAILABLE`; conteúdo do evento inválido: `EVENT_EMAIL_NOT_READY` — nos dois casos o e-mail fica pendente para nova tentativa, **nunca** sai o modelo regular para inscrição de evento.
+
+| E-mail | Assunto | Conteúdo |
+| --- | --- | --- |
+| Confirmação | "Você está na lista de espera — {evento}" | Evento, data, horário (05h30 às 09h00), local, participantes; **"Isto não é um ingresso"** (nem reserva garantida, sem cobrança); como funciona o aviso; link para sair |
+| Aviso de vaga | "Surgiu uma vaga: {evento}" | Surgiu disponibilidade; evento, data, horário, local, participantes, ingresso por participante; **"A vaga não está garantida"** (a disponibilidade pode mudar até a conclusão da compra); botão **GARANTIR MEU INGRESSO** → `/eventos/<slug>#reserva`; como garantir; link para sair |
+
+**O aviso do evento só é reivindicado com a venda aberta.** A rota de envio pede `claim_pending_waitlist_spot_emails_by_kind` com `REGULAR` e, só com `isEventsWaitlistEnabled()` (lista dos eventos + venda aberta + seção pública), também `EVENT`. Fechada a venda, o aviso do evento **não é tocado**: sem tentativa gasta, sem envio contado, continua `QUEUED`. Quando a venda abrir, a reivindicação confere de novo, como sempre: inscrição ativa, sessão aberta e futura, experiência publicada, abertura ainda aberta, vagas para o grupo inteiro (`waitlist_detection_spots`), 3 avisos e 12 h. Evento despublicado antes do envio: `SKIPPED` (`SESSION_UNAVAILABLE`), sem contar envio. As inscrições e avisos regulares seguem exatamente como antes (`REGULAR` é sempre pedido; a variável `WAITLIST_NOTIFY_ENABLED` continua sendo a da rota).
+
+**Página de saída** (`/lista-de-espera#t=…`): a visão do link passa a vir de `waitlist_cancel_overview_with_kind`; para evento, "lista de espera deste evento", "participantes", "Nenhum ingresso ou pagamento é afetado" e "Voltar para o evento". Regular, os textos de sempre.
+
+**Migration `202610300001_waitlist_event_scope.sql` (não aplicada).** Aditiva: duas funções novas, só para a service role; nenhuma função existente muda (teste compara o corpo de todas antes e depois), nada escreve em tabela, nenhum agendamento.
+
+| Função | Faz |
+| --- | --- |
+| `waitlist_cancel_overview_with_kind(token, origem)` | Chama `waitlist_cancel_overview` (o limite de tentativas conta uma vez) e acrescenta `experienceKind` e, para evento, `experienceSlug` |
+| `claim_pending_waitlist_spot_emails_by_kind(tipos, …)` | A reivindicação de sempre, filtrada pelos tipos pedidos; mesmo núcleo (`waitlist_spot_take`), mesma ordem da fila, mesmo `skip locked` |
+
+Sem a migration o site continua funcionando: a página de saída volta à visão de sempre (fala "turma") e o envio volta à reivindicação de sempre — e aí um aviso de evento com a venda fechada é barrado no envio (`EVENT_SALES_CLOSED`, gasta uma tentativa). Por isso **a migration vem antes de ligar `EVENTS_WAITLIST_ENABLED`**.
+
+Scripts: `supabase/diagnostics/waitlist_event_scope_preflight.sql` (`WAITLIST_EVENTOS_PREFLIGHT_OK`), `..._postcheck.sql` (`WAITLIST_EVENTOS_POSTCHECK_OK`, mesma assinatura e contagens), `supabase/rollback/202610300001_waitlist_event_scope.rollback.sql` (remove só as duas funções).
+
+**Prévias** (só arquivos, sem envio): `pnpm email:preview:evento-lista` → `.preview/evento-essencia-lista-{confirmacao,aviso-de-vaga}.{html,txt}`.
+
+### Ativação da lista do evento (cada passo com autorização)
+
+1. Merge e deploy da 5C-2: nada muda (variáveis ausentes).
+2. Correção do interruptor de publicação (PR próprio, ver "Interruptor da publicação") — obrigatória antes de abrir o ESSÊNCIA.
+3. Preflight → migration `202610300001` (com `begin;` + `set local lock_timeout = '5s';` … `commit;`) → postcheck.
+4. Cadastro do ESSÊNCIA e abertura da venda (`EVENTS_PUBLIC_ENABLED`, `EVENT_BOOKING_OPEN`), já autorizados à parte.
+5. `EVENTS_WAITLIST_ENABLED=true` só em Production + deploy: botão e inscrição no evento esgotado, confirmação por e-mail.
+6. Avisos de vaga automáticos: agendador e escopo do envio, na 5C-3.
+
+Para desligar: remover `EVENTS_WAITLIST_ENABLED` e publicar (inscrição em 404, avisos do evento deixam de ser reivindicados e ficam na fila); ou voltar `EVENT_WAITLIST_EMAILS_READY` a `false` no código.
+
+Testes: `tests/special-events-waitlist-email.test.ts` e, com sessões reais do Postgres (CI), a reivindicação por tipo em `tests/waitlist-spot-concurrency.test.ts`.
 
 ### Diagnóstico (29/10/2026)
 

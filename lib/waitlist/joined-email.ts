@@ -10,6 +10,7 @@
 
 import { emailDeliveryOf, isRetryableEmailError, sanitizeEmailErrorCode, type EmailMessage } from "../email/email-provider.ts";
 import { buildWaitlistJoinedEmail, parseWaitlistJoinedEmailData } from "./joined-email-content.ts";
+import { buildEventWaitlistJoinedEmail, EVENT_CONTEXT_UNAVAILABLE, EVENT_EMAIL_NOT_READY, waitlistEventOf } from "../events/waitlist-email.ts";
 
 // --- Política -----------------------------------------------------------------
 
@@ -83,6 +84,12 @@ export type WaitlistEmailRuntime = {
   /** Origem do link de cancelamento. Padrão: o domínio oficial. */
   origin?: string;
   log?: (fields: { stage: "waitlist_joined" | "waitlist_retry"; outcome: "sent" | "skipped" | "pending" | "failed"; attempt?: number; errorCode?: string; drained?: number }) => void;
+  /**
+   * Tipo da sessão (etapa 5C-2): acrescenta ao payload se é evento, com o
+   * conteúdo dele. Falha lança — e o e-mail fica pendente, nunca sai o modelo
+   * regular para uma inscrição de evento.
+   */
+  enrich?: (payload: unknown) => Promise<unknown>;
 };
 
 // --- Leitura das respostas do banco -------------------------------------------
@@ -198,9 +205,19 @@ async function deliverClaimed(runtime: WaitlistEmailRuntime, claim: WaitlistEmai
 
   let message = claim.message;
   if (!message) {
-    const data = parseWaitlistJoinedEmailData(claim.payload);
+    let payload = claim.payload;
+    if (runtime.enrich) {
+      try {
+        payload = await runtime.enrich(payload);
+      } catch {
+        return failed(EVENT_CONTEXT_UNAVAILABLE, "REJECTED", true);
+      }
+    }
+    const data = parseWaitlistJoinedEmailData(payload);
     if (!data) return failed("PAYLOAD_EMPTY", "REJECTED", false);
-    message = buildWaitlistJoinedEmail(data, runtime.origin);
+    const event = waitlistEventOf(payload);
+    if (event === "INVALID") return failed(EVENT_EMAIL_NOT_READY, "REJECTED", true);
+    message = event ? buildEventWaitlistJoinedEmail(data, event, runtime.origin) : buildWaitlistJoinedEmail(data, runtime.origin);
     const frozen = await runtime.queue.freeze(claim, message).catch(() => false);
     if (!frozen) return failed("FREEZE_FAILED", "REJECTED", true);
   }

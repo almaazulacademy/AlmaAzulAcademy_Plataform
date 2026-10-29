@@ -150,4 +150,25 @@ if (!database) {
     await A.query("commit");
     assert.equal(await call(`public.available_spots($1::uuid)`, [session]), 0);
   });
+
+  // Etapa 5C-2: a reivindicação por tipo (migration 202610300001) divide a fila do mesmo jeito.
+  const claimByKindOn = (client: pg.Client, kinds: string[]) => settle(client.query(`select public.claim_pending_waitlist_spot_emails_by_kind($1::text[], 50, 6, 2, 1380) as value`, [kinds]));
+
+  test("reivindicação por tipo: dois envios ao mesmo tempo não pegam o mesmo aviso; tipo fora do pedido nem é tocado", async () => {
+    const { notice } = await queuedNotice();
+    await A.query("begin");
+    const onlyEvents = await claimByKindOn(A, ["EVENT"]);
+    assert.ok(onlyEvents.ok, onlyEvents.ok ? "" : onlyEvents.error);
+    assert.equal(claimed(onlyEvents, notice), false, "aviso de turma regular fora de um pedido só de eventos");
+    const first = await claimByKindOn(A, ["REGULAR", "EVENT"]);
+    assert.equal(claimed(first, notice), true);
+
+    await B.query("set statement_timeout = '3s'");
+    const second = await claimByKindOn(B, ["REGULAR", "EVENT"]);
+    assert.ok(second.ok, second.ok ? "" : second.error);
+    assert.equal(claimed(second, notice), false, "o aviso em reivindicação é pulado, não esperado");
+    await A.query("commit");
+    const attempts = (await one(`select attempts from public.waitlist_notifications where id = $1::uuid`, [notice])).attempts;
+    assert.equal(attempts, 1, "uma tentativa só");
+  });
 }
