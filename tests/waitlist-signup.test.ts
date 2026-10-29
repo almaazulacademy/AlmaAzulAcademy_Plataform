@@ -592,7 +592,10 @@ test("telas: botão só com a inscrição ligada; formulário com isca invisíve
   assert.match(form, /fetch\("\/api\/waitlist"/);
 
   const signupPage = code("app/lista-de-espera/[sessionId]/page.tsx");
-  assert.match(signupPage, /if \(!isWaitlistSignupEnabled\(\)\) notFound\(\);/);
+  // Cada tipo com a sua variável (etapa 5C-1): sem nenhuma, 404; sessão regular só com a regular.
+  assert.match(signupPage, /if \(!regularEnabled && !eventsEnabled\) notFound\(\);/);
+  assert.match(signupPage, /if \(!regularEnabled\) notFound\(\);/);
+  assert.ok(signupPage.indexOf("if (!eventsEnabled) notFound();") < signupPage.indexOf("if (!regularEnabled) notFound();"), "sessão de evento nunca cai na tela regular");
   assert.match(signupPage, /session && !isSessionBookable\(session\) \? \(/);
   for (const path of ["app/lista-de-espera/page.tsx", "app/lista-de-espera/[sessionId]/page.tsx"]) {
     assert.match(code(path), /robots: \{ index: false, follow: false \}/, path);

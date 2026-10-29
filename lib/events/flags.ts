@@ -29,3 +29,23 @@ export function isEventsDemoEnabled(env: Record<string, string | undefined> = pr
 export function isEventBookingOpen(env: Record<string, string | undefined> = process.env) {
   return env.EVENT_BOOKING_OPEN === "true" && isEventsPublicEnabled(env);
 }
+
+/**
+ * A confirmação e o aviso de vaga da lista de espera ainda saem com o texto das
+ * experiências regulares ("turma"). Até a etapa 5C-2 trazer os e-mails do
+ * evento, a inscrição de evento fica fechada **no código**, mesmo com a
+ * variável ligada.
+ */
+export const EVENT_WAITLIST_EMAILS_READY = false;
+
+/**
+ * `EVENTS_WAITLIST_ENABLED=true` abre a lista de espera **só dos eventos**:
+ * botão "Entrar na lista de espera" no evento esgotado, `/lista-de-espera/[id]`
+ * da sessão do evento e a inscrição pela API. Exige a venda do evento aberta
+ * (`isEventBookingOpen`). Não depende nem liga `WAITLIST_PUBLIC_ENABLED` /
+ * `WAITLIST_SIGNUP_ENABLED`, que continuam valendo só para as experiências
+ * regulares. Desligada (o padrão), nenhum caminho inscreve numa sessão de evento.
+ */
+export function isEventsWaitlistEnabled(env: Record<string, string | undefined> = process.env, emailsReady = EVENT_WAITLIST_EMAILS_READY) {
+  return emailsReady && env.EVENTS_WAITLIST_ENABLED === "true" && isEventBookingOpen(env);
+}

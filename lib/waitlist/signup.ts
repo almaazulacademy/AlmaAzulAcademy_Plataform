@@ -12,6 +12,7 @@
  */
 
 import { isWaitlistPublicEnabled } from "./public.ts";
+import { EVENT_WAITLIST_MESSAGES, eventWaitlistQuantityMessage, type WaitlistScope } from "../events/waitlist.ts";
 import { digitsOnly, normalizePhone } from "../reservations/validation.ts";
 
 /**
@@ -66,6 +67,12 @@ export type WaitlistSignupDeps = {
   /** Novas tentativas, depois da resposta. Nunca lança. */
   followUpConfirmation: (sessionId: string, email: string) => Promise<unknown>;
   afterResponse: (task: () => Promise<unknown>) => void;
+  /**
+   * Escopo da sessão (regular ou evento, cada um com a sua variável), decidido
+   * no servidor antes do banco. A rota sempre passa; sem ele, é a inscrição
+   * regular de sempre.
+   */
+  scope?: (sessionId: string) => Promise<WaitlistScope>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -109,6 +116,18 @@ export async function handleWaitlistSignup(deps: WaitlistSignupDeps, body: unkno
   if (!validation.success) return { status: 400, body: { code: "INVALID", message: WAITLIST_MESSAGES.INVALID, errors: validation.errors } };
   const input = validation.data;
 
+  const scope: WaitlistScope = deps.scope ? await deps.scope(input.sessionId) : { kind: "REGULAR" };
+  if (scope.kind === "DISABLED") return { status: 404, body: { message: "Recurso não disponível." } };
+  if (scope.kind === "UNAVAILABLE") return unavailable();
+  if (scope.kind === "SESSION_UNAVAILABLE") return { status: 409, body: { code: "SESSION_UNAVAILABLE", message: EVENT_WAITLIST_MESSAGES.SESSION_UNAVAILABLE } };
+  const event = scope.kind === "EVENT" ? scope : null;
+  const messages = event ? { ...WAITLIST_MESSAGES, ...EVENT_WAITLIST_MESSAGES } : WAITLIST_MESSAGES;
+  // O máximo por pedido do evento (6 no ESSÊNCIA), antes do banco, que só
+  // conhece o limite geral (20) e a capacidade da sessão.
+  if (event && input.quantity > event.maxPerOrder) {
+    return { status: 400, body: { code: "INVALID", message: WAITLIST_MESSAGES.INVALID, errors: { quantity: eventWaitlistQuantityMessage(event.maxPerOrder) } } };
+  }
+
   let result: RpcResult;
   try {
     result = await deps.rpc("waitlist_join", {
@@ -138,21 +157,22 @@ export async function handleWaitlistSignup(deps: WaitlistSignupDeps, body: unkno
           }
         });
       }
-      return { status: 200, body: { status: "ACCEPTED", message: WAITLIST_MESSAGES.ACCEPTED } };
+      return { status: 200, body: { status: "ACCEPTED", message: messages.ACCEPTED } };
     case "RATE_LIMITED":
       return rateLimited(answer.retryAfterSeconds);
     case "INVALID": {
       const field = typeof answer.field === "string" && answer.field in WAITLIST_FIELD_MESSAGES ? answer.field : "form";
-      return { status: 400, body: { code: "INVALID", message: WAITLIST_MESSAGES.INVALID, errors: { [field]: WAITLIST_FIELD_MESSAGES[field] ?? WAITLIST_MESSAGES.INVALID } } };
+      const fieldMessage = event && field === "quantity" ? eventWaitlistQuantityMessage(event.maxPerOrder) : WAITLIST_FIELD_MESSAGES[field] ?? WAITLIST_MESSAGES.INVALID;
+      return { status: 400, body: { code: "INVALID", message: WAITLIST_MESSAGES.INVALID, errors: { [field]: fieldMessage } } };
     }
     case "SESSION_UNAVAILABLE":
-      return { status: 409, body: { code: "SESSION_UNAVAILABLE", message: WAITLIST_MESSAGES.SESSION_UNAVAILABLE } };
+      return { status: 409, body: { code: "SESSION_UNAVAILABLE", message: messages.SESSION_UNAVAILABLE } };
     case "NOT_SOLD_OUT":
-      return { status: 409, body: { code: "NOT_SOLD_OUT", message: WAITLIST_MESSAGES.NOT_SOLD_OUT, reserveHref: `/reservar/${input.sessionId}` } };
+      return { status: 409, body: { code: "NOT_SOLD_OUT", message: messages.NOT_SOLD_OUT, reserveHref: `/reservar/${input.sessionId}` } };
     case "LIMIT_REACHED":
-      return { status: 409, body: { code: "LIMIT_REACHED", message: WAITLIST_MESSAGES.LIMIT_REACHED } };
+      return { status: 409, body: { code: "LIMIT_REACHED", message: messages.LIMIT_REACHED } };
     case "WAITLIST_FULL":
-      return { status: 409, body: { code: "WAITLIST_FULL", message: WAITLIST_MESSAGES.WAITLIST_FULL } };
+      return { status: 409, body: { code: "WAITLIST_FULL", message: messages.WAITLIST_FULL } };
     default:
       return unavailable();
   }

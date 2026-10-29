@@ -50,7 +50,9 @@ export function availabilityBadge(availability: EventAvailability, remainingSpot
 export type EventCta =
   | { kind: "BOOK"; label: string; href: string }
   | { kind: "SOON"; label: string; note: string }
-  | { kind: "UNAVAILABLE"; label: string; note: string };
+  | { kind: "UNAVAILABLE"; label: string; note: string }
+  /** Evento esgotado com a lista de espera dos eventos aberta (etapa 5C). */
+  | { kind: "WAITLIST"; label: string; href: string; title: string; note: string };
 
 /**
  * O botão de reserva. Com `bookingOpen` desligado — fase 4, antes do fluxo de
@@ -61,11 +63,16 @@ export function eventCta(options: {
   sessionId: string | null;
   ctaLabel: string;
   bookingOpen: boolean;
+  /** Destino do botão da lista de espera, só com `EVENTS_WAITLIST_ENABLED`. */
+  waitlistHref?: string | null;
 }): EventCta {
-  const { availability, sessionId, ctaLabel, bookingOpen } = options;
+  const { availability, sessionId, ctaLabel, bookingOpen, waitlistHref } = options;
   if (availability === "AVAILABLE") {
     if (bookingOpen && sessionId) return { kind: "BOOK", label: ctaLabel, href: `/reservar/${sessionId}` };
     return { kind: "SOON", label: ctaLabel, note: "As reservas pelo site abrem em breve." };
+  }
+  if (availability === "SOLD_OUT" && waitlistHref) {
+    return { kind: "WAITLIST", label: "Entrar na lista de espera", href: waitlistHref, title: "Evento esgotado", note: "Todas as vagas desta edição foram preenchidas. Entre para a lista de espera e seja avisado caso surja uma oportunidade." };
   }
   if (availability === "SOLD_OUT") return { kind: "UNAVAILABLE", label: "Esgotado", note: "Todas as vagas desta edição foram reservadas." };
   if (availability === "CLOSED") return { kind: "UNAVAILABLE", label: "Reservas encerradas", note: "As reservas para esta edição foram encerradas." };

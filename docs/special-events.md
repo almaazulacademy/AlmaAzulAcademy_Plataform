@@ -17,7 +17,7 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 | 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | Na `main` (#42); migration aplicada em produção (28/10), interruptor desligado |
 | 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | Na `main` e em produção (#43, 28/10); sem migration |
 | 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu, atrás de `EVENTS_PUBLIC_ENABLED`; conteúdo operacional do ESSÊNCIA | Concluída: na `main` e em produção (#44, 29/10); desligada; sem migration |
-| 5. Reserva, e-mail, cancelamento e crédito | 5A reservas e pagamentos; 5B e-mail de evento; 5C lista de espera; 5D reembolso pelo WhatsApp; 5E crédito | 5A na `main` (#46), desligada; 5B em PR draft; demais aguardam autorização |
+| 5. Reserva, e-mail, cancelamento e crédito | 5A reservas e pagamentos; 5B e-mail de evento; 5C lista de espera; 5D reembolso pelo WhatsApp; 5E crédito | 5A (#46), 5B (#47) e o ajuste de 24 vagas (#48) na `main`, desligados; 5C-1 em PR draft; demais aguardam autorização |
 | 6. Painel | `/admin/eventos` com formulário estruturado | — |
 | 7. Relatórios | Painéis separados por tipo | — |
 | 8. Lançamento do ESSÊNCIA | Cadastro, publicação e interruptor ligado | — |
@@ -42,6 +42,12 @@ Tabela `special_event_settings` (uma linha, `publication_enabled = false`), com 
 ```sql
 update public.special_event_settings set publication_enabled = true, updated_at = now();
 ```
+
+**O interruptor só trava o ato de publicar; ele não esconde evento já publicado.** `list_public_events`, `get_public_event` e `list_public_event_sessions` filtram por `kind = 'EVENT'` e `status = 'PUBLISHED'`, sem olhar `publication_enabled`; `create_pre_reservation` e `waitlist_join` olham o status da experiência. Desligar o interruptor depois de publicar **não** tira o evento do site, da venda nem da lista de espera (achado de 29/10/2026, conferido no teste da 5C-1). As experiências regulares não são afetadas: desde a fase 3 elas leem as listagens por tipo.
+
+Para tirar um evento do ar, do mais rápido ao mais completo: remover `EVENTS_PUBLIC_ENABLED` (ou `EVENT_BOOKING_OPEN` / `EVENTS_WAITLIST_ENABLED`) e publicar de novo — páginas em 404, venda e inscrição recusadas no servidor; ou mudar o status da experiência para rascunho pelo painel — some das leituras públicas e o banco recusa reserva e inscrição.
+
+Correção proposta, **fora do PR da 5C-1** e só com autorização: uma migration pequena que acrescenta `and exists (select 1 from public.special_event_settings where publication_enabled)` às três leituras públicas de eventos (corpo novo só nelas, com preflight comparando as definições atuais, postcheck e rollback), tornando o interruptor também um botão de emergência de leitura. Ela não muda reserva nem lista de espera por si: as duas rotas do site já exigem o evento visível (`get_public_event`) antes de mostrar o formulário, e a inscrição confere o mesmo no servidor. Aplicar antes de ligar `EVENTS_PUBLIC_ENABLED` em produção.
 
 ### Nenhuma reserva troca de tipo
 
@@ -294,6 +300,72 @@ gera `.preview/evento-essencia-{confirmacao,lembrete-qr,reagendamento}.{html,txt
 **Antes de abrir a venda:** gerar a prévia e revisar; enviar a demonstração autorizada e conferir no Gmail (celular e computador); cadastrar o ESSÊNCIA com o `editorial_content` revisado; só então, com autorização, ligar as variáveis.
 
 Testes: `tests/special-events-email.test.ts`.
+
+## Fase 5C — lista de espera do evento
+
+Não há segunda lista. O evento usa as tabelas, funções, fila, limites, auditoria e painel da lista de espera de sempre ([docs/waitlist.md](waitlist.md)), que já funcionam por sessão: `waitlist_join` aceita sessão `OPEN`, futura, de experiência `PUBLISHED` e com zero vagas; a varredura (`waitlist_scan`) lê `available_spots`; o aviso confere vaga e limites de novo antes de sair. Nada disso olha `experiences.kind`, e nenhuma migration é necessária para o evento caber nelas.
+
+| Etapa | O que entrega | Estado |
+| --- | --- | --- |
+| 5C-1 | Interface pública, `EVENTS_WAITLIST_ENABLED` e escopo no servidor | PR draft, desligada |
+| 5C-2 | Confirmação e aviso de vaga com textos de evento; link para a página do evento; aviso só com venda aberta | Aguarda autorização |
+| 5C-3 | Agendador (detecção + envio), monitoramento, ativação e rollback | Aguarda autorização |
+
+### 5C-1 — inscrição com escopo próprio
+
+**Variável própria.** `EVENTS_WAITLIST_ENABLED=true` abre a lista **só dos eventos**, e só com a venda do evento aberta (`EVENT_BOOKING_OPEN` + `EVENTS_PUBLIC_ENABLED`). As variáveis da lista regular (`WAITLIST_PUBLIC_ENABLED`, `WAITLIST_SIGNUP_ENABLED`) continuam valendo só para as experiências regulares: uma não liga a outra. **Na 5C-1 a variável sozinha não abre nada**: `EVENT_WAITLIST_EMAILS_READY = false` (`lib/events/flags.ts`) mantém a inscrição do evento fechada no código até a 5C-2, porque a confirmação e o aviso ainda sairiam com o texto de "turma" — inclusive pela rotina diária que recupera confirmações pendentes.
+
+**No servidor, antes do banco** (`lib/events/waitlist.ts`, chamado por `POST /api/waitlist`):
+
+| Pedido | Resposta |
+| --- | --- |
+| Nenhuma das duas variáveis ligada | 404, sem tocar no banco (como antes) |
+| Sessão regular com a lista regular desligada | 404, mesmo com a dos eventos ligada |
+| Sessão de evento com a dos eventos desligada | 404, mesmo com a regular ligada e o id em mãos |
+| Evento fora do site (despublicado, conteúdo inválido, ou sessão que não é a edição mostrada) | 409 `SESSION_UNAVAILABLE` |
+| Tipo da sessão ilegível | 503, nunca inscrição às cegas |
+| Mais participantes que `event.reservation.maxPerOrder` (6 no ESSÊNCIA) | 400 no campo quantidade |
+| O resto | `waitlist_join` de sempre: limite de tentativas, isca, duplicidade, tetos, zero vagas (`NOT_SOLD_OUT` com vaga), grupo que caiba na capacidade (24) |
+
+O tipo vem de `experiences.kind`, lido com a service role; a visibilidade, de `get_public_event` (a mesma leitura da página). Respostas com texto de evento ("evento", "ingresso"), nunca "turma".
+
+**No site** (só com a variável ligada):
+
+| Onde | O que muda |
+| --- | --- |
+| `/eventos/[slug]` esgotado | Na seção de reserva, botão **Entrar na lista de espera** e, ao lado, **Evento esgotado** — "Todas as vagas desta edição foram preenchidas. Entre para a lista de espera e seja avisado caso surja uma oportunidade." Hero e barra do celular dizem "Evento esgotado" e levam à seção. Sem a variável, o esgotado de sempre |
+| `/reservar/[id]` do evento esgotado | O mesmo convite e o botão |
+| `/lista-de-espera/[id]` do evento | Formulário de sempre com "Participantes" (até 6), textos de evento, cartão do evento e local; "Voltar para o evento". Com vaga, manda para o evento; fora do site, "lista de espera indisponível". Sessão regular nunca cai aqui, nem sessão de evento na tela regular |
+| Prévia `/eventos/demonstracao/essencia?estado=SOLD_OUT&lista=1` | O botão, sem destino |
+
+Saída da lista: o link de sempre (`/lista-de-espera#t=…`). A página do link ainda diz "turma" (a RPC não informa o tipo) — vai para a 5C-2, junto com os e-mails.
+
+### Diagnóstico (29/10/2026)
+
+Conferido no código da `main` (`2e57673`) e em produção, só leitura: inscrição pública desligada (`POST /api/waitlist` e `/lista-de-espera/<id>` respondem 404), rota de envio protegida (`/api/cron/waitlist-notifications` sem segredo responde 401: `CRON_SECRET` existe), painel atrás de login. Migrations da lista `202610250001`, `202610250002`, `202610260001` e `202610260002` aplicadas (registro da operação de 26–28/10); `detection_enabled` desligado e sem agendamento da lista naquela data — **reconferir no SQL Editor antes da 5C-3**:
+
+```sql
+select 'deteccao' as item, detection_enabled::text as valor from public.waitlist_settings
+union all select 'agendamentos', coalesce(string_agg(jobname || '=' || active::text, ', '), 'nenhum') from cron.job where jobname ilike '%waitlist%'
+union all select 'pg_net', coalesce((select extversion from pg_extension where extname = 'pg_net'), 'ausente')
+union all select 'segredo_no_vault', count(*)::text from vault.secrets where name = 'waitlist_cron_secret'
+union all select 'inscricoes_ativas', count(*)::text from public.waitlist_entries where status = 'ACTIVE';
+```
+
+Painel (`/admin/lista-de-espera`): já filtra por sessão, mostra experiência (o nome do evento), inscritos, quantidade, posição, avisos com tentativas e falhas, e remove com motivo. Funciona para o evento sem mudança; um selo "Evento" na lista de turmas fica como adaptação mínima opcional da 5C-2.
+
+### Agendador (5C-3): recomendação
+
+| Opção | Frequência real | Custo | Duplicidade | Desligar sem código | Veredito |
+| --- | --- | --- | --- | --- | --- |
+| **pg_cron (varredura) + pg_cron → pg_net → rota (envio), segredo no Vault** | 1 min | Incluso no Supabase; função Vercel só quando há aviso na fila | Varredura com advisory lock; fila com reivindicação `skip locked` e chave de idempotência | `cron.alter_job(active := false)` ou `detection_enabled = false` | **Recomendado** |
+| Vercel Cron (`vercel.json`) | Diária no plano atual (os dois crons do projeto são diários) | Grátis; por minuto só no Pro | Rota já idempotente | Remover a entrada exige deploy | Impreciso demais para vaga que some em minutos |
+| GitHub Actions agendado | 5–15 min, com atrasos | Grátis | Idem | Desativar o workflow | Pausa após 60 dias sem atividade; segredo fora da infraestrutura |
+| Carona (`after()` em cancelamentos e no painel) | Só com tráfego | Só código | Idem | — | Não cobre pré-reserva vencida sem ninguém no site; só complemento |
+
+O pg_cron já roda a expiração das pré-reservas a cada minuto em produção, e os scripts estão prontos e não aplicados (`supabase/maintenance/waitlist_scan_schedule.sql`, `waitlist_notify_schedule.sql`). Ponto de atenção para a 5C-3: **ligar a varredura é global** — ela olha toda sessão com inscrição ativa. Hoje só eventos poderiam ter inscrição (a lista regular segue desligada), mas, para a ativação dos eventos não depender disso, a 5C-3 deve acrescentar um escopo ao envio (por exemplo `WAITLIST_NOTIFY_SCOPE=EVENTS`), que a rota confere antes de enviar. Nenhum agendamento é criado sem autorização.
+
+Testes: `tests/special-events-waitlist.test.ts`.
 
 ## Aplicação segura (quando autorizada)
 
