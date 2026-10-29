@@ -263,7 +263,7 @@ test("dashboard separa visão geral e uma página por base, com estado vazio", (
 // ---------------------------------------------------------------------------
 
 test("menu não trata a Imersão como item estrutural e Reservar leva para a agenda", () => {
-  const navbar = source("components/layout/navbar.tsx");
+  const navbar = source("components/layout/navbar-client.tsx") + source("lib/navigation.ts");
   assert.doesNotMatch(navbar, /imersao-paranoa/);
   assert.match(navbar, /\{ label: "Experiências", href: "\/experiencias" \}/);
   assert.match(navbar, /\{ label: "Bases", href: "\/bases" \}/);

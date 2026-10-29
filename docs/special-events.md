@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md) · [Lista de espera](waitlist.md)
 
-**Estado (28/10/2026): fase 2 em PR draft; migration `202610280001_special_events_foundation.sql` aplicada em produção**, com preflight e postcheck sem falhas nem pontos de atenção (assinatura das 166 funções existentes igual antes e depois, todas as experiências `REGULAR`, interruptor da publicação desligado). Nenhum evento está cadastrado nem publicado, e o site ainda não lê nada de eventos.
+**Estado (29/10/2026): fases 2 e 3 na `main` e em produção** — PR #42 (squash `8aa7677`) e PR #43 (squash `34dec78`, deploy de produção às 23:17:55 UTC de 28/10). Migration `202610280001_special_events_foundation.sql` aplicada, com preflight e postcheck sem falhas nem pontos de atenção. **Fase 4 (páginas públicas) em PR draft, desligada** (`EVENTS_PUBLIC_ENABLED` ausente). Nenhum evento cadastrado nem publicado; o interruptor da publicação segue desligado.
 
 ## O que é
 
@@ -14,9 +14,9 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 
 | Fase | O que entrega | Estado |
 | --- | --- | --- |
-| 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | PR draft; migration aplicada em produção (28/10), interruptor desligado |
-| 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | PR draft sobre o da fase 2; sem migration |
-| 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu | — |
+| 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | Na `main` (#42); migration aplicada em produção (28/10), interruptor desligado |
+| 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | Na `main` e em produção (#43, 28/10); sem migration |
+| 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu, atrás de `EVENTS_PUBLIC_ENABLED` | PR draft; desligada; sem migration |
 | 5. Reserva e e-mail | Textos da página de reserva e e-mail de confirmação de evento | — |
 | 6. Painel | `/admin/eventos` com formulário estruturado | — |
 | 7. Relatórios | Painéis separados por tipo | — |
@@ -137,6 +137,84 @@ A leitura dos tipos vai em lotes de 100 sessões: a troca de turma do painel lis
 O contador "turmas sem vagas para o grupo" vem da RPC e ainda conta sessões do outro tipo sem vaga; só a explicação ao lado da lista é afetada. No Stand-by e no autoatendimento ele só conta turmas do mesmo valor pago por pessoa, então um evento a R$ 150 só entra na conta de uma reserva regular paga a R$ 150 por pessoa; na troca de turma do painel, um evento esgotado soma 1.
 
 Testes: `tests/special-events-separation.test.ts`.
+
+## Fase 4 — páginas públicas
+
+Só código; nenhuma migration e nenhum dado gravado. Tudo atrás de `EVENTS_PUBLIC_ENABLED` (ausente = desligada).
+
+### Interruptores
+
+| Interruptor | Efeito |
+| --- | --- |
+| `EVENTS_PUBLIC_ENABLED=true` | Expõe `/eventos`, `/eventos/[slug]`, o item "Eventos" no menu e o destaque na home. Ausente: as rotas respondem **404** e nada de evento aparece; a home e o menu nem consultam o banco |
+| `special_event_settings.publication_enabled` (banco) | Sem ele nenhum evento é publicado; mesmo com a variável ligada, a seção mostra o estado vazio e o menu não ganha o item |
+| `EVENT_BOOKING_OPEN` (`lib/events/flags.ts`) | `false` nesta fase: o botão "Garantir minha vaga" aparece, desativado, com "As reservas pelo site abrem em breve". Na fase 5 vira link para `/reservar/[sessionId]` |
+
+O item do menu e o destaque da home só aparecem com a variável ligada **e** pelo menos um evento publicado.
+
+### Rotas
+
+| Rota | O que mostra |
+| --- | --- |
+| `/eventos` | Hero da seção, próximos eventos (o primeiro em destaque), edições anteriores quando existirem e estado vazio elegante |
+| `/eventos/[slug]` | A página do evento, montada só com os dados cadastrados. Inexistente ou não publicado: 404 |
+| `/experiencias/[slug]` | Slug de um evento publicado redireciona (307) para `/eventos/[slug]` com a seção ligada |
+| `/eventos/demonstracao` e `/eventos/demonstracao/essencia` | **Prévia com dados de demonstração** (fixture, sem banco), só no desenvolvimento local e no Preview da Vercel; em Production, 404. Aviso visível de que não é um evento publicado, `noindex`, fora do sitemap. `?estado=SOLD_OUT\|CLOSED\|ENDED`, `?vagas=3` e `?vazio=1` mostram as outras situações |
+
+Não há `loading.tsx` na seção de propósito: com ele, o Next começa a enviar a resposta antes do `notFound()` e o 404 da seção desligada sairia com status 200. `error.tsx` cobre falhas inesperadas.
+
+### Página do evento
+
+Oito blocos, todos vindos de `experiences.editorial_content`: Hero (selo, título, subtítulo em âmbar, descrição, destaques, data, horário e local), apresentação, programação em linha do tempo com fotos, o que está incluso (ingresso único), quem faz acontecer (logos quando existem), local (o `BaseLocationCard` da base, com endereço, ponto de encontro e mapa), informações importantes e reserva (resumo e botão). No celular, um CTA fixo embaixo, com espaço reservado para não cobrir o rodapé, e sem o botão flutuante do WhatsApp para não sobrepor.
+
+Visual: fundo noturno, títulos em Montserrat 800 caixa alta (carregada com `next/font` só nas páginas de evento), destaques em âmbar (`ember`), fotografias reais.
+
+### Conteúdo editorial do evento
+
+O documento é o mesmo das experiências (versão 1, que o banco exige para publicar) com um bloco a mais, `event` (`lib/events/editorial.ts`):
+
+| Campo | Conteúdo |
+| --- | --- |
+| `badge`, `subtitle`, `tagline`, `highlights` | Selo, subtítulo, descrição e destaques do Hero |
+| `heroImageMobile`, `cardImage` | Foto do Hero para celular e do card (opcionais) |
+| `intro` | Título, parágrafos e foto da apresentação |
+| `program.items[]` | `time` (HH:MM, em ordem), `title`, `description`, `hosts[]`, `note`, `image` |
+| `included.items[]` | O que o ingresso inclui |
+| `partners.items[]` | `name`, `role` (nas palavras da organização), `logo` opcional |
+| `info.items[]` | `title`, `body`; sem texto confirmado ficam `pending` e **só aparecem na prévia** |
+| `reservation` | Título, texto do botão e foto de fundo |
+
+Evento publicado sem o bloco completo não aparece no site. O conteúdo do ESSÊNCIA está em `lib/events/fixtures/essencia.ts`, no formato exato do banco, para ser cadastrado na fase de lançamento.
+
+### Mídias
+
+| Arquivo | Origem | Uso |
+| --- | --- | --- |
+| `bases/concha-acustica/concha-hero-nascer-do-sol-{desktop,mobile}.webp` | Repositório (mesma foto do slide 1 do carrossel) | Hero e card |
+| `bases/concha-acustica/capsula-lago-por-do-sol-desktop.webp` | Repositório | Apresentação e Hero de `/eventos` |
+| `experiences/remada-nascer-do-sol/remada-nascer-do-sol-galeria-02.webp` | Repositório | 05h30 — canoa havaiana |
+| `eventos/essencia/capsula-deck-lago.jpg` | Pasta do Cápsula Bar (`DSC00153`, fundo do slide 3) | 07h30 — meditação |
+| `eventos/essencia/capsula-mesas-encontro.jpg` | Pasta do Cápsula Bar (`DSC07470`, fundo do slide 4) | 09h — encerramento |
+| `eventos/essencia/capsula-pier-amanhecer.jpg` | Pasta do Cápsula Bar (`DSC00386`, fundo do slide 5) | Reserva |
+| `eventos/essencia/logo-cure-se-bem.png` | `CURE-SE LOGO VETOR.pdf` | Parceiros |
+| `eventos/essencia/logo-nutre.png` | Logo enviado pela organização | Parceiros |
+| `branding/alma-azul-logo-dark.png`, `bases/concha-acustica/capsula-bar-logo.webp` | Repositório | Parceiros |
+
+Rapha Dantas não tem logo fornecido: aparece pelo nome. Os slides não foram usados como imagem (têm texto embutido).
+
+### Pendente antes de publicar
+
+- Textos de **o que levar, chegada, segurança na água, cancelamento, clima e restrições** — hoje `pending`, invisíveis fora da prévia.
+- Fotos sem texto dos slides 1 e 2, se preferirem às do repositório; logo do Rapha Dantas, se houver.
+- Confirmação dos parceiros quanto ao uso dos logos.
+- Fase 5: o botão de reserva (`EVENT_BOOKING_OPEN`) e o e-mail de evento.
+- O slug `demonstracao` fica reservado para a prévia: um evento com esse slug não teria página.
+
+### Como revisar no Preview
+
+O Preview usa o banco de produção. A prévia **não lê nem grava nada**: abra `/eventos/demonstracao` e `/eventos/demonstracao/essencia` (com `?estado=SOLD_OUT`, `CLOSED`, `ENDED` ou `?vazio=1`). Não ligue `EVENTS_PUBLIC_ENABLED` nem o interruptor do banco para revisar.
+
+Capturas em `docs/screenshots/eventos-especiais/`. Testes: `tests/special-events-public.test.ts`.
 
 ## Aplicação segura (quando autorizada)
 

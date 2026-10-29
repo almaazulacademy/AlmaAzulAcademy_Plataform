@@ -1,5 +1,14 @@
 # Changelog
 
+## Eventos especiais — páginas públicas e ESSÊNCIA (fase 4, desligada)
+
+- **Nada muda em produção ao publicar este código**: tudo atrás de `EVENTS_PUBLIC_ENABLED`, ausente. Desligada, `/eventos` e `/eventos/[slug]` respondem 404 e o menu e a home ficam como estão. Sem migration. Detalhes em [docs/special-events.md](docs/special-events.md#fase-4--páginas-públicas).
+- **`/eventos`**: Hero da seção, próximos eventos, edições anteriores e estado vazio. **`/eventos/[slug]`**: modelo reutilizável com Hero, apresentação, programação em linha do tempo, incluso, parceiros, local, informações importantes e reserva, tudo vindo de `editorial_content` validado (`lib/events/editorial.ts`). CTA fixo no celular.
+- **Item "Eventos" no menu e destaque na home** só com a seção ligada e evento publicado. `/experiencias/[slug]` de um evento leva à página do evento.
+- **Botão "Garantir minha vaga" sem checkout** nesta fase (`EVENT_BOOKING_OPEN = false`), respeitando vagas, esgotado, encerrado e realizado.
+- **Prévia com o ESSÊNCIA de demonstração** em `/eventos/demonstracao`, só no desenvolvimento e no Preview, sem banco, `noindex`. Fotos reais do repositório e do Cápsula Bar; logos fornecidos; informações operacionais pendentes só na prévia.
+- Reservas, pagamentos, e-mails, planilha, Stand-by, lista de espera e check-in não foram alterados.
+
 ## Eventos especiais — separação no site (fase 3)
 
 - **Sem migration e sem mudança visível hoje**: não há evento publicado e o interruptor da publicação segue desligado. Detalhes em [docs/special-events.md](docs/special-events.md#fase-3--separação-no-site).
