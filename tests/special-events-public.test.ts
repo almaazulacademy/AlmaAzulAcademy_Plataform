@@ -26,7 +26,7 @@ import {
   sessionStartClock,
 } from "../lib/events/policy.ts";
 import { isEventBookingOpen, isEventsDemoEnabled, isEventsPublicEnabled } from "../lib/events/flags.ts";
-import { DEMO_AVAILABILITIES, ESSENCIA_EDITORIAL, ESSENCIA_STARTS_AT, essenciaDemoEvent } from "../lib/events/fixtures/essencia.ts";
+import { DEMO_AVAILABILITIES, ESSENCIA_CAPACITY, ESSENCIA_EDITORIAL, ESSENCIA_STARTS_AT, essenciaDemoEvent } from "../lib/events/fixtures/essencia.ts";
 import {
   availabilityBadge,
   eventCta,
@@ -132,7 +132,10 @@ test("informações do ESSÊNCIA: os sete textos aprovados, todos publicáveis",
     "Nossa experiência começa às 05h30, no Cápsula Bar, às margens do Lago Paranoá.",
     "Recomendamos chegar com alguns minutos de antecedência para aproveitar cada momento. Haverá tolerância de chegada até às 05h50.",
   ]);
-  assert.match(byId("o-que-levar"), /Os materiais necessários para a prática de Superioga serão fornecidos pela equipe\./);
+  assert.match(byId("o-que-levar"), /Venha com roupas confortáveis, adequadas para atividades físicas\. Recomendamos trazer garrafa de água, protetor solar e seus itens pessoais\./);
+  assert.match(byId("o-que-levar"), /Para participar da prática de Superioga, traga seu próprio tapete\. A organização não disponibilizará tapetes para essa atividade\./);
+  // Regra antiga (materiais fornecidos pela equipe) não pode sobrar em lugar nenhum do conteúdo.
+  assert.doesNotMatch(JSON.stringify(ESSENCIA_EDITORIAL), /fornecid[oa]s? pela equipe|materiais necessários/i);
   assert.match(byId("seguranca"), /O uso de colete salva-vidas é obrigatório/);
   assert.match(byId("alimentacao"), /Nutre Congelados Saudáveis/);
   assert.match(byId("clima"), /o evento será reagendado e os participantes serão comunicados pela organização/);
@@ -286,7 +289,8 @@ test("prévia: o ESSÊNCIA de demonstração em todas as situações, sem sessã
     assert.equal(event.session.priceCents, 15_000);
     assert.equal(event.session.durationMinutes, 210);
   }
-  assert.equal(essenciaDemoEvent("AVAILABLE").session.remainingSpots, 12);
+  assert.equal(essenciaDemoEvent("AVAILABLE").session.remainingSpots, 24);
+  assert.equal(ESSENCIA_CAPACITY, 24);
   assert.equal(essenciaDemoEvent("SOLD_OUT").session.remainingSpots, 0);
   const { upcoming, past } = splitEvents([essenciaDemoEvent("AVAILABLE"), essenciaDemoEvent("ENDED")]);
   assert.equal(upcoming.length, 1);
@@ -301,8 +305,8 @@ test("dados: a linha de list_public_events vira o evento da página, com base, s
   const db = await fullDatabase();
   const fx = await rescheduleFixtures(async (sql, params = []) => (await db.query(sql, params)).rows as Row[]);
   const created = await fx.call(
-    `public.admin_create_event($1::uuid, $2::uuid, 'essencia', 'ESSÊNCIA — Corpo, Mente e Natureza', 'Canoa, meditação e Superioga', $3::jsonb, null, now() + interval '9 days', 210, 15000, 12)`,
-    [ADMIN, fx.SUNSET_CONCHA.base_id, JSON.stringify(ESSENCIA_EDITORIAL)],
+    `public.admin_create_event($1::uuid, $2::uuid, 'essencia', 'ESSÊNCIA — Corpo, Mente e Natureza', 'Canoa, meditação e Superioga', $3::jsonb, null, now() + interval '9 days', 210, 15000, $4)`,
+    [ADMIN, fx.SUNSET_CONCHA.base_id, JSON.stringify(ESSENCIA_EDITORIAL), ESSENCIA_CAPACITY],
   );
   // O banco aceita o documento: a mesma régua de publicação das experiências.
   assert.equal((await db.query<Row>(`select public.experience_editorial_is_publishable($1::jsonb) as ok`, [JSON.stringify(ESSENCIA_EDITORIAL)])).rows[0].ok, true);
@@ -323,8 +327,9 @@ test("dados: a linha de list_public_events vira o evento da página, com base, s
     address: "SHTN Trecho 1, Lote 8 — Brasília/DF",
     mapsUrl: "https://maps.app.goo.gl/ueSCiLvHAggrzuAX7",
   });
-  assert.deepEqual([event.session.id, event.session.availability, event.session.remainingSpots, event.session.priceCents, event.session.durationMinutes], [created.sessionId, "AVAILABLE", 12, 15000, 210]);
+  assert.deepEqual([event.session.id, event.session.availability, event.session.remainingSpots, event.session.priceCents, event.session.durationMinutes], [created.sessionId, "AVAILABLE", 24, 15000, 210]);
 
+  await fx.reserve(created.sessionId, 12);
   await fx.reserve(created.sessionId, 12);
   const soldOut = mapPublicEvent((await db.query(`select * from public.get_public_event('essencia')`)).rows[0]);
   assert.deepEqual([soldOut?.session.availability, soldOut?.session.remainingSpots], ["SOLD_OUT", 0]);

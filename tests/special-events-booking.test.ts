@@ -26,7 +26,7 @@ import {
 } from "../lib/events/booking.ts";
 import { RESERVATION_MAX_QUANTITY, validateEventEditorial } from "../lib/events/editorial.ts";
 import { isEventBookingOpen } from "../lib/events/flags.ts";
-import { ESSENCIA_EDITORIAL, essenciaDemoEvent } from "../lib/events/fixtures/essencia.ts";
+import { ESSENCIA_CAPACITY, ESSENCIA_EDITORIAL, essenciaDemoEvent } from "../lib/events/fixtures/essencia.ts";
 import { reservationQuantityOptions } from "../lib/waitlist/public.ts";
 import { fullDatabase } from "./support/full-database.ts";
 import { createPgliteAdmin } from "./support/pglite-admin.ts";
@@ -44,12 +44,12 @@ const { call, rows, IMERSAO, SUNSET_CONCHA, makeSession, reserve } = fx;
 
 let sequence = 0;
 
-/** O ESSÊNCIA cadastrado só no banco de teste: publicado, sessão aberta, 12 vagas, R$ 150. */
+/** O ESSÊNCIA cadastrado só no banco de teste: publicado, sessão aberta, 24 vagas, R$ 150. */
 async function essencia() {
   sequence += 1;
   const created = await call(
-    `public.admin_create_event($1::uuid, $2::uuid, $3, 'ESSÊNCIA — Corpo, Mente e Natureza', 'Canoa, meditação e Superioga', $4::jsonb, null, now() + interval '9 days', 210, 15000, 12)`,
-    [ADMIN, SUNSET_CONCHA.base_id, `essencia-teste-${sequence}`, JSON.stringify(ESSENCIA_EDITORIAL)],
+    `public.admin_create_event($1::uuid, $2::uuid, $3, 'ESSÊNCIA — Corpo, Mente e Natureza', 'Canoa, meditação e Superioga', $4::jsonb, null, now() + interval '9 days', 210, 15000, $5)`,
+    [ADMIN, SUNSET_CONCHA.base_id, `essencia-teste-${sequence}`, JSON.stringify(ESSENCIA_EDITORIAL), ESSENCIA_CAPACITY],
   );
   await rows(`update public.special_event_settings set publication_enabled = true`);
   await rows(`update public.experiences set status = 'PUBLISHED' where id = $1::uuid`, [created.experienceId]);
@@ -122,31 +122,31 @@ test("acesso direto: com a venda fechada, nem o id da sessão abre uma reserva d
 // 2. Limite por pedido e capacidade
 // ===========================================================================
 
-test("ESSÊNCIA: até 6 por pedido, 12 no total, R$ 150 por pessoa decididos pelo banco", async () => {
+test("ESSÊNCIA: até 6 por pedido, 24 no total, R$ 150 por pessoa decididos pelo banco", async () => {
   const session = await essencia();
   assert.deepEqual(await startReservation(session, 7, true), { rejected: "EVENT_ORDER_LIMIT" });
-  const first = await startReservation(session, 6, true);
-  assert.equal(first.created.totalCents, 90_000, "6 × R$ 150");
-  const second = await startReservation(session, 6, true);
-  assert.equal(second.created.totalCents, 90_000);
+  for (let order = 0; order < 4; order += 1) {
+    const created = await startReservation(session, 6, true);
+    assert.equal(created.created.totalCents, 90_000, "6 × R$ 150");
+  }
   // Capacidade cheia: a última tentativa é recusada pelo banco, não pela página.
   const third = await startReservation(session, 1, true);
   assert.match(third.failed ?? "", /INSUFFICIENT_SPOTS/);
   const occupied = await rows(`select coalesce(sum(quantity), 0)::int as n, coalesce(sum(total_cents), 0)::int as total from public.reservations where session_id = $1::uuid and status = 'PRE_RESERVED'`, [session]);
-  assert.deepEqual(occupied[0], { n: 12, total: 180_000 }, "receita bruta máxima R$ 1.800");
+  assert.deepEqual(occupied[0], { n: 24, total: 360_000 }, "receita bruta máxima R$ 3.600");
   // O preço é o da sessão: o navegador não manda valor nenhum.
   assert.doesNotMatch(source("lib/reservations/validation.ts"), /price|totalCents|unitPrice/i);
 });
 
 test("última vaga: com 1 vaga restante, só um pedido de 1 entra", async () => {
   const session = await essencia();
-  await reserve(session, 6);
-  await reserve(session, 5);
+  for (const quantity of [6, 6, 6, 5]) await reserve(session, quantity);
   const [a, b] = [await startReservation(session, 1, true), await startReservation(session, 1, true)];
   assert.ok(a.created, "a primeira leva a última vaga");
   assert.match(b.failed ?? "", /INSUFFICIENT_SPOTS/);
   // Concorrência real (sessões independentes do Postgres): special-events-concurrency.test.ts.
   assert.match(source("tests/special-events-concurrency.test.ts"), /16 pessoas compram 1 vaga ao mesmo tempo/);
+  assert.match(source("tests/special-events-concurrency.test.ts"), /ESSÊNCIA, 24 vagas: 16 pessoas compram 2 ao mesmo tempo/);
 });
 
 test("pré-reserva vencida deixa de ocupar vaga do evento", async () => {
@@ -154,15 +154,15 @@ test("pré-reserva vencida deixa de ocupar vaga do evento", async () => {
   const held = await startReservation(session, 6, true);
   // Criada há 3 h, venceu há 1 h (a retenção é de 2 h).
   await rows(`update public.reservations set created_at = now() - interval '3 hours', expires_at = now() - interval '1 hour' where id = $1::uuid`, [held.created.reservationId]);
-  assert.equal(Number((await rows(`select public.available_spots($1::uuid) as n`, [session]))[0].n), 12);
+  assert.equal(Number((await rows(`select public.available_spots($1::uuid) as n`, [session]))[0].n), ESSENCIA_CAPACITY);
   assert.ok((await startReservation(session, 6, true)).created);
 });
 
 test("quantidade: o formulário do evento oferece até 6; o da experiência regular, como antes", () => {
-  assert.equal(eventQuantityLimit(12, 6), 6);
+  assert.equal(eventQuantityLimit(ESSENCIA_CAPACITY, 6), 6);
   assert.equal(eventQuantityLimit(4, 6), 4);
   assert.equal(eventQuantityLimit(0, 6), 0);
-  assert.deepEqual(reservationQuantityOptions(eventQuantityLimit(12, 6)), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(reservationQuantityOptions(eventQuantityLimit(ESSENCIA_CAPACITY, 6)), [1, 2, 3, 4, 5, 6]);
   assert.equal(reservationQuantityOptions(12).length, 12, "regular: até as vagas, limite geral de 20");
   assert.equal(reservationQuantityOptions(40).length, RESERVATION_MAX_QUANTITY);
 });

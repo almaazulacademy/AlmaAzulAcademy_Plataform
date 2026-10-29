@@ -15,7 +15,7 @@ import test from "node:test";
 import { eventBookingRejection, loadSessionBookingRules, type RulesQueryClient } from "../lib/events/booking.ts";
 import { validateEventEditorial } from "../lib/events/editorial.ts";
 import { eventEmailMissing } from "../lib/events/email-readiness.ts";
-import { CONCHA_ACUSTICA_LOCATION, ESSENCIA_EDITORIAL, ESSENCIA_STARTS_AT } from "../lib/events/fixtures/essencia.ts";
+import { CONCHA_ACUSTICA_LOCATION, ESSENCIA_CAPACITY, ESSENCIA_EDITORIAL, ESSENCIA_STARTS_AT } from "../lib/events/fixtures/essencia.ts";
 import {
   buildCheckinReminderEmail,
   buildReservationConfirmationEmail,
@@ -64,7 +64,7 @@ function eventData(overrides: Partial<ReservationConfirmationData> = {}): Reserv
 }
 
 /** O que nunca pode aparecer num e-mail de evento: textos de remada da base. */
-const GENERIC = [CANCELLATION_NOTE, MEETING_TOLERANCE_NOTE, ...PREPARATION_ITEMS, "1 dia antes", "roupa de banho", "chinelo", "Nos vemos na água", "Criaremos um grupo"];
+const GENERIC = [CANCELLATION_NOTE, MEETING_TOLERANCE_NOTE, ...PREPARATION_ITEMS, "1 dia antes", "roupa de banho", "chinelo", "Nos vemos na água", "Criaremos um grupo", "fornecidos pela equipe", "materiais necessários"];
 
 function assertNoGeneric(message: ConfirmationEmail, label: string) {
   for (const text of GENERIC) {
@@ -97,7 +97,7 @@ test("confirmação do evento: todo o conteúdo obrigatório, no horário de Bra
     "09h — Encerramento e conexão",
     "roupas confortáveis",
     "garrafa de água, protetor solar",
-    "Os materiais necessários para a prática de Superioga serão fornecidos pela equipe.",
+    "Para participar da prática de Superioga, traga seu próprio tapete. A organização não disponibilizará tapetes para essa atividade.",
     "O uso de colete salva-vidas é obrigatório durante a atividade na água.",
     "lanche saudável oferecido pela Nutre Congelados Saudáveis",
     "Você pode solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (horário de Brasília), escolhendo entre crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe.",
@@ -107,7 +107,7 @@ test("confirmação do evento: todo o conteúdo obrigatório, no horário de Bra
     "https://www.almaazulacademy.com.br/checkin/3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b",
   ];
   for (const text of required) assert.ok(email.text.includes(text), `texto puro sem: ${text}`);
-  for (const text of ["Ingresso confirmado", "ESS7K2M9QX", "até 05h50", "09h00", "Superioga serão fornecidos pela equipe", "colete salva-vidas", "Nutre Congelados Saudáveis", "5 de novembro de 2026, às 12h00", "Como chegar — Google Maps"]) {
+  for (const text of ["Ingresso confirmado", "ESS7K2M9QX", "até 05h50", "09h00", "traga seu próprio tapete", "colete salva-vidas", "Nutre Congelados Saudáveis", "5 de novembro de 2026, às 12h00", "Como chegar — Google Maps"]) {
     assert.ok(email.html.includes(text), `HTML sem: ${text}`);
   }
   assertNoGeneric(email, "confirmação");
@@ -145,7 +145,7 @@ test("lembrete do QR do evento: ingresso, início, tolerância e QR, sem texto d
 test("reagendamento do evento: nova data, pagamento válido, programação e sem política antecipada", () => {
   const email = buildReservationRescheduleEmail(eventData());
   assert.equal(email.subject, "Nova data confirmada — ESSÊNCIA — Corpo, Mente e Natureza · ESS7K2M9QX");
-  for (const text of ["Seu ingresso foi transferido para uma nova data", "SEU PAGAMENTO CONTINUA VÁLIDO", "05h30 — Canoa havaiana", "colete salva-vidas", "O QR Code do seu ingresso continua o mesmo"]) {
+  for (const text of ["Seu ingresso foi transferido para uma nova data", "SEU PAGAMENTO CONTINUA VÁLIDO", "05h30 — Canoa havaiana", "traga seu próprio tapete", "colete salva-vidas", "O QR Code do seu ingresso continua o mesmo"]) {
     assert.ok(email.text.includes(text), text);
   }
   assert.ok(!email.text.includes("Política de cancelamento".toUpperCase()), "como no reagendamento das experiências, sem antecipar a política");
@@ -259,8 +259,8 @@ test("banco: reserva paga do evento → payload da RPC → contexto do evento �
   const client = admin.client as unknown as EventEmailQueryClient;
   const fx = await rescheduleFixtures(async (sql, params = []) => (await db.query(sql, params)).rows as Row[]);
   const created = await fx.call(
-    `public.admin_create_event($1::uuid, $2::uuid, 'essencia', 'ESSÊNCIA — Corpo, Mente e Natureza', 'x', $3::jsonb, null, now() + interval '9 days', 210, 15000, 12)`,
-    [ADMIN, fx.SUNSET_CONCHA.base_id, JSON.stringify(ESSENCIA_EDITORIAL)],
+    `public.admin_create_event($1::uuid, $2::uuid, 'essencia', 'ESSÊNCIA — Corpo, Mente e Natureza', 'x', $3::jsonb, null, now() + interval '9 days', 210, 15000, $4)`,
+    [ADMIN, fx.SUNSET_CONCHA.base_id, JSON.stringify(ESSENCIA_EDITORIAL), ESSENCIA_CAPACITY],
   );
   await db.query(`update public.special_event_settings set publication_enabled = true`);
   await db.query(`update public.experiences set status = 'PUBLISHED' where id = $1::uuid`, [created.experienceId]);
