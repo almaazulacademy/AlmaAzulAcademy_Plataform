@@ -21,6 +21,8 @@ type Overview = {
   firstName: string;
   quantity: number;
   session: { startsAt: string; experienceTitle: string; baseName: string };
+  /** Inscrição de um evento especial (etapa 5C-2): textos de evento e volta para a página dele. */
+  event?: { slug: string } | null;
 };
 
 type View =
@@ -36,6 +38,17 @@ const CLOSED_COPY: Record<string, string> = {
   CONVERTED: "Você já tem uma reserva nesta turma. A inscrição na lista de espera foi encerrada.",
   EXPIRED: "Esta turma já aconteceu ou não está mais aberta. A inscrição foi encerrada.",
 };
+
+const EVENT_CLOSED_COPY: Record<string, string> = {
+  CANCELLED: "Pronto: você saiu da lista de espera deste evento. Não enviaremos mais avisos sobre ele.",
+  REMOVED: "Esta inscrição foi encerrada pela nossa equipe.",
+  CONVERTED: "Você já tem ingresso para este evento. A inscrição na lista de espera foi encerrada.",
+  EXPIRED: "Este evento já aconteceu ou não está mais aberto. A inscrição foi encerrada.",
+};
+
+function closedCopy(overview: Overview | null, state: string) {
+  return (overview?.event ? EVENT_CLOSED_COPY : CLOSED_COPY)[state];
+}
 
 async function post(path: string, token: string) {
   const response = await fetch(path, {
@@ -73,7 +86,7 @@ export function WaitlistCancel() {
         if (!ok) return setView({ kind: "ERROR", message: messageOf(payload, "Não foi possível abrir o link agora. Tente novamente em instantes.") });
         const overview = payload as unknown as Overview;
         if (overview.state === "ACTIVE") return setView({ kind: "ACTIVE", overview });
-        setView({ kind: "CLOSED", overview, message: CLOSED_COPY[overview.state] ?? "Esta inscrição já não está ativa." });
+        setView({ kind: "CLOSED", overview, message: closedCopy(overview, overview.state) ?? "Esta inscrição já não está ativa." });
       })
       .catch(() => setView({ kind: "ERROR", message: "Não foi possível conectar. Verifique sua internet e tente novamente." }));
   }, []);
@@ -85,7 +98,8 @@ export function WaitlistCancel() {
       const { ok, payload } = await post("/api/waitlist/cancel", token);
       if (!ok) { setView({ kind: "ERROR", message: messageOf(payload, "Não foi possível sair da lista agora. Tente novamente.") }); return; }
       const state = typeof payload.state === "string" ? payload.state : "CANCELLED";
-      setView({ kind: "CLOSED", overview: view.overview, message: state === "CANCELLED" ? messageOf(payload, CLOSED_COPY.CANCELLED) : CLOSED_COPY[state] ?? messageOf(payload, "Esta inscrição já não está ativa.") });
+      const eventCopy = view.overview.event ? closedCopy(view.overview, state) : null;
+      setView({ kind: "CLOSED", overview: view.overview, message: eventCopy ?? (state === "CANCELLED" ? messageOf(payload, CLOSED_COPY.CANCELLED) : CLOSED_COPY[state] ?? messageOf(payload, "Esta inscrição já não está ativa.")) });
     } catch {
       setView({ kind: "ERROR", message: "Não foi possível conectar. Verifique sua internet e tente novamente." });
     } finally {
@@ -109,16 +123,22 @@ export function WaitlistCancel() {
   }
 
   const overview = view.overview;
+  const event = overview?.event ?? null;
+  const back = event ? { href: `/eventos/${event.slug}`, label: "Voltar para o evento" } : { href: "/agenda", label: "Ver a agenda" };
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      {overview?.session.startsAt ? <SessionTurma startsAt={overview.session.startsAt} experienceTitle={overview.session.experienceTitle} label="Lista de espera da turma" /> : null}
+      {overview?.session.startsAt ? <SessionTurma startsAt={overview.session.startsAt} experienceTitle={overview.session.experienceTitle} label={event ? "Lista de espera do evento" : "Lista de espera da turma"} /> : null}
       <div className="rounded-4xl bg-white p-7 sm:p-10" role={view.kind === "CLOSED" ? "status" : undefined}>
         {view.kind === "ACTIVE" ? (
           <>
             <span className="grid size-12 place-items-center rounded-2xl bg-mist text-lake"><BellOff aria-hidden="true" className="size-6" /></span>
             <h1 className="mt-6 text-3xl font-medium tracking-[-0.05em] sm:text-4xl">Sair da lista de espera?</h1>
             <p className="mt-4 leading-7 text-ink/65">
-              {view.overview.firstName ? `${view.overview.firstName}, você` : "Você"} está na lista de espera desta turma{view.overview.quantity > 1 ? `, para ${view.overview.quantity} pessoas` : ""}. Ao sair, não enviaremos mais avisos sobre ela. Nenhuma reserva ou pagamento é afetado.
+              {event ? (
+                <>{view.overview.firstName ? `${view.overview.firstName}, você` : "Você"} está na lista de espera deste evento{view.overview.quantity > 1 ? `, para ${view.overview.quantity} participantes` : ""}. Ao sair, não enviaremos mais avisos sobre ele. Nenhum ingresso ou pagamento é afetado.</>
+              ) : (
+                <>{view.overview.firstName ? `${view.overview.firstName}, você` : "Você"} está na lista de espera desta turma{view.overview.quantity > 1 ? `, para ${view.overview.quantity} pessoas` : ""}. Ao sair, não enviaremos mais avisos sobre ela. Nenhuma reserva ou pagamento é afetado.</>
+              )}
             </p>
             <Button type="button" size="lg" className="mt-7 w-full sm:w-auto" disabled={pending} onClick={confirm}>
               {pending ? <><Loader2 aria-hidden="true" className="size-4 animate-spin" />Saindo...</> : "Sim, sair da lista de espera"}
@@ -129,7 +149,7 @@ export function WaitlistCancel() {
             <span className="grid size-12 place-items-center rounded-2xl bg-mist text-lake"><Check aria-hidden="true" className="size-6" /></span>
             <h1 className="mt-6 text-3xl font-medium tracking-[-0.05em] sm:text-4xl">Inscrição encerrada</h1>
             <p className="mt-4 leading-7 text-ink/65">{view.message}</p>
-            <Link href="/agenda" className="mt-7 inline-flex font-semibold text-forest">Ver a agenda</Link>
+            <Link href={back.href} className="mt-7 inline-flex font-semibold text-forest">{back.label}</Link>
           </>
         )}
       </div>

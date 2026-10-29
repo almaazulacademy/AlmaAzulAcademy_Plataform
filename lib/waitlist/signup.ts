@@ -205,11 +205,22 @@ export function waitlistTokenFromHash(hash: string) {
 
 const ENTRY_STATES = new Set(["ACTIVE", "CONVERTED", "CANCELLED", "REMOVED", "EXPIRED"]);
 
+function isMissingFunction(error: { message: string; code?: string }) {
+  return error.code === "42883" || error.code === "PGRST202" || /function .* does not exist|could not find the function/i.test(error.message);
+}
+
 async function callCancel(deps: WaitlistCancelDeps, name: "waitlist_cancel_overview" | "waitlist_cancel", body: unknown, clientAddress: string | null) {
   const token = parseCancelToken(body);
   // Formato errado: a mesma resposta de token desconhecido, sem tocar no banco.
   if (!token) return { kind: "NOT_FOUND" as const };
   try {
+    // A visão do link vem com o tipo da experiência (migration 202610300001).
+    // Sem a função nova, a de sempre — e a página fala de "turma", como antes.
+    if (name === "waitlist_cancel_overview") {
+      const withKind = await deps.rpc("waitlist_cancel_overview_with_kind", { p_token: token, p_client_address: clientAddress });
+      if (!withKind.error && isRecord(withKind.data)) return { kind: "DATA" as const, data: withKind.data };
+      if (withKind.error && !isMissingFunction(withKind.error)) return { kind: "UNAVAILABLE" as const };
+    }
     const result = await deps.rpc(name, { p_token: token, p_client_address: clientAddress });
     if (result.error || !isRecord(result.data)) return { kind: "UNAVAILABLE" as const };
     return { kind: "DATA" as const, data: result.data };
@@ -228,11 +239,14 @@ export async function handleWaitlistCancelOverview(deps: WaitlistCancelDeps, bod
   if (data.status === "NOT_FOUND") return { status: 404, body: { code: "NOT_FOUND", message: WAITLIST_CANCEL_MESSAGES.NOT_FOUND } };
   if (typeof data.status !== "string" || !ENTRY_STATES.has(data.status)) return unavailable();
   const session = isRecord(data.session) ? data.session : {};
-  // Só o que o banco já limitou: estado, primeiro nome, quantidade e a turma.
+  const eventSlug = data.experienceKind === "EVENT" && typeof data.experienceSlug === "string" && /^[a-z0-9-]{1,80}$/.test(data.experienceSlug) ? data.experienceSlug : null;
+  // Só o que o banco já limitou: estado, primeiro nome, quantidade, a turma e,
+  // para evento, o slug da página dele.
   return {
     status: 200,
     body: {
       state: data.status,
+      event: eventSlug ? { slug: eventSlug } : null,
       firstName: typeof data.firstName === "string" ? data.firstName : "",
       quantity: Number(data.quantity) || 0,
       session: {

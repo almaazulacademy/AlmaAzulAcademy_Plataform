@@ -31,12 +31,11 @@ export function isEventBookingOpen(env: Record<string, string | undefined> = pro
 }
 
 /**
- * A confirmação e o aviso de vaga da lista de espera ainda saem com o texto das
- * experiências regulares ("turma"). Até a etapa 5C-2 trazer os e-mails do
- * evento, a inscrição de evento fica fechada **no código**, mesmo com a
- * variável ligada.
+ * Trava da etapa 5C-1, retirada na 5C-2: a confirmação, o aviso de vaga e a
+ * página de saída já saem com os textos do evento. Volta a `false` fecha a
+ * inscrição de evento no código, mesmo com a variável ligada.
  */
-export const EVENT_WAITLIST_EMAILS_READY = false;
+export const EVENT_WAITLIST_EMAILS_READY = true;
 
 /**
  * `EVENTS_WAITLIST_ENABLED=true` abre a lista de espera **só dos eventos**:

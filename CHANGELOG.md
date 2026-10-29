@@ -1,5 +1,14 @@
 # Changelog
 
+## Eventos especiais — e-mails e saída da lista de espera (etapa 5C-2, desligada)
+
+- **Nada muda em produção ao publicar este código**: `EVENTS_WAITLIST_ENABLED`, `EVENTS_PUBLIC_ENABLED` e `EVENT_BOOKING_OPEN` ausentes; nenhum agendamento. Migration `202610300001` **não aplicada** (aditiva, duas funções novas). Detalhes em [docs/special-events.md](docs/special-events.md#5c-2--e-mails-e-saída-da-lista-do-evento).
+- **Confirmação e aviso de vaga do evento**: modelos próprios ("Isto não é um ingresso", "A vaga não está garantida", **GARANTIR MEU INGRESSO** → `/eventos/<slug>#reserva`), escolhidos pelo tipo da sessão lido no banco; sem saber o tipo, o e-mail fica pendente — nunca o modelo regular.
+- **Aviso do evento só com a venda aberta**: reivindicação por tipo; fechada, o aviso fica na fila sem gastar tentativa nem contar envio.
+- **Página de saída** com textos de evento e volta para a página dele.
+- **Trava da 5C-1 retirada** (`EVENT_WAITLIST_EMAILS_READY = true`): a inscrição do evento passa a depender só das variáveis, todas ausentes.
+- E-mails e lista das experiências regulares sem mudança.
+
 ## Eventos especiais — lista de espera, inscrição e escopo (etapa 5C-1, desligada)
 
 - **Nada muda em produção ao publicar este código**: `EVENTS_WAITLIST_ENABLED` ausente e, nesta etapa, fechada também no código (`EVENT_WAITLIST_EMAILS_READY = false`) até os e-mails do evento (5C-2). Sem migration. Detalhes em [docs/special-events.md](docs/special-events.md#fase-5c--lista-de-espera-do-evento).

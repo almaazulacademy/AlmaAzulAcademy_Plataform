@@ -26,6 +26,7 @@ import {
   type WaitlistRpcClient,
 } from "./joined-email.ts";
 import { buildWaitlistSpotEmail, parseWaitlistSpotEmailData } from "./spot-email-content.ts";
+import { buildEventWaitlistSpotEmail, EVENT_CONTEXT_UNAVAILABLE, EVENT_EMAIL_NOT_READY, waitlistEventOf } from "../events/waitlist-email.ts";
 
 /**
  * Quantos avisos uma execução reivindica de uma vez. Pequeno de propósito: o que
@@ -65,8 +66,11 @@ export function waitlistSpotIdempotencyKey(notificationId: string, generation: n
   return `waitlist-spot/${notificationId}/${generation}`;
 }
 
+/** Tipos de experiência cujos avisos uma execução pode reivindicar. */
+export type WaitlistSpotKind = "REGULAR" | "EVENT";
+
 export type WaitlistSpotQueue = {
-  claimPending(limit: number): Promise<WaitlistEmailClaim[]>;
+  claimPending(limit: number, kinds?: readonly WaitlistSpotKind[]): Promise<WaitlistEmailClaim[]>;
   freeze(claim: WaitlistEmailClaim, message: WaitlistEmailContent): Promise<boolean>;
   complete(claim: WaitlistEmailClaim): Promise<void>;
   fail(claim: WaitlistEmailClaim, errorCode: string, kind: WaitlistFailureKind, retryable: boolean): Promise<void>;
@@ -82,6 +86,13 @@ export type WaitlistSpotRuntime = {
   pause?: (milliseconds: number) => Promise<void>;
   /** Relógio do orçamento de tempo. Padrão: `Date.now`. */
   now?: () => number;
+  /**
+   * Etapa 5C-2. Tipos reivindicados nesta execução: `EVENT` só com a venda e a
+   * lista dos eventos abertas. Ausente, todos os tipos (o comportamento de antes).
+   */
+  kinds?: readonly WaitlistSpotKind[];
+  /** Tipo da sessão e conteúdo do evento, antes de montar a mensagem. Falha lança. */
+  enrich?: (payload: unknown) => Promise<unknown>;
 };
 
 const sleep = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
@@ -94,13 +105,24 @@ export function createWaitlistSpotQueue(client: WaitlistRpcClient): WaitlistSpot
   }
 
   return {
-    async claimPending(limit) {
-      const claims = await call("claim_pending_waitlist_spot_emails", {
+    async claimPending(limit, kinds) {
+      const policy = {
         p_limit: limit,
         p_max_attempts: WAITLIST_EMAIL_MAX_ATTEMPTS,
         p_lease_minutes: WAITLIST_EMAIL_LEASE_MINUTES,
         p_window_minutes: WAITLIST_IDEMPOTENCY_WINDOW_MINUTES,
-      }, "CLAIM_UNAVAILABLE");
+      };
+      let claims: unknown;
+      if (kinds) {
+        // Só os tipos pedidos (migration 202610300001). Sem a função no banco,
+        // volta para a de sempre; o aviso de evento com a venda fechada é então
+        // barrado no envio (`EVENT_SALES_CLOSED`).
+        const scoped = await client.rpc("claim_pending_waitlist_spot_emails_by_kind", { p_kinds: [...kinds], ...policy });
+        if (scoped.error && !isMissingFunction(scoped.error)) throw new Error("CLAIM_UNAVAILABLE");
+        claims = scoped.error ? await call("claim_pending_waitlist_spot_emails", policy, "CLAIM_UNAVAILABLE") : scoped.data;
+      } else {
+        claims = await call("claim_pending_waitlist_spot_emails", policy, "CLAIM_UNAVAILABLE");
+      }
       return Array.isArray(claims) ? claims.flatMap((item) => parseWaitlistEmailClaim(item) ?? []) : [];
     },
     async freeze(claim, message) {
@@ -127,6 +149,11 @@ export function createWaitlistSpotQueue(client: WaitlistRpcClient): WaitlistSpot
   };
 }
 
+function isMissingFunction(error: unknown) {
+  const value = error as { code?: unknown; message?: unknown } | null;
+  return value?.code === "42883" || value?.code === "PGRST202" || /function .* does not exist|could not find the function/i.test(String(value?.message ?? ""));
+}
+
 function errorCodeOf(error: unknown) {
   return error instanceof Error && /^[A-Z_]{1,64}$/.test(error.message) ? error.message : sanitizeEmailErrorCode(error);
 }
@@ -145,9 +172,22 @@ async function deliverClaimed(runtime: WaitlistSpotRuntime, claim: WaitlistEmail
 
   let message = claim.message;
   if (!message) {
-    const data = parseWaitlistSpotEmailData(claim.payload);
+    let payload = claim.payload;
+    if (runtime.enrich) {
+      try {
+        payload = await runtime.enrich(payload);
+      } catch {
+        return failed(EVENT_CONTEXT_UNAVAILABLE, "REJECTED", true);
+      }
+    }
+    const data = parseWaitlistSpotEmailData(payload);
     if (!data) return failed("PAYLOAD_EMPTY", "REJECTED", false);
-    message = buildWaitlistSpotEmail(data, runtime.origin);
+    const event = waitlistEventOf(payload);
+    if (event === "INVALID") return failed(EVENT_EMAIL_NOT_READY, "REJECTED", true);
+    // Só alcançado sem a migration 202610300001 (reivindicação por tipo): aviso
+    // de evento com a venda fechada nunca sai.
+    if (event && runtime.kinds && !runtime.kinds.includes("EVENT")) return failed("EVENT_SALES_CLOSED", "REJECTED", true);
+    message = event ? buildEventWaitlistSpotEmail(data, event, runtime.origin) : buildWaitlistSpotEmail(data, runtime.origin);
     const frozen = await runtime.queue.freeze(claim, message).catch(() => false);
     if (!frozen) return failed("FREEZE_FAILED", "REJECTED", true);
   }
@@ -194,7 +234,7 @@ export async function sendPendingWaitlistSpotEmails(
   try {
     for (let round = 0; round < maxBatches; round += 1) {
       if (round > 0 && now() - started >= budget) break;
-      const claims = await runtime.queue.claimPending(batch);
+      const claims = await runtime.queue.claimPending(batch, runtime.kinds);
       if (!claims.length) break;
       for (const claim of claims) {
         if (processed > 0 && spacing > 0) await pause(spacing);
