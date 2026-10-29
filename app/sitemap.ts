@@ -2,6 +2,8 @@ import type { MetadataRoute } from "next";
 
 import { listPublicBases } from "@/lib/bases/data";
 import { listPublishedExperiences } from "@/lib/editorial/data";
+import { listPublicEvents } from "@/lib/events/data";
+import { isEventsPublicEnabled } from "@/lib/events/flags";
 import { absoluteUrl } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -48,5 +50,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error("Erro ao montar as bases do sitemap:", error instanceof Error ? error.message : "erro desconhecido");
   }
 
-  return [...staticRoutes, ...baseRoutes, ...experienceRoutes];
+  // Eventos especiais: só com a seção ligada. A prévia de demonstração nunca entra.
+  let eventRoutes: MetadataRoute.Sitemap = [];
+  if (isEventsPublicEnabled()) {
+    const events = await listPublicEvents();
+    eventRoutes = [
+      { url: absoluteUrl("/eventos"), lastModified, changeFrequency: "weekly" as const, priority: 0.8 },
+      ...events.map((event) => ({ url: absoluteUrl(`/eventos/${event.slug}`), lastModified, changeFrequency: "weekly" as const, priority: 0.8 })),
+    ];
+  }
+
+  return [...staticRoutes, ...baseRoutes, ...experienceRoutes, ...eventRoutes];
 }

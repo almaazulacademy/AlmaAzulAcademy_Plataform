@@ -27,6 +27,12 @@ const config: Config = {
         lake: "rgb(var(--lake) / <alpha-value>)",
         forest: "rgb(var(--forest) / <alpha-value>)",
         sand: "rgb(var(--sand) / <alpha-value>)",
+        // Eventos especiais: o âmbar e o fundo noturno do carrossel oficial.
+        ember: "rgb(var(--ember) / <alpha-value>)",
+        night: "rgb(var(--night) / <alpha-value>)",
+      },
+      fontFamily: {
+        event: ["var(--font-event)", "Inter", "ui-sans-serif", "sans-serif"],
       },
       borderRadius: {
         "4xl": "2rem",

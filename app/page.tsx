@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, PersonStanding, Sailboat, Store, Users, Waves } from "lucide-react";
 
 import { BaseCard } from "@/components/bases/base-card";
+import { EventHighlight } from "@/components/events/event-highlight";
 import { ExperienceCard } from "@/components/experience-card";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
@@ -14,6 +15,9 @@ import { baseLabel, exclusiveLabel, experiencesForBase } from "@/lib/bases/avail
 import { listCatalogExperiences, listPublicBases } from "@/lib/bases/data";
 import { WHATSAPP_UPCOMING_ACTIVITIES_LINK } from "@/lib/contact";
 import { listPublishedExperiences } from "@/lib/editorial/data";
+import { listPublicEvents } from "@/lib/events/data";
+import { isEventsPublicEnabled } from "@/lib/events/flags";
+import { splitEvents } from "@/lib/events/public";
 import { resolveExperienceCardLocation, resolveExperienceCardMedia } from "@/lib/editorial/image";
 
 const futureFormats = [
@@ -29,7 +33,14 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default async function HomePage() {
-  const [published, bases, catalog] = await Promise.all([listPublishedExperiences(), listPublicBases(), listCatalogExperiences()]);
+  const [published, bases, catalog, events] = await Promise.all([
+    listPublishedExperiences(),
+    listPublicBases(),
+    listCatalogExperiences(),
+    // Seção de eventos desligada: nem consulta o banco.
+    isEventsPublicEnabled() ? listPublicEvents() : Promise.resolve([]),
+  ]);
+  const [nextEvent] = splitEvents(events).upcoming;
   const cards = published.map((experience) => {
     const media = resolveExperienceCardMedia(experience);
     const placement = catalog.find((item) => item.slug === experience.slug);
@@ -88,6 +99,8 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {nextEvent ? <EventHighlight event={nextEvent} /> : null}
 
       <Section
         id="bases"

@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 
 import { ComingSoonExperience } from "@/components/bases/coming-soon-experience";
 import { ExperienceLanding } from "@/components/experience-landing";
 import { renamedExperienceRedirect } from "@/lib/bases/catalog";
 import { getExperiencePlacement } from "@/lib/bases/data";
 import { getPublishedExperience } from "@/lib/editorial/data";
+import { getPublicEvent } from "@/lib/events/data";
+import { isEventsPublicEnabled } from "@/lib/events/flags";
 import { DATE_FILTER_PARAM, parseDateFilter } from "@/lib/sessions/date-filter";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +52,9 @@ export default async function DynamicExperiencePage({ params, searchParams }: Pr
   if (!experience) {
     const upcoming = await getExperiencePlacement(slug);
     if (upcoming?.experience.status === "COMING_SOON") return <ComingSoonExperience experience={upcoming.experience} base={upcoming.base} />;
+    // Evento especial publicado: a página dele é /eventos/[slug]. Redirecionamento
+    // temporário, porque a seção de eventos pode ser desligada.
+    if (isEventsPublicEnabled() && (await getPublicEvent(slug))) redirect(`/eventos/${slug}`);
     // Link antigo de uma experiência renomeada: leva para a URL atual.
     const renamed = renamedExperienceRedirect(slug, Boolean(upcoming));
     if (renamed) permanentRedirect(renamed);
