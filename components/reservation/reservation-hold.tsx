@@ -25,9 +25,12 @@ type ReservationHoldProps = {
   session?: BookingSession;
   /** Local de encontro da base da reserva, quando a consulta o conhece. */
   location?: BaseLocation | null;
+  /** Evento especial: textos de ingresso e o caminho de volta para a página do evento. */
+  event?: { slug: string; title: string };
 };
 
-export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "Sua vaga está reservada por 2 horas.", session, location }: ReservationHoldProps) {
+export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title, session, location, event }: ReservationHoldProps) {
+  const heading = title ?? (event ? "Seus ingressos estão reservados por 2 horas." : "Sua vaga está reservada por 2 horas.");
   const [expired, setExpired] = useState(new Date(expiresAt).getTime() <= Date.now());
   const [copied, setCopied] = useState(false);
   const expire = useCallback(() => setExpired(true), []);
@@ -44,15 +47,18 @@ export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "S
   return (
     <div className="rounded-4xl border border-ink/10 bg-white p-7 shadow-[0_25px_80px_rgba(20,49,44,0.10)] sm:p-10">
       <CheckCircle2 className="size-9 text-lake" />
-      <h1 className="mt-6 text-balance text-4xl font-medium leading-tight tracking-[-0.05em] sm:text-5xl">{expired ? "O prazo desta pré-reserva terminou." : title}</h1>
+      <h1 className="mt-6 text-balance text-4xl font-medium leading-tight tracking-[-0.05em] sm:text-5xl">{expired ? "O prazo desta pré-reserva terminou." : heading}</h1>
       <p className="mt-5 max-w-xl leading-7 text-ink/60">
-        {expired ? "As vagas foram liberadas automaticamente. Escolha uma nova sessão para tentar novamente." : "Finalize o pagamento antes do contador chegar a zero. Guarde o código para acompanhar a reserva depois."}
+        {expired
+          ? (event ? "Os ingressos foram liberados automaticamente. Se ainda houver vagas, você pode tentar de novo pela página do evento." : "As vagas foram liberadas automaticamente. Escolha uma nova sessão para tentar novamente.")
+          : "Finalize o pagamento antes do contador chegar a zero. Guarde o código para acompanhar a reserva depois."}
       </p>
       {session && !expired ? (
         <SessionTurma
           startsAt={session.startsAt}
           experienceTitle={session.experienceTitle}
-          note="Cada turma tem horário e vagas próprios. Confira o horário antes de pagar."
+          label={event ? "Seu ingresso" : undefined}
+          note={event ? "Ingresso único com toda a programação. Confira data e horário antes de pagar." : "Cada turma tem horário e vagas próprios. Confira o horário antes de pagar."}
           className="mt-8"
         />
       ) : null}
@@ -70,7 +76,9 @@ export function ReservationHold({ publicCode, expiresAt, checkoutUrl, title = "S
       <div className="mt-7 flex flex-col gap-3 sm:flex-row">
         {!expired && checkoutUrl && <a href={checkoutUrl} className={buttonVariants({ size: "lg" })}>Pagar agora</a>}
         <Link href="/acompanhar-reserva" className={cn(buttonVariants({ variant: "outline", size: "lg" }))}>Acompanhar reserva</Link>
-        {expired && <Link href="/agenda" className={buttonVariants({ size: "lg" })}>Ver novas datas</Link>}
+        {expired && (event
+          ? <Link href={`/eventos/${event.slug}`} className={buttonVariants({ size: "lg" })}>Voltar ao evento</Link>
+          : <Link href="/agenda" className={buttonVariants({ size: "lg" })}>Ver novas datas</Link>)}
       </div>
     </div>
   );

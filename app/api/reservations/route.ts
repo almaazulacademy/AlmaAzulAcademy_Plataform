@@ -1,5 +1,7 @@
 import { NextResponse, after } from "next/server";
 
+import { eventBookingRejection, loadSessionBookingRules, type RulesQueryClient } from "@/lib/events/booking";
+import { isEventBookingOpen } from "@/lib/events/flags";
 import { getPaymentProvider } from "@/lib/payments";
 import { getBookingSession } from "@/lib/reservations/data";
 import { drainReconciliationOpportunistically } from "@/lib/reservations/payment-reconciliation";
@@ -85,6 +87,26 @@ export async function POST(request: Request) {
   if (!admin) return NextResponse.json({ message: "Sistema de reservas ainda não configurado." }, { status: 503 });
 
   const input = validation.data;
+
+  // Evento especial: a venda só existe com EVENT_BOOKING_OPEN, e o pedido
+  // respeita o máximo de participantes do evento. Decidido aqui, no servidor,
+  // antes de qualquer vaga ser bloqueada — o botão da página não é a barreira.
+  // Experiência regular segue exatamente como antes.
+  let rules;
+  try {
+    rules = await loadSessionBookingRules(admin as unknown as RulesQueryClient, input.sessionId);
+  } catch (error) {
+    console.error("Falha ao conferir as regras da sessão:", error instanceof Error ? error.message : "erro desconhecido");
+    return NextResponse.json({ message: "Não foi possível iniciar a reserva agora. Tente novamente em instantes." }, { status: 503 });
+  }
+  const rejection = eventBookingRejection(rules, input.quantity, isEventBookingOpen());
+  if (rejection) {
+    return NextResponse.json(
+      { message: rejection.message, code: rejection.code, ...(rejection.field ? { errors: { [rejection.field]: rejection.message } } : {}) },
+      { status: rejection.status },
+    );
+  }
+
   const creation = await admin.rpc("create_pre_reservation", {
     p_session_id: input.sessionId,
     p_full_name: input.fullName,

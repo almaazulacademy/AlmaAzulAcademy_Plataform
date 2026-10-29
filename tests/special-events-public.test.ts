@@ -25,7 +25,7 @@ import {
   deadlineTimeText,
   sessionStartClock,
 } from "../lib/events/policy.ts";
-import { EVENT_BOOKING_OPEN, isEventsDemoEnabled, isEventsPublicEnabled } from "../lib/events/flags.ts";
+import { isEventBookingOpen, isEventsDemoEnabled, isEventsPublicEnabled } from "../lib/events/flags.ts";
 import { DEMO_AVAILABILITIES, ESSENCIA_EDITORIAL, ESSENCIA_STARTS_AT, essenciaDemoEvent } from "../lib/events/fixtures/essencia.ts";
 import {
   availabilityBadge,
@@ -262,8 +262,8 @@ test("apresentação: situação das vagas e botão em cada estado; nunca checko
   assert.equal(parseAvailability("QUALQUER"), "NO_SESSION");
   assert.deepEqual(["AVAILABLE", "SOLD_OUT", "CLOSED", "ENDED", "CANCELLED"].map((state) => isUpcoming(parseAvailability(state))), [true, true, true, false, false]);
 
-  assert.equal(EVENT_BOOKING_OPEN, false, "a fase 4 não abre o checkout");
-  const soon = eventCta({ availability: "AVAILABLE", sessionId: "s-1", ctaLabel: "Garantir minha vaga", bookingOpen: EVENT_BOOKING_OPEN });
+  assert.equal(isEventBookingOpen({}), false, "a venda de eventos nasce fechada");
+  const soon = eventCta({ availability: "AVAILABLE", sessionId: "s-1", ctaLabel: "Garantir minha vaga", bookingOpen: isEventBookingOpen({}) });
   assert.equal(soon.kind, "SOON");
   assert.ok(!("href" in soon));
   // Na fase 5, o mesmo botão leva ao fluxo de reserva de sempre.
@@ -369,7 +369,7 @@ test("rotas: 404 com a seção desligada, metadados de SEO e prévia sem indexa�
   assert.match(detail, /if \(!event\) notFound\(\);/);
   assert.match(detail, /openGraph:/);
   assert.match(detail, /canonical: `\/eventos\/\$\{event\.slug\}`/);
-  assert.match(detail, /bookingOpen=\{EVENT_BOOKING_OPEN\}/);
+  assert.match(detail, /bookingOpen=\{isEventBookingOpen\(\)\}/);
 
   for (const file of ["app/eventos/demonstracao/page.tsx", "app/eventos/demonstracao/[slug]/page.tsx"]) {
     const code = source(file);

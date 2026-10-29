@@ -1,5 +1,13 @@
 # Changelog
 
+## Eventos especiais — reservas e pagamentos (etapa 5A, desligada)
+
+- **Nada muda em produção ao publicar este código**: a venda de eventos só abre com `EVENT_BOOKING_OPEN=true` e `EVENTS_PUBLIC_ENABLED=true`, ambas ausentes. Sem migration. Detalhes em [docs/special-events.md](docs/special-events.md#fase-5a--reservas-e-pagamentos-do-evento).
+- **Bloqueio no servidor**: com a venda fechada, `POST /api/reservations` recusa sessão de evento antes de bloquear vaga (`EVENT_BOOKING_CLOSED`), mesmo com o id da sessão. Experiência regular segue igual.
+- **Até 6 participantes por pedido** no ESSÊNCIA (`event.reservation.maxPerOrder`), no servidor e no formulário; capacidade de 12 e preço de R$ 150 continuam decididos pelo banco.
+- **Textos de ingresso** em `/reservar`, resumo, pré-reserva e retorno do pagamento; política de cancelamento antes do pagamento; volta para `/eventos/[slug]`.
+- InfinitePay, webhook, reconciliação, confirmação, planilha e check-in não foram alterados.
+
 ## Eventos especiais — páginas públicas e ESSÊNCIA (fase 4, concluída e desligada)
 
 - **Concluída em 29/10/2026** (PR #44, `56dbc47`): na `main` e em produção com `EVENTS_PUBLIC_ENABLED` ausente e a publicação desligada no banco. Próxima etapa: fase 5, sob autorização.

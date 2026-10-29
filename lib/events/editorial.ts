@@ -73,8 +73,18 @@ export type EventContent = {
   arrival: EventArrival | null;
   /** Prazo de cancelamento inequívoco. Opcional; com ele, o texto `cancelamento` é obrigatório. */
   cancellation: EventCancellation | null;
-  reservation: { eyebrow: string; title: string; ctaLabel: string; image: EditorialImage | null };
+  reservation: {
+    eyebrow: string;
+    title: string;
+    ctaLabel: string;
+    image: EditorialImage | null;
+    /** Máximo de participantes por pedido, de 1 a 20. Sem ele, o limite geral (20). */
+    maxPerOrder: number;
+  };
 };
+
+/** O limite geral de uma reserva, o mesmo de `create_pre_reservation`. */
+export const RESERVATION_MAX_QUANTITY = 20;
 
 export type EventEditorial = ExperienceEditorial & { event: EventContent };
 
@@ -224,8 +234,14 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
       title: need(text(reservation?.title), "Título da reserva"),
       ctaLabel: text(reservation?.ctaLabel) || "Garantir minha vaga",
       image: image(reservation?.image),
+      maxPerOrder: RESERVATION_MAX_QUANTITY,
     },
   };
+  if (reservation?.maxPerOrder !== undefined) {
+    const max = Number(reservation.maxPerOrder);
+    if (!Number.isInteger(max) || max < 1 || max > RESERVATION_MAX_QUANTITY) errors.push(`O máximo de participantes por pedido deve ser de 1 a ${RESERVATION_MAX_QUANTITY}.`);
+    else content.reservation.maxPerOrder = max;
+  }
   if (!content.intro.paragraphs.length) errors.push("A apresentação precisa de pelo menos um parágrafo.");
 
   return errors.length ? { content: null, errors } : { content, errors: [] };

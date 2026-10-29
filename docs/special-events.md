@@ -17,7 +17,7 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 | 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | Na `main` (#42); migration aplicada em produção (28/10), interruptor desligado |
 | 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | Na `main` e em produção (#43, 28/10); sem migration |
 | 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu, atrás de `EVENTS_PUBLIC_ENABLED`; conteúdo operacional do ESSÊNCIA | Concluída: na `main` e em produção (#44, 29/10); desligada; sem migration |
-| 5. Reserva, e-mail, cancelamento e crédito | Botão de reserva, política na página de reserva, e-mail de confirmação de evento, lista de espera do evento, crédito para outras experiências e reembolso pelo WhatsApp oficial | Próxima; aguarda autorização |
+| 5. Reserva, e-mail, cancelamento e crédito | 5A reservas e pagamentos; 5B e-mail de evento; 5C lista de espera; 5D reembolso pelo WhatsApp; 5E crédito | 5A em PR draft, desligada; demais aguardam autorização |
 | 6. Painel | `/admin/eventos` com formulário estruturado | — |
 | 7. Relatórios | Painéis separados por tipo | — |
 | 8. Lançamento do ESSÊNCIA | Cadastro, publicação e interruptor ligado | — |
@@ -239,6 +239,31 @@ Stand-by, reservas, cancelamento pelo painel e reembolsos **não mudam** nesta f
 O Preview usa o banco de produção. A prévia **não lê nem grava nada**: abra `/eventos/demonstracao` e `/eventos/demonstracao/essencia` (com `?estado=SOLD_OUT`, `CLOSED`, `ENDED` ou `?vazio=1`). Não ligue `EVENTS_PUBLIC_ENABLED` nem o interruptor do banco para revisar.
 
 Capturas em `docs/screenshots/eventos-especiais/`. Testes: `tests/special-events-public.test.ts`.
+
+## Fase 5A — reservas e pagamentos do evento
+
+Só código; nenhuma migration. O evento usa o fluxo de sempre — `/reservar/[sessionId]`, `POST /api/reservations`, `create_pre_reservation`, InfinitePay, webhook, reconciliação, confirmação, planilha e check-in —, sem segundo fluxo e sem mexer no motor financeiro.
+
+**Venda fechada no servidor.** `EVENT_BOOKING_OPEN=true` (junto com `EVENTS_PUBLIC_ENABLED`) abre a venda. Desligada — o padrão —, `POST /api/reservations` recusa qualquer sessão de evento com `409 EVENT_BOOKING_CLOSED` **antes** de bloquear vaga, mesmo com o id da sessão em mãos, e a página `/reservar/[sessionId]` mostra "Reservas ainda não abertas" sem formulário. A decisão é de `lib/events/booking.ts` (`loadSessionBookingRules` + `eventBookingRejection`), que lê `sessions.experience_id` → `experiences.kind` com a service role; sem conseguir ler, a rota responde 503 e não abre reserva. Experiência regular passa direto, como antes. **Não ligar antes do e-mail de evento (5B) validado.**
+
+**Máximo por pedido.** `event.reservation.maxPerOrder` (1 a 20, no conteúdo do evento): o ESSÊNCIA aceita até **6** participantes por pedido. O servidor recusa acima disso (`400 EVENT_ORDER_LIMIT`) e o formulário só oferece até `min(vagas restantes, máximo)`. O limite geral de 20 e a capacidade (12) continuam no banco, que também decide o preço (R$ 150 da sessão) — o navegador não manda valor nenhum.
+
+**Textos de ingresso.** Para sessão de evento publicado:
+
+| Onde | Agora |
+| --- | --- |
+| `/reservar/[sessionId]` | "Seu ingresso", local da base do evento, "Voltar para o evento" (`/eventos/[slug]`); evento esgotado ou venda fechada com explicação e volta para o evento |
+| Formulário | "Garantir meu ingresso", "Participantes" ("Até 6 por pedido."), política de cancelamento **antes do botão de pagamento** |
+| Resumo | "Resumo do ingresso": ingresso único com a programação completa, data, horário, tolerância de chegada, programação, o que está incluso, preço por participante e o prazo de cancelamento |
+| Pré-reserva | "Seus ingressos estão reservados por 2 horas"; vencida, "Voltar ao evento" |
+| Retorno do pagamento | "Ingresso confirmado" e link para a página do evento |
+| Página do evento | O botão "Garantir minha vaga" leva a `/reservar/[sessionId]` com a venda aberta; a prévia nunca |
+
+Experiência regular: textos, quantidade e links de sempre.
+
+**Ainda não cobre (próximas etapas):** a consulta por CPF + código (`/acompanhar-reserva`) ainda mostra "turma" numa pré-reserva de evento retomada (fica para a 5D, que mexe nessa tela); e-mails de evento (5B); lista de espera do evento (5C).
+
+Testes: `tests/special-events-booking.test.ts`.
 
 ## Aplicação segura (quando autorizada)
 

@@ -12,6 +12,9 @@ import { WaitlistJoinLink } from "@/components/waitlist/join-link";
 import { SoldOutNotice } from "@/components/waitlist/sold-out-notice";
 import { getExperiencePlacement, getSessionAvailabilityContext } from "@/lib/bases/data";
 import { baseLocation } from "@/lib/bases/location";
+import { eventBookingContext } from "@/lib/events/booking";
+import { getPublicEvent } from "@/lib/events/data";
+import { isEventBookingOpen } from "@/lib/events/flags";
 import { getBookingSession, listPublicSessions } from "@/lib/reservations/data";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSessionBookable, isWaitlistPublicEnabled, type PublicSession } from "@/lib/waitlist/public";
@@ -41,6 +44,12 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
   // Local de encontro: sai da base da experiência desta sessão, nunca do nome dela.
   const placement = session ? await getExperiencePlacement(session.experienceSlug).catch(() => null) : null;
   const comingSoon = upcoming && (upcoming.experienceStatus === "COMING_SOON" || upcoming.baseStatus !== "ACTIVE") ? upcoming : null;
+  // Evento especial publicado: textos de ingresso, local e política do evento,
+  // e volta para a página dele. Com a venda fechada, nada de formulário — e a
+  // API recusa do mesmo jeito (`POST /api/reservations`).
+  const eventSlug = session?.experienceSlug ?? upcoming?.experienceSlug ?? null;
+  const event = eventSlug ? await getPublicEvent(eventSlug).catch(() => null) : null;
+  const bookingOpen = isEventBookingOpen();
   // Turma publicada, aberta e futura, mas sem vaga: com a lista de espera
   // pública ligada, a página diz "Esgotado" em vez de "Sessão indisponível".
   // Só leitura, pela mesma função da agenda; nunca abre o formulário.
@@ -54,8 +63,39 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
     <main className="min-h-screen bg-paper pt-24">
       <Navbar />
       <div className="container py-12 sm:py-16 lg:py-24">
-        <Link href="/agenda" className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-forest"><ArrowLeft className="size-4" />Voltar para as datas</Link>
-        {session ? (
+        {event
+          ? <Link href={`/eventos/${event.slug}`} className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-forest"><ArrowLeft className="size-4" />Voltar para o evento</Link>
+          : <Link href="/agenda" className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-forest"><ArrowLeft className="size-4" />Voltar para as datas</Link>}
+        {event ? (
+          session && bookingOpen ? (
+            <>
+              <SessionTurma
+                startsAt={session.startsAt}
+                experienceTitle={`${event.editorial.hero.title} — ${event.editorial.event.subtitle}`}
+                label="Seu ingresso"
+                note="Ingresso único com toda a programação do evento. Confira data e horário antes de seguir para o pagamento."
+                className="mb-8"
+              />
+              <BaseLocationCard location={event.location} className="mb-8" />
+              <ReservationForm session={session} event={eventBookingContext(event)} />
+            </>
+          ) : (
+            <div className="rounded-4xl bg-white p-10 text-center sm:p-16" role="status">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-lake">Evento especial · {event.editorial.hero.title}</p>
+              <h1 className="mt-4 text-4xl font-medium tracking-[-0.05em]">
+                {!bookingOpen ? "Reservas ainda não abertas" : event.session.availability === "SOLD_OUT" ? "Evento esgotado" : "Reservas indisponíveis"}
+              </h1>
+              <p className="mx-auto mt-4 max-w-lg leading-7 text-ink/55">
+                {!bookingOpen
+                  ? "As reservas deste evento ainda não estão abertas. Nenhuma reserva pode ser feita por enquanto."
+                  : event.session.availability === "SOLD_OUT"
+                    ? "Todas as vagas desta edição foram preenchidas."
+                    : "Este ingresso não está disponível para reserva agora."}
+              </p>
+              <Link href={`/eventos/${event.slug}`} className="mt-7 inline-flex font-semibold text-forest">Voltar ao evento</Link>
+            </div>
+          )
+        ) : session ? (
           <>
             {/* Fica fora do ReservationForm de propósito: assim o horário
                 continua na tela depois do envio, enquanto o cliente vê o
