@@ -43,6 +43,12 @@ Tabela `special_event_settings` (uma linha, `publication_enabled = false`), com 
 update public.special_event_settings set publication_enabled = true, updated_at = now();
 ```
 
+**O interruptor só trava o ato de publicar; ele não esconde evento já publicado.** `list_public_events`, `get_public_event` e `list_public_event_sessions` filtram por `kind = 'EVENT'` e `status = 'PUBLISHED'`, sem olhar `publication_enabled`; `create_pre_reservation` e `waitlist_join` olham o status da experiência. Desligar o interruptor depois de publicar **não** tira o evento do site, da venda nem da lista de espera (achado de 29/10/2026, conferido no teste da 5C-1). As experiências regulares não são afetadas: desde a fase 3 elas leem as listagens por tipo.
+
+Para tirar um evento do ar, do mais rápido ao mais completo: remover `EVENTS_PUBLIC_ENABLED` (ou `EVENT_BOOKING_OPEN` / `EVENTS_WAITLIST_ENABLED`) e publicar de novo — páginas em 404, venda e inscrição recusadas no servidor; ou mudar o status da experiência para rascunho pelo painel — some das leituras públicas e o banco recusa reserva e inscrição.
+
+Correção proposta, **fora do PR da 5C-1** e só com autorização: uma migration pequena que acrescenta `and exists (select 1 from public.special_event_settings where publication_enabled)` às três leituras públicas de eventos (corpo novo só nelas, com preflight comparando as definições atuais, postcheck e rollback), tornando o interruptor também um botão de emergência de leitura. Ela não muda reserva nem lista de espera por si: as duas rotas do site já exigem o evento visível (`get_public_event`) antes de mostrar o formulário, e a inscrição confere o mesmo no servidor. Aplicar antes de ligar `EVENTS_PUBLIC_ENABLED` em produção.
+
 ### Nenhuma reserva troca de tipo
 
 Trigger `reservations_event_kind_guard`, `before update of session_id` em `reservations`: uma reserva só troca de sessão para outra sessão do mesmo tipo. Recusa com `EVENT_KIND_MISMATCH` e desfaz a transação inteira — histórico de troca, resolução do Stand-by, e-mail de reagendamento e job da planilha nem chegam a ser gravados.
