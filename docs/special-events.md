@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md) · [Lista de espera](waitlist.md)
 
-**Estado (29/10/2026): fases 2 e 3 na `main` e em produção** — PR #42 (squash `8aa7677`) e PR #43 (squash `34dec78`, deploy de produção às 23:17:55 UTC de 28/10). Migration `202610280001_special_events_foundation.sql` aplicada, com preflight e postcheck sem falhas nem pontos de atenção. **Fase 4 (páginas públicas) em PR draft, desligada** (`EVENTS_PUBLIC_ENABLED` ausente). Nenhum evento cadastrado nem publicado; o interruptor da publicação segue desligado.
+**Estado (29/10/2026): fases 2, 3 e 4 concluídas, na `main` e em produção, com a publicação desativada.** PR #42 (squash `8aa7677`), PR #43 (squash `34dec78`) e PR #44 (squash `56dbc47`, 29/10). Migration `202610280001_special_events_foundation.sql` aplicada, com preflight e postcheck sem falhas. A interface pública (`/eventos`, `/eventos/[slug]`) e o conteúdo operacional do ESSÊNCIA estão aprovados, mas **desligados**: `EVENTS_PUBLIC_ENABLED` ausente (as rotas respondem 404) e `special_event_settings.publication_enabled` desligado. Nenhum evento cadastrado nem publicado, nenhuma reserva de evento. **Próxima etapa: fase 5**, que depende de autorização.
 
 ## O que é
 
@@ -16,8 +16,8 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 | --- | --- | --- |
 | 2. Banco e segurança | `experiences.kind`, interruptor de publicação, trava entre tipos, leitura pública e funções do painel | Na `main` (#42); migration aplicada em produção (28/10), interruptor desligado |
 | 3. Separação no site | Home, vitrine, agenda e base passam a usar as listagens regulares; opções de troca de turma filtradas por tipo | Na `main` e em produção (#43, 28/10); sem migration |
-| 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu, atrás de `EVENTS_PUBLIC_ENABLED` | PR draft; desligada; sem migration |
-| 5. Reserva e e-mail | Textos da página de reserva e e-mail de confirmação de evento | — |
+| 4. Páginas públicas | `/eventos`, `/eventos/[slug]`, destaque na home e item no menu, atrás de `EVENTS_PUBLIC_ENABLED`; conteúdo operacional do ESSÊNCIA | Concluída: na `main` e em produção (#44, 29/10); desligada; sem migration |
+| 5. Reserva, e-mail, cancelamento e crédito | Botão de reserva, política na página de reserva, e-mail de confirmação de evento, lista de espera do evento, crédito para outras experiências e reembolso pelo WhatsApp oficial | Próxima; aguarda autorização |
 | 6. Painel | `/admin/eventos` com formulário estruturado | — |
 | 7. Relatórios | Painéis separados por tipo | — |
 | 8. Lançamento do ESSÊNCIA | Cadastro, publicação e interruptor ligado | — |

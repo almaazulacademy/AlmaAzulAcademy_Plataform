@@ -1,6 +1,8 @@
 # Changelog
 
-## Eventos especiais — páginas públicas e ESSÊNCIA (fase 4, desligada)
+## Eventos especiais — páginas públicas e ESSÊNCIA (fase 4, concluída e desligada)
+
+- **Concluída em 29/10/2026** (PR #44, `56dbc47`): na `main` e em produção com `EVENTS_PUBLIC_ENABLED` ausente e a publicação desligada no banco. Próxima etapa: fase 5, sob autorização.
 
 - **Nada muda em produção ao publicar este código**: tudo atrás de `EVENTS_PUBLIC_ENABLED`, ausente. Desligada, `/eventos` e `/eventos/[slug]` respondem 404 e o menu e a home ficam como estão. Sem migration. Detalhes em [docs/special-events.md](docs/special-events.md#fase-4--páginas-públicas).
 - **`/eventos`**: Hero da seção, próximos eventos, edições anteriores e estado vazio. **`/eventos/[slug]`**: modelo reutilizável com Hero, apresentação, programação em linha do tempo, incluso, parceiros, local, informações importantes e reserva, tudo vindo de `editorial_content` validado (`lib/events/editorial.ts`). CTA fixo no celular.
