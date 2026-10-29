@@ -14,7 +14,8 @@
     "sheets:verify": "node --experimental-strip-types scripts/google-sheets/verify.ts",
     "email:preview": "node --experimental-strip-types scripts/email/preview.ts",
     "email:preview:evento": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/email/event-preview.ts",
-    "email:preview:evento-lista": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/email/event-waitlist-preview.ts"
+    "email:preview:evento-lista": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/email/event-waitlist-preview.ts",
+    "events:essencia-sql": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/events/essencia-cadastro-sql.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
