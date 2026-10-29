@@ -7,8 +7,7 @@
  * Nada deste arquivo é gravado no banco nem aparece em Production.
  *
  * Textos e créditos vêm do briefing aprovado e do carrossel oficial. As
- * informações operacionais ainda não confirmadas ficam marcadas `pending` e
- * nunca aparecem num evento publicado.
+ * informações operacionais são os textos definitivos aprovados em 29/10/2026.
  *
  * Módulo puro, sem imports de aplicação: é lido pelo Next e pelos testes.
  */
@@ -159,14 +158,51 @@ export const ESSENCIA_EDITORIAL = {
       eyebrow: "Antes de ir",
       title: "Informações importantes",
       items: [
-        { title: "O que levar", pending: true },
-        { title: "Orientações de chegada", pending: true },
-        { title: "Segurança na água", body: "Não é necessário ter experiência prévia com canoa havaiana.", pending: true },
-        { title: "Política de cancelamento", pending: true },
-        { title: "Condições climáticas", pending: true },
-        { title: "Restrições e recomendações", pending: true },
+        {
+          id: "chegada",
+          title: "Horário e chegada",
+          body: "Nossa experiência começa às 05h30, no Cápsula Bar, às margens do Lago Paranoá.\n\nRecomendamos chegar com alguns minutos de antecedência para aproveitar cada momento. Haverá tolerância de chegada até às 05h50.",
+        },
+        {
+          id: "o-que-levar",
+          title: "O que levar",
+          body: "Venha com roupas confortáveis, adequadas para atividades físicas. Recomendamos trazer garrafa de água, protetor solar e seus itens pessoais.\n\nOs materiais necessários para a prática de Superioga serão fornecidos pela equipe.",
+        },
+        {
+          id: "experiencia",
+          title: "Preciso ter experiência anterior?",
+          body: "Não! A experiência foi pensada para acolher também quem está começando. Nossa equipe conduzirá as atividades e fornecerá as orientações necessárias.",
+        },
+        {
+          id: "seguranca",
+          title: "Segurança durante a remada",
+          body: "O uso de colete salva-vidas é obrigatório durante a atividade na água. Antes da saída, nossa equipe apresentará as orientações de segurança.",
+        },
+        {
+          id: "alimentacao",
+          title: "Alimentação inclusa",
+          body: "Ao final da programação, teremos um momento especial de integração com lanche saudável oferecido pela Nutre Congelados Saudáveis.",
+        },
+        {
+          id: "clima",
+          title: "Condições climáticas",
+          body: "A segurança e o bem-estar de todos vêm em primeiro lugar. Caso as condições climáticas impeçam a realização segura da experiência, o evento será reagendado e os participantes serão comunicados pela organização.",
+        },
+        {
+          id: "cancelamento",
+          title: "Política de cancelamento",
+          body: "Você poderá solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (meio-dia), horário de Brasília, escolhendo entre o reembolso do valor pago ou uma vaga para a próxima edição do ESSÊNCIA.\n\nApós esse prazo, entre em contato com nossa equipe para verificar as possibilidades de atendimento.",
+        },
       ],
     },
+    /** Início às 05h30, chegada tolerada até 05h50 (horário de Brasília). */
+    arrival: { startTime: "05:30", toleranceUntil: "05:50" },
+    /**
+     * Prazo inclusivo: pedidos até 05/11/2026 12h00 de Brasília (UTC−3) estão
+     * dentro. Nada é automático — reembolso ou vaga na próxima edição são
+     * tratados pela equipe; a vaga não vira reserva sozinha.
+     */
+    cancellation: { deadline: "2026-11-05T12:00:00-03:00", timeZone: "America/Sao_Paulo", summary: "reembolso ou vaga na próxima edição" },
     reservation: {
       eyebrow: "Sua próxima pausa tem data marcada",
       title: "Garanta a sua vaga",

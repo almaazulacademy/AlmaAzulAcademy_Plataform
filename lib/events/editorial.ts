@@ -15,6 +15,16 @@
  */
 
 import { isEditorialImageSource, validateExperienceEditorial, type EditorialImage, type ExperienceEditorial } from "../editorial/experience.ts";
+import {
+  clockText,
+  deadlineDayText,
+  deadlineTimeText,
+  isClockTime,
+  isIsoWithOffset,
+  POLICY_TIME_ZONE,
+  type EventArrival,
+  type EventCancellation,
+} from "./policy.ts";
 
 export type EventProgramItem = {
   /** "05:30", no horário de Brasília. */
@@ -36,7 +46,10 @@ export type EventPartner = {
 };
 
 export type EventInfoItem = {
+  /** Âncora estável (`#info-<id>`). `chegada` e `cancelamento` são conferidos com as regras do evento. */
+  id: string | null;
   title: string;
+  /** Parágrafos separados por linha em branco. */
   body: string | null;
   /** Texto ainda não confirmado pela equipe: nunca aparece num evento publicado. */
   pending: boolean;
@@ -56,6 +69,10 @@ export type EventContent = {
   included: { eyebrow: string; title: string; description: string | null; items: string[] };
   partners: { eyebrow: string; title: string; items: EventPartner[] };
   info: { eyebrow: string; title: string; items: EventInfoItem[] };
+  /** Início e tolerância de chegada. Opcional: sem ele, a página não fala de tolerância. */
+  arrival: EventArrival | null;
+  /** Prazo de cancelamento inequívoco. Opcional; com ele, o texto `cancelamento` é obrigatório. */
+  cancellation: EventCancellation | null;
   reservation: { eyebrow: string; title: string; ctaLabel: string; image: EditorialImage | null };
 };
 
@@ -133,8 +150,47 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
   const infoItems = list(info?.items).map((item, index): EventInfoItem => {
     const body = text(item.body) || null;
     const pending = item.pending === true || !body;
-    return { title: need(text(item.title), `Título da informação ${index + 1}`), body, pending };
+    const id = text(item.id);
+    if (id && !/^[a-z0-9-]+$/.test(id)) errors.push(`Identificador da informação ${index + 1} deve usar letras minúsculas, números e hífen.`);
+    return { id: id || null, title: need(text(item.title), `Título da informação ${index + 1}`), body, pending };
   });
+  const infoById = (id: string) => infoItems.find((item) => item.id === id && !item.pending) ?? null;
+
+  const arrivalRecord = record(root.arrival);
+  let arrival: EventArrival | null = null;
+  if (arrivalRecord) {
+    const startTime = text(arrivalRecord.startTime);
+    const toleranceUntil = text(arrivalRecord.toleranceUntil);
+    if (!isClockTime(startTime) || !isClockTime(toleranceUntil)) errors.push("Início e tolerância de chegada devem ser HH:MM.");
+    else if (toleranceUntil <= startTime) errors.push("A tolerância de chegada deve ser depois do início.");
+    else {
+      arrival = { startTime, toleranceUntil };
+      // O texto publicado diz os mesmos horários da regra.
+      const body = infoById("chegada")?.body ?? "";
+      if (!body.includes(clockText(startTime)) || !body.includes(clockText(toleranceUntil))) {
+        errors.push(`O texto "chegada" precisa citar ${clockText(startTime)} e ${clockText(toleranceUntil)}.`);
+      }
+    }
+  }
+
+  const cancellationRecord = record(root.cancellation);
+  let cancellation: EventCancellation | null = null;
+  if (cancellationRecord) {
+    const deadline = text(cancellationRecord.deadline);
+    const timeZone = text(cancellationRecord.timeZone);
+    const summary = text(cancellationRecord.summary);
+    if (!isIsoWithOffset(deadline)) errors.push("O prazo de cancelamento deve ser ISO 8601 com deslocamento, ex.: 2026-11-05T12:00:00-03:00.");
+    else if (timeZone !== POLICY_TIME_ZONE) errors.push(`O fuso do prazo de cancelamento deve ser ${POLICY_TIME_ZONE}.`);
+    else if (!summary) errors.push("O resumo da política de cancelamento é obrigatório.");
+    else {
+      cancellation = { deadline, timeZone: POLICY_TIME_ZONE, summary };
+      // O texto publicado diz o mesmo prazo da regra.
+      const body = infoById("cancelamento")?.body ?? "";
+      if (!body.includes(deadlineDayText(deadline)) || !body.includes(deadlineTimeText(deadline))) {
+        errors.push(`O texto "cancelamento" precisa citar ${deadlineDayText(deadline)} e ${deadlineTimeText(deadline)}.`);
+      }
+    }
+  }
 
   const includedItems = texts(included?.items);
   if (!includedItems.length) errors.push("O que está incluso precisa de pelo menos um item.");
@@ -161,6 +217,8 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
     },
     partners: { eyebrow: text(partners?.eyebrow), title: text(partners?.title) || "Quem faz acontecer", items: partnerItems },
     info: { eyebrow: text(info?.eyebrow), title: text(info?.title) || "Informações importantes", items: infoItems },
+    arrival,
+    cancellation,
     reservation: {
       eyebrow: text(reservation?.eyebrow),
       title: need(text(reservation?.title), "Título da reserva"),
@@ -180,6 +238,11 @@ export function validateEventEditorial(value: unknown): Validation {
   const errors = [...(base.success ? [] : base.errors), ...event.errors];
   if (!base.success || !event.content) return { success: false, errors };
   return { success: true, data: { ...base.data, event: event.content } };
+}
+
+/** Parágrafos de um texto de informação (separados por linha em branco). */
+export function infoParagraphs(body: string | null) {
+  return (body ?? "").split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
 }
 
 /** O que o visitante lê: informações ainda pendentes só aparecem na prévia. */

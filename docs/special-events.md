@@ -181,7 +181,9 @@ O documento é o mesmo das experiências (versão 1, que o banco exige para publ
 | `program.items[]` | `time` (HH:MM, em ordem), `title`, `description`, `hosts[]`, `note`, `image` |
 | `included.items[]` | O que o ingresso inclui |
 | `partners.items[]` | `name`, `role` (nas palavras da organização), `logo` opcional |
-| `info.items[]` | `title`, `body`; sem texto confirmado ficam `pending` e **só aparecem na prévia** |
+| `info.items[]` | `id` (âncora `#info-<id>`), `title`, `body` (parágrafos separados por linha em branco); sem texto confirmado ficam `pending` e **só aparecem na prévia** |
+| `arrival` | `startTime` e `toleranceUntil` (HH:MM, Brasília). O texto `chegada` precisa citar os dois horários |
+| `cancellation` | `deadline` (ISO 8601 **com deslocamento**), `timeZone` (`America/Sao_Paulo`) e `summary`. O texto `cancelamento` precisa citar o mesmo dia e hora |
 | `reservation` | Título, texto do botão e foto de fundo |
 
 Evento publicado sem o bloco completo não aparece no site. O conteúdo do ESSÊNCIA está em `lib/events/fixtures/essencia.ts`, no formato exato do banco, para ser cadastrado na fase de lançamento.
@@ -202,12 +204,31 @@ Evento publicado sem o bloco completo não aparece no site. O conteúdo do ESSÊ
 
 Rapha Dantas não tem logo fornecido: aparece pelo nome. Os slides não foram usados como imagem (têm texto embutido).
 
+### Regras operacionais do ESSÊNCIA
+
+Textos definitivos aprovados em 29/10/2026, em `info.items` da fixture: horário e chegada, o que levar, experiência anterior, segurança durante a remada, alimentação inclusa, condições climáticas e política de cancelamento. Nenhum fica pendente; não há referência a chegada às 05h15 em lugar nenhum do repositório.
+
+| Regra | Valor guardado | Onde aparece |
+| --- | --- | --- |
+| Início e tolerância | `arrival: { startTime: "05:30", toleranceUntil: "05:50" }` | Texto "Horário e chegada" e a linha "Chegada · tolerância até 05H50" no bloco de reserva |
+| Prazo de cancelamento | `cancellation.deadline = "2026-11-05T12:00:00-03:00"` (`= 2026-11-05T15:00:00Z`), `timeZone: "America/Sao_Paulo"` | Texto "Política de cancelamento" e, junto ao botão de reserva, "Cancelamento até 05/11/2026 às 12h00 (horário de Brasília): reembolso ou vaga na próxima edição", com link para a política completa |
+
+O validador recusa prazo sem deslocamento, fuso diferente de `America/Sao_Paulo` e texto que diga outro dia ou hora que a regra — mudar uma sem a outra não passa. `arrivalMatchesSession` confere a chegada com a sessão cadastrada (início igual, tolerância entre o início e o fim).
+
+**Prazo inclusivo** (`cancellationWindow`, `lib/events/policy.ts`): pedido até `2026-11-05T12:00:00.000-03:00`, inclusive, é `WITHIN_DEADLINE`; um milissegundo depois, `AFTER_DEADLINE` — análise da equipe, sem promessa automática.
+
+**Nada é automático nesta fase**, e os fluxos existentes cobrem a política sem mudança:
+
+- **Reembolso**: a equipe cancela pelo painel (`admin_cancel_reservation`, com motivo e auditoria) e devolve o valor fora da plataforma, como hoje. Nenhum reembolso é disparado pelo site.
+- **Vaga na próxima edição**: o direito fica registrado com o **Stand-by** — a reserva paga sai da turma, mantém pagamento, valor e código, não ocupa vaga e não expira. Quando a próxima edição existir (`admin_duplicate_event`), a equipe ou o cliente escolhem a nova sessão; a trava de tipo permite evento → evento, e a régua de mesmo valor por pessoa vale como sempre (edição com outro preço exige tratamento manual). Nenhuma reserva nova é criada sozinha.
+- **Clima**: reagendar o evento é mudar a data da sessão pelo painel; o aviso aos participantes é feito pela organização (não há e-mail automático de mudança de data).
+- **Antes da confirmação**: a política fica visível na página do evento, ao lado do botão. Na fase 5, a página de reserva e o e-mail de confirmação do evento devem repetir o prazo a partir do mesmo `cancellation`.
+
 ### Pendente antes de publicar
 
-- Textos de **o que levar, chegada, segurança na água, cancelamento, clima e restrições** — hoje `pending`, invisíveis fora da prévia.
-- Fotos sem texto dos slides 1 e 2, se preferirem às do repositório; logo do Rapha Dantas, se houver.
-- Confirmação dos parceiros quanto ao uso dos logos.
-- Fase 5: o botão de reserva (`EVENT_BOOKING_OPEN`) e o e-mail de evento.
+- Confirmação dos parceiros quanto ao uso dos logos; logo do Rapha Dantas, se houver.
+- Fase 5: botão de reserva (`EVENT_BOOKING_OPEN`), política na página de reserva e e-mail de evento.
+- **Fase 5, obrigatório antes de vender**: o e-mail de confirmação atual (`lib/reservations/confirmation-email.ts`) vale para qualquer base e traria a uma reserva do ESSÊNCIA textos de remada que contradizem o evento — "cancelamento até 1 dia antes" (`CANCELLATION_NOTE`) e "roupa de banho"/"chinelo" (`PREPARATION_ITEMS`). A tolerância de 20 minutos (`MEETING_TOLERANCE_NOTE`) coincide com 05h50. O e-mail de evento deve usar `event.cancellation`, `event.arrival` e os textos de `info.items`. Hoje nada disso chega a cliente: a reserva do evento não está aberta.
 - O slug `demonstracao` fica reservado para a prévia: um evento com esse slug não teria página.
 
 ### Como revisar no Preview

@@ -15,7 +15,16 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import test from "node:test";
 
-import { parseEventContent, validateEventEditorial, visibleInfoItems } from "../lib/events/editorial.ts";
+import { infoParagraphs, parseEventContent, validateEventEditorial, visibleInfoItems } from "../lib/events/editorial.ts";
+import {
+  arrivalMatchesSession,
+  cancellationWindow,
+  clockText,
+  deadlineDayText,
+  deadlineShortText,
+  deadlineTimeText,
+  sessionStartClock,
+} from "../lib/events/policy.ts";
 import { EVENT_BOOKING_OPEN, isEventsDemoEnabled, isEventsPublicEnabled } from "../lib/events/flags.ts";
 import { DEMO_AVAILABILITIES, ESSENCIA_EDITORIAL, ESSENCIA_STARTS_AT, essenciaDemoEvent } from "../lib/events/fixtures/essencia.ts";
 import {
@@ -89,17 +98,111 @@ test("conteúdo: todas as imagens do ESSÊNCIA existem no repositório e têm te
   }
 });
 
-test("conteúdo: informações operacionais pendentes nunca aparecem fora da prévia", () => {
+test("conteúdo: informações pendentes nunca aparecem fora da prévia", () => {
+  const draft = clone(ESSENCIA_EDITORIAL) as unknown as { event: { info: { items: Array<Record<string, unknown>> }; arrival?: unknown; cancellation?: unknown } };
+  draft.event.info.items = [{ title: "Restrições e recomendações", pending: true }, { id: "o-que-levar", title: "O que levar", body: "Texto confirmado." }];
+  delete draft.event.arrival;
+  delete draft.event.cancellation;
+  const parsed = parseEventContent(draft.event);
+  assert.ok(parsed.content, parsed.errors.join("; "));
+  assert.deepEqual(visibleInfoItems(parsed.content!, false).map((item) => item.title), ["O que levar"]);
+  assert.equal(visibleInfoItems(parsed.content!, true).length, 2);
+});
+
+test("informações do ESSÊNCIA: os sete textos aprovados, todos publicáveis", () => {
+  const result = validateEventEditorial(ESSENCIA_EDITORIAL);
+  assert.ok(result.success, result.success ? "" : result.errors.join("; "));
+  if (!result.success) return;
+  const items = result.data.event.info.items;
+  assert.deepEqual(items.map((item) => item.id), ["chegada", "o-que-levar", "experiencia", "seguranca", "alimentacao", "clima", "cancelamento"]);
+  assert.deepEqual(items.map((item) => item.title), [
+    "Horário e chegada",
+    "O que levar",
+    "Preciso ter experiência anterior?",
+    "Segurança durante a remada",
+    "Alimentação inclusa",
+    "Condições climáticas",
+    "Política de cancelamento",
+  ]);
+  assert.ok(items.every((item) => !item.pending), "nenhum texto pendente");
+  assert.equal(visibleInfoItems(result.data.event, false).length, 7);
+
+  const byId = (id: string) => items.find((item) => item.id === id)!.body!;
+  assert.deepEqual(infoParagraphs(byId("chegada")), [
+    "Nossa experiência começa às 05h30, no Cápsula Bar, às margens do Lago Paranoá.",
+    "Recomendamos chegar com alguns minutos de antecedência para aproveitar cada momento. Haverá tolerância de chegada até às 05h50.",
+  ]);
+  assert.match(byId("o-que-levar"), /Os materiais necessários para a prática de Superioga serão fornecidos pela equipe\./);
+  assert.match(byId("seguranca"), /O uso de colete salva-vidas é obrigatório/);
+  assert.match(byId("alimentacao"), /Nutre Congelados Saudáveis/);
+  assert.match(byId("clima"), /o evento será reagendado e os participantes serão comunicados pela organização/);
+  assert.deepEqual(infoParagraphs(byId("cancelamento")), [
+    "Você poderá solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (meio-dia), horário de Brasília, escolhendo entre o reembolso do valor pago ou uma vaga para a próxima edição do ESSÊNCIA.",
+    "Após esse prazo, entre em contato com nossa equipe para verificar as possibilidades de atendimento.",
+  ]);
+
+  // Nenhuma referência à antiga chegada às 05h15, em nenhum texto do evento.
+  assert.doesNotMatch(JSON.stringify(ESSENCIA_EDITORIAL), /0?5h15|0?5:15/);
+});
+
+test("chegada: início às 05h30 e tolerância até 05h50, coerentes com a sessão de 05h30 às 09h", () => {
   const result = validateEventEditorial(ESSENCIA_EDITORIAL);
   assert.ok(result.success);
   if (!result.success) return;
-  assert.equal(visibleInfoItems(result.data.event, false).length, 0, "nenhum texto operacional confirmado ainda");
-  assert.equal(visibleInfoItems(result.data.event, true).length, 6);
-  const confirmed = clone(ESSENCIA_EDITORIAL) as unknown as { event: { info: { items: Array<Record<string, unknown>> } } };
-  confirmed.event.info.items[0] = { title: "O que levar", body: "Texto confirmado pela equipe." };
-  const parsed = parseEventContent(confirmed.event);
-  assert.ok(parsed.content);
-  assert.deepEqual(visibleInfoItems(parsed.content!, false).map((item) => item.title), ["O que levar"]);
+  assert.deepEqual(result.data.event.arrival, { startTime: "05:30", toleranceUntil: "05:50" });
+  assert.equal(sessionStartClock(ESSENCIA_STARTS_AT), "05:30");
+  assert.equal(arrivalMatchesSession(result.data.event.arrival!, ESSENCIA_STARTS_AT, 210), true);
+  // Outra sessão (06h00) não combina com a regra das 05h30.
+  assert.equal(arrivalMatchesSession(result.data.event.arrival!, "2026-11-07T09:00:00.000Z", 210), false);
+  // Tolerância depois do fim da sessão não combina.
+  assert.equal(arrivalMatchesSession({ startTime: "05:30", toleranceUntil: "09:30" }, ESSENCIA_STARTS_AT, 210), false);
+  assert.equal(clockText("05:50"), "05h50");
+});
+
+test("cancelamento: prazo inequívoco de 05/11/2026 às 12h00 de Brasília, inclusivo", () => {
+  const result = validateEventEditorial(ESSENCIA_EDITORIAL);
+  assert.ok(result.success);
+  if (!result.success) return;
+  const cancellation = result.data.event.cancellation!;
+  assert.deepEqual(cancellation, { deadline: "2026-11-05T12:00:00-03:00", timeZone: "America/Sao_Paulo", summary: "reembolso ou vaga na próxima edição" });
+  assert.equal(new Date(cancellation.deadline).toISOString(), "2026-11-05T15:00:00.000Z");
+  assert.equal(deadlineDayText(cancellation.deadline), "5 de novembro de 2026");
+  assert.equal(deadlineTimeText(cancellation.deadline), "12h00");
+  assert.equal(deadlineShortText(cancellation.deadline), "05/11/2026 às 12h00 (horário de Brasília)");
+
+  // Limites: antes, exatamente no instante e depois.
+  assert.equal(cancellationWindow(cancellation, new Date("2026-11-05T11:59:59.999-03:00")), "WITHIN_DEADLINE");
+  assert.equal(cancellationWindow(cancellation, new Date("2026-11-05T12:00:00.000-03:00")), "WITHIN_DEADLINE");
+  assert.equal(cancellationWindow(cancellation, new Date("2026-11-05T15:00:00.000Z")), "WITHIN_DEADLINE", "o mesmo instante em UTC");
+  assert.equal(cancellationWindow(cancellation, new Date("2026-11-05T12:00:00.001-03:00")), "AFTER_DEADLINE");
+  assert.equal(cancellationWindow(cancellation, new Date("2026-11-05T12:00:01-03:00")), "AFTER_DEADLINE");
+  // Meio-dia em outro fuso não é o prazo: 12h00 UTC são 09h00 em Brasília, ainda dentro.
+  assert.equal(cancellationWindow(cancellation, new Date("2026-11-05T12:00:00Z")), "WITHIN_DEADLINE");
+  assert.equal(cancellationWindow(cancellation, new Date("2026-11-06T00:00:00-03:00")), "AFTER_DEADLINE");
+});
+
+test("cancelamento e chegada: o banco de conteúdo recusa prazo ambíguo e texto divergente da regra", () => {
+  const variant = (change: (event: Record<string, unknown>) => void) => {
+    const copy = clone(ESSENCIA_EDITORIAL) as unknown as { event: Record<string, unknown> };
+    change(copy.event);
+    return parseEventContent(copy.event).errors.join(" ");
+  };
+  assert.match(variant((event) => { (event.cancellation as Record<string, unknown>).deadline = "2026-11-05T12:00:00"; }), /deslocamento/);
+  assert.match(variant((event) => { (event.cancellation as Record<string, unknown>).deadline = "05/11/2026 12:00"; }), /deslocamento/);
+  assert.match(variant((event) => { (event.cancellation as Record<string, unknown>).timeZone = "UTC"; }), /America\/Sao_Paulo/);
+  // Prazo mudou e o texto não: recusado.
+  assert.match(variant((event) => { (event.cancellation as Record<string, unknown>).deadline = "2026-11-06T12:00:00-03:00"; }), /6 de novembro de 2026/);
+  assert.match(variant((event) => { (event.arrival as Record<string, unknown>).toleranceUntil = "06:00"; }), /06h00/);
+  assert.match(variant((event) => { (event.arrival as Record<string, unknown>).toleranceUntil = "05:20"; }), /depois do início/);
+  // Outra edição com outras regras e textos coerentes: aceita.
+  const next = clone(ESSENCIA_EDITORIAL) as unknown as { event: Record<string, unknown> & { info: { items: Array<Record<string, unknown>> } } };
+  next.event.arrival = { startTime: "06:00", toleranceUntil: "06:15" };
+  next.event.cancellation = { deadline: "2027-03-10T18:00:00-03:00", timeZone: "America/Sao_Paulo", summary: "reembolso" };
+  next.event.info.items = [
+    { id: "chegada", title: "Horário e chegada", body: "Começamos às 06h00. Tolerância até 06h15." },
+    { id: "cancelamento", title: "Política de cancelamento", body: "Cancelamento até 10 de março de 2027, às 18h00, horário de Brasília." },
+  ];
+  assert.deepEqual(parseEventContent(next.event).errors, []);
 });
 
 test("conteúdo: evento sem programação, com horário inválido ou fora de ordem é recusado", () => {
@@ -321,4 +424,10 @@ test("componentes: conteúdo vindo dos dados, acessível e sem nada fixo do ESS�
   assert.match(page, /pb-28 text-white lg:pb-0/);
   assert.match(page, /fixed inset-x-0 bottom-0 z-40 .* lg:hidden/);
   assert.match(page, /env\(safe-area-inset-bottom\)/);
+  // Política e chegada vêm do conteúdo e ficam visíveis junto ao botão de reserva.
+  assert.match(page, /id=\{item\.id \? `info-\$\{item\.id\}` : undefined\}/);
+  assert.match(page, /deadlineShortText\(extra\.cancellation\.deadline\)/);
+  assert.match(page, /href="#info-cancelamento"/);
+  assert.match(page, /clockText\(extra\.arrival\.toleranceUntil\)/);
+  assert.doesNotMatch(page, /05:50|05h50|2026-11-05/, "nenhuma regra do ESSÊNCIA fixada no componente");
 });

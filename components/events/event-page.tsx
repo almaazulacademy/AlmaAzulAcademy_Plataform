@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { CalendarDays, Check, Clock, MapPin, Ticket, Users } from "lucide-react";
+import { CalendarDays, Check, Clock, DoorOpen, MapPin, Ticket, Users } from "lucide-react";
 
 import { BaseLocationCard } from "@/components/bases/base-location";
 import { EditorialImage } from "@/components/editorial-image";
@@ -7,7 +7,8 @@ import { AvailabilityBadge, EventCtaButton, EventDemoBanner, EventEyebrow } from
 import { eventDisplayFont } from "@/components/events/fonts";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
-import { visibleInfoItems } from "@/lib/events/editorial";
+import { infoParagraphs, visibleInfoItems } from "@/lib/events/editorial";
+import { clockText, deadlineShortText } from "@/lib/events/policy";
 import { eventCta, eventDayLabel, eventLongDate, eventPrice, eventTimeRange, programTimeLabel, spotsLabel } from "@/lib/events/presentation";
 import type { PublicEvent } from "@/lib/events/public";
 import { cn } from "@/lib/utils";
@@ -188,17 +189,26 @@ export function EventPage({ event, preview = false, bookingOpen = false }: { eve
 
       {/* 7. Informações importantes */}
       {info.length ? (
-        <section className="bg-night py-24 sm:py-32" aria-labelledby="evento-info">
+        <section id="informacoes" className="scroll-mt-24 bg-night py-24 sm:py-32" aria-labelledby="evento-info">
           <div className="container">
             {extra.info.eyebrow ? <EventEyebrow>{extra.info.eyebrow}</EventEyebrow> : null}
             <h2 id="evento-info" className="mt-6 font-event text-4xl font-extrabold uppercase leading-[0.95] sm:text-5xl">{extra.info.title}</h2>
-            <dl className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <dl className="mt-12 grid gap-4 lg:grid-cols-2">
               {info.map((item) => (
-                <div key={item.title} className={cn("rounded-3xl border p-6", item.pending ? "border-dashed border-ember/50 bg-ember/5" : "border-white/10 bg-white/5")}>
-                  <dt className="font-event text-base font-bold uppercase tracking-[0.06em]">{item.title}</dt>
-                  <dd className="mt-3 text-base leading-7 text-white/70">
-                    {item.body ? <span className="block">{item.body}</span> : null}
-                    {item.pending ? <span className="mt-2 block text-sm font-semibold text-ember">Texto a confirmar antes da publicação.</span> : null}
+                <div
+                  key={item.title}
+                  id={item.id ? `info-${item.id}` : undefined}
+                  className={cn(
+                    "scroll-mt-28 rounded-3xl border p-6 sm:p-8",
+                    item.pending ? "border-dashed border-ember/50 bg-ember/5" : "border-white/10 bg-white/5",
+                    // A política com prazo ocupa a linha inteira e ganha o traço âmbar.
+                    item.id === "cancelamento" && extra.cancellation && "border-ember/40 lg:col-span-2",
+                  )}
+                >
+                  <dt className="font-event text-base font-bold uppercase tracking-[0.06em] sm:text-lg">{item.title}</dt>
+                  <dd className="mt-4 max-w-prose space-y-3 text-base leading-7 text-white/75 sm:text-[1.05rem] sm:leading-8">
+                    {infoParagraphs(item.body).map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+                    {item.pending ? <p className="text-sm font-semibold text-ember">Texto a confirmar antes da publicação.</p> : null}
                   </dd>
                 </div>
               ))}
@@ -222,10 +232,18 @@ export function EventPage({ event, preview = false, bookingOpen = false }: { eve
               {day ? <SummaryRow icon={<CalendarDays className="size-5" />} label="Data" value={day} /> : null}
               {time ? <SummaryRow icon={<Clock className="size-5" />} label="Horário" value={time} /> : null}
               <SummaryRow icon={<MapPin className="size-5" />} label="Local" value={place.toUpperCase()} />
+              {extra.arrival ? <SummaryRow icon={<DoorOpen className="size-5" />} label="Chegada" value={`TOLERÂNCIA ATÉ ${clockText(extra.arrival.toleranceUntil).toUpperCase()}`} /> : null}
               {spots ? <SummaryRow icon={<Users className="size-5" />} label="Vagas" value={spots.toUpperCase()} /> : null}
               {session.priceCents ? <SummaryRow icon={<Ticket className="size-5" />} label="Investimento" value={`${eventPrice(session.priceCents)} POR PESSOA`} /> : null}
             </dl>
             {session.startsAt ? <p className="mt-6 text-sm text-white/60">Edição de {eventLongDate(session.startsAt)}. {extra.included.items.length ? `Inclui: ${extra.included.items.join(" · ")}.` : ""}</p> : null}
+            {extra.cancellation ? (
+              <p className="mt-4 text-sm leading-6 text-white/75">
+                <span className="font-semibold text-white">Cancelamento até {deadlineShortText(extra.cancellation.deadline)}:</span>{" "}
+                {extra.cancellation.summary}.{" "}
+                <a href="#info-cancelamento" className="font-semibold text-ember underline-offset-4 hover:underline">Ver a política completa</a>
+              </p>
+            ) : null}
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
               <EventCtaButton cta={cta} />
               {cta.kind !== "BOOK" ? <p className="text-sm text-white/70">{cta.note}</p> : null}
