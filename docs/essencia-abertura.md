@@ -6,6 +6,10 @@ Roteiro para levar o ESSÊNCIA — Corpo, Mente e Natureza (07/11/2026) do repos
 
 ## 1. Cadastro em estado fechado
 
+**Incidente de 30/10/2026 — primeira tentativa falhou, sem gravar nada.** Em produção, `experiences` ainda tem sete colunas do schema legado (fora do repositório), obrigatórias e sem valor padrão: `eyebrow`, `short_description`, `location`, `cover_image`, `gallery`, `included`, `active`. `admin_create_experience` (chamada por `admin_create_event`) não as preenche, e o cadastro parou em `23502 null value in column "eyebrow"`. O `kind` aparecia como `REGULAR` porque a linha recusada era a do INSERT, antes de `admin_create_event` marcá-la como `EVENT`. Como tudo estava numa transação, nada ficou. O banco de teste é montado só pelas migrations do repositório, que não têm essas colunas — por isso os testes do roteiro passaram. A correção é a migration `202610310002_experiences_legacy_columns_on_insert.sql` (gatilho que preenche as colunas legadas só quando vêm nulas, a partir das colunas atuais da mesma linha, como a `202609150001_multi_base.sql` já fazia), com `supabase/diagnostics/experiences_legacy_columns_{preflight,postcheck}.sql` e rollback; o teste `tests/experiences-legacy-columns.test.ts` reproduz o esquema de produção (as sete colunas obrigatórias sem padrão), mostra a falha sem a migration e o cadastro completo com ela. O roteiro passou a conferir isso: o preflight do cadastro tem `COLUNAS_LEGADAS_COBERTAS`, e o cadastro recusa (`ESSENCIA_LEGADO`) se as colunas legadas existirem sem o gatilho.
+
+**Ordem:** preflight da `202610310002` → migration → postcheck; só então o preflight do cadastro → cadastro → postcheck do cadastro.
+
 Não há tela de cadastro de evento no painel: o caminho é a RPC do painel, `admin_create_event`, com as mesmas validações e a mesma auditoria (`EVENT_CREATED`), rodada no SQL Editor. Os quatro scripts são **gerados da fixture aprovada** (`lib/events/fixtures/essencia.ts`) por `pnpm events:essencia-sql` — nada é digitado à mão — e o teste `tests/special-events-essencia-cadastro.test.ts` falha se algum divergir dela.
 
 | Script | O que faz |

@@ -73,6 +73,12 @@ begin
   if coalesce((select publication_enabled from public.special_event_settings where singleton), true) then
     raise exception 'ESSENCIA_INTERRUPTOR: o interruptor de publicação precisa estar desligado';
   end if;
+  -- Banco com as colunas do schema legado (produção) precisa do gatilho que as
+  -- preenche (202610310002); sem ele, admin_create_experience falha em "eyebrow".
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'experiences' and column_name = 'eyebrow')
+     and not exists (select 1 from pg_trigger where tgrelid = 'public.experiences'::regclass and tgname = 'experiences_fill_legacy_columns') then
+    raise exception 'ESSENCIA_LEGADO: aplique antes a migration 202610310002 (colunas legadas de experiences)';
+  end if;
 
   created := public.admin_create_event(
     actor,
@@ -160,6 +166,13 @@ with checks as (
            || ', lista por tipo=' || exists (select 1 from pg_proc where proname = 'claim_pending_waitlist_spot_emails_by_kind' and pronamespace = 'public'::regnamespace)::text,
          case when (select prosrc like '%publication_enabled%' from pg_proc where proname = 'list_public_events' and pronamespace = 'public'::regnamespace)
                and exists (select 1 from pg_proc where proname = 'claim_pending_waitlist_spot_emails_by_kind' and pronamespace = 'public'::regnamespace) then 'OK' else 'FALHOU' end
+  union all
+  select 'COLUNAS_LEGADAS_COBERTAS',
+         case when not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'experiences' and column_name = 'eyebrow') then 'sem colunas legadas'
+              when exists (select 1 from pg_trigger where tgrelid = 'public.experiences'::regclass and tgname = 'experiences_fill_legacy_columns') then 'colunas legadas preenchidas pelo gatilho'
+              else 'colunas legadas SEM o gatilho (aplicar 202610310002)' end,
+         case when not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'experiences' and column_name = 'eyebrow')
+               or exists (select 1 from pg_trigger where tgrelid = 'public.experiences'::regclass and tgname = 'experiences_fill_legacy_columns') then 'OK' else 'FALHOU' end
   union all
   select 'EVENTOS_CADASTRADOS',
          coalesce((select string_agg(slug || '=' || status, ', ' order by slug) from public.experiences where kind = 'EVENT'), 'nenhum'),
