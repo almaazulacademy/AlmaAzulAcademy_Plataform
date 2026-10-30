@@ -36,6 +36,13 @@ with checks as (
          case when not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'experiences' and column_name = 'eyebrow')
                or exists (select 1 from pg_trigger where tgrelid = 'public.experiences'::regclass and tgname = 'experiences_fill_legacy_columns') then 'OK' else 'FALHOU' end
   union all
+  select 'RASCUNHO_NASCE_INATIVO',
+         case when not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'experiences' and column_name = 'active') then 'sem a coluna active'
+              when (select md5(regexp_replace(btrim(p.prosrc, E' \t\r\n'), '\s+', ' ', 'g')) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'experiences_fill_legacy_columns') = '4ee78d0a6fcbc88ca58c7c22875152f5' then 'gatilho com a regra do active'
+              else 'gatilho SEM a regra do active (aplicar 202610310003)' end,
+         case when not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'experiences' and column_name = 'active')
+               or (select md5(regexp_replace(btrim(p.prosrc, E' \t\r\n'), '\s+', ' ', 'g')) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'experiences_fill_legacy_columns') = '4ee78d0a6fcbc88ca58c7c22875152f5' then 'OK' else 'FALHOU' end
+  union all
   select 'EVENTOS_CADASTRADOS',
          coalesce((select string_agg(slug || '=' || status, ', ' order by slug) from public.experiences where kind = 'EVENT'), 'nenhum'),
          case when exists (select 1 from public.experiences where kind = 'EVENT') then 'ATENCAO' else 'OK' end

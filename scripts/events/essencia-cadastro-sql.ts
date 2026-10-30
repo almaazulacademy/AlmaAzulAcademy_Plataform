@@ -103,6 +103,11 @@ begin
   if not public.experience_editorial_is_publishable((select editorial_content from public.experiences where id = (created ->> 'experienceId')::uuid)) then
     raise exception 'ESSENCIA_CONTEUDO: conteúdo editorial não passa na régua de publicação';
   end if;
+  -- Coluna legada \`active\`: com ela ligada, o rascunho ficaria legível pela chave
+  -- pública (política de leitura de produção). Aplique a migration 202610310003.
+  if (select to_jsonb(e) ->> 'active' from public.experiences e where e.id = (created ->> 'experienceId')::uuid) = 'true' then
+    raise exception 'ESSENCIA_ATIVO: o rascunho não pode nascer com active = true (aplique a migration 202610310003)';
+  end if;
 
   raise notice 'ESSENCIA_CRIADO experienceId=% sessionId=%', created ->> 'experienceId', created ->> 'sessionId';
 end;
@@ -174,6 +179,13 @@ with checks as (
          case when not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'experiences' and column_name = 'eyebrow')
                or exists (select 1 from pg_trigger where tgrelid = 'public.experiences'::regclass and tgname = 'experiences_fill_legacy_columns') then 'OK' else 'FALHOU' end
   union all
+  select 'RASCUNHO_NASCE_INATIVO',
+         case when not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'experiences' and column_name = 'active') then 'sem a coluna active'
+              when (select md5(regexp_replace(btrim(p.prosrc, E' \\t\\r\\n'), '\\s+', ' ', 'g')) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'experiences_fill_legacy_columns') = '4ee78d0a6fcbc88ca58c7c22875152f5' then 'gatilho com a regra do active'
+              else 'gatilho SEM a regra do active (aplicar 202610310003)' end,
+         case when not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'experiences' and column_name = 'active')
+               or (select md5(regexp_replace(btrim(p.prosrc, E' \\t\\r\\n'), '\\s+', ' ', 'g')) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'experiences_fill_legacy_columns') = '4ee78d0a6fcbc88ca58c7c22875152f5' then 'OK' else 'FALHOU' end
+  union all
   select 'EVENTOS_CADASTRADOS',
          coalesce((select string_agg(slug || '=' || status, ', ' order by slug) from public.experiences where kind = 'EVENT'), 'nenhum'),
          case when exists (select 1 from public.experiences where kind = 'EVENT') then 'ATENCAO' else 'OK' end
@@ -221,6 +233,10 @@ checks as (
          coalesce((select 'até ' || (editorial_content #>> '{event,reservation,maxPerOrder}') || ' por pedido; cancelamento até ' || (editorial_content #>> '{event,cancellation,deadline}') from ev), 'ausente'),
          case when (select (editorial_content #>> '{event,reservation,maxPerOrder}') = '${ESSENCIA_EDITORIAL.event.reservation.maxPerOrder}'
                            and (editorial_content #>> '{event,cancellation,deadline}') = '${ESSENCIA_EDITORIAL.event.cancellation.deadline}' from ev) then 'OK' else 'FALHOU' end
+  union all
+  select 'RASCUNHO_INATIVO',
+         coalesce((select coalesce('active=' || (to_jsonb(ev) ->> 'active'), 'sem a coluna active') from ev), 'ausente'),
+         case when (select coalesce(to_jsonb(ev) ->> 'active', 'false') = 'false' from ev) then 'OK' else 'FALHOU' end
   union all
   select 'NADA_PUBLICO',
          (select count(*)::text from public.list_public_events()) || ' evento(s) nas leituras públicas; interruptor '

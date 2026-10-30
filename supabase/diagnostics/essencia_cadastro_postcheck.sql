@@ -35,6 +35,10 @@ checks as (
          case when (select (editorial_content #>> '{event,reservation,maxPerOrder}') = '6'
                            and (editorial_content #>> '{event,cancellation,deadline}') = '2026-11-05T12:00:00-03:00' from ev) then 'OK' else 'FALHOU' end
   union all
+  select 'RASCUNHO_INATIVO',
+         coalesce((select coalesce('active=' || (to_jsonb(ev) ->> 'active'), 'sem a coluna active') from ev), 'ausente'),
+         case when (select coalesce(to_jsonb(ev) ->> 'active', 'false') = 'false' from ev) then 'OK' else 'FALHOU' end
+  union all
   select 'NADA_PUBLICO',
          (select count(*)::text from public.list_public_events()) || ' evento(s) nas leituras públicas; interruptor '
            || coalesce((select case when publication_enabled then 'ligado' else 'desligado' end from public.special_event_settings where singleton), 'ausente'),

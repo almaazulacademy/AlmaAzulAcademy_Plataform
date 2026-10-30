@@ -1,5 +1,12 @@
 # Changelog
 
+## Experiências — rascunho não nasce com `active` ligado
+
+- **Causa**: em produção `active` tem padrão `true` e há a política de leitura `active = true OR is_admin()`; um rascunho criado pelo painel nasceria legível pela chave pública.
+- **Migration `202610310003`** (não aplicada): corpo novo só da função do gatilho; inserção não publicada grava `active = false`. Linhas existentes, políticas e demais funções não mudam.
+- **Roteiro do cadastro** confere (`RASCUNHO_NASCE_INATIVO`, `ESSENCIA_ATIVO`, `RASCUNHO_INATIVO`). Teste com as colunas exatas de produção.
+- **Pendência registrada**: auditoria de RLS e de `active` antes de publicar o ESSÊNCIA.
+
 ## Experiências — colunas do schema legado na criação (correção do cadastro do ESSÊNCIA)
 
 - **Causa**: em produção, `experiences` tem sete colunas legadas obrigatórias sem padrão (`eyebrow`, `short_description`, `location`, `cover_image`, `gallery`, `included`, `active`); `admin_create_experience` não as preenche, e o cadastro do ESSÊNCIA falhou em `eyebrow` (30/10/2026, sem gravar nada). Os testes não pegaram porque o banco de teste não tem essas colunas.
