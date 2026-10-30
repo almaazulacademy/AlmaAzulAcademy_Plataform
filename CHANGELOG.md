@@ -1,5 +1,11 @@
 # Changelog
 
+## Experiências — colunas do schema legado na criação (correção do cadastro do ESSÊNCIA)
+
+- **Causa**: em produção, `experiences` tem sete colunas legadas obrigatórias sem padrão (`eyebrow`, `short_description`, `location`, `cover_image`, `gallery`, `included`, `active`); `admin_create_experience` não as preenche, e o cadastro do ESSÊNCIA falhou em `eyebrow` (30/10/2026, sem gravar nada). Os testes não pegaram porque o banco de teste não tem essas colunas.
+- **Migration `202610310002`** (não aplicada): gatilho `before insert` que preenche só as colunas legadas que existem e vieram nulas, a partir das colunas atuais; nenhuma função existente muda, nenhuma restrição afrouxada, nenhuma linha existente tocada. Preflight lista toda coluna obrigatória sem padrão.
+- **Roteiro do cadastro** confere o gatilho (`COLUNAS_LEGADAS_COBERTAS`, `ESSENCIA_LEGADO`). Teste com o esquema de produção reproduz a falha e prova o cadastro completo.
+
 ## Eventos especiais — interruptor de publicação também nas leituras (correção de segurança)
 
 - **Nada muda em produção ao publicar este código**: o interruptor está desligado e nenhum evento está publicado; migrations não aplicadas. Detalhes em [docs/special-events.md](docs/special-events.md#interruptor-da-publicação).
