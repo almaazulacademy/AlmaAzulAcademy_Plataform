@@ -74,6 +74,11 @@ begin
   if not public.experience_editorial_is_publishable((select editorial_content from public.experiences where id = (created ->> 'experienceId')::uuid)) then
     raise exception 'ESSENCIA_CONTEUDO: conteúdo editorial não passa na régua de publicação';
   end if;
+  -- Coluna legada `active`: com ela ligada, o rascunho ficaria legível pela chave
+  -- pública (política de leitura de produção). Aplique a migration 202610310003.
+  if (select to_jsonb(e) ->> 'active' from public.experiences e where e.id = (created ->> 'experienceId')::uuid) = 'true' then
+    raise exception 'ESSENCIA_ATIVO: o rascunho não pode nascer com active = true (aplique a migration 202610310003)';
+  end if;
 
   raise notice 'ESSENCIA_CRIADO experienceId=% sessionId=%', created ->> 'experienceId', created ->> 'sessionId';
 end;

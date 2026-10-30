@@ -22,6 +22,7 @@ import { ADMIN, rescheduleFixtures, type Row } from "./support/reschedule-email-
 
 const MIGRATION = "202610310002_experiences_legacy_columns_on_insert.sql";
 const PREVIOUS = "202610310001_special_events_publication_switch.sql";
+const ACTIVE_MIGRATION = "202610310003_experiences_active_on_insert.sql";
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -33,13 +34,17 @@ const CADASTRO_POSTCHECK = source("supabase/diagnostics/essencia_cadastro_postch
 const PREFLIGHT = source("supabase/diagnostics/experiences_legacy_columns_preflight.sql");
 const POSTCHECK = source("supabase/diagnostics/experiences_legacy_columns_postcheck.sql");
 const ROLLBACK = source("supabase/rollback/202610310002_experiences_legacy_columns_on_insert.rollback.sql");
+const ACTIVE_PREFLIGHT = source("supabase/diagnostics/experiences_active_on_insert_preflight.sql");
+const ACTIVE_POSTCHECK = source("supabase/diagnostics/experiences_active_on_insert_postcheck.sql");
+const ACTIVE_ROLLBACK = source("supabase/rollback/202610310003_experiences_active_on_insert.rollback.sql");
 
 type Check = { check_name: string; result: string; status: string };
 
 /**
- * As sete colunas como produção as tem: obrigatórias e sem valor padrão. As
- * linhas existentes recebem um valor (como em produção, onde já estão
- * preenchidas) e o padrão é retirado em seguida.
+ * As sete colunas exatamente como produção as tem (information_schema, 31/10/2026):
+ * todas obrigatórias; quatro textos sem padrão; `gallery` e `included` com padrão
+ * `'[]'`; `active` com padrão `true`. As linhas existentes recebem um valor e o
+ * padrão dos textos é retirado em seguida.
  */
 const PRODUCTION_LEGACY_COLUMNS = `
   alter table public.experiences
@@ -52,7 +57,7 @@ const PRODUCTION_LEGACY_COLUMNS = `
     add column active boolean not null default true;
   alter table public.experiences
     alter column eyebrow drop default, alter column short_description drop default, alter column location drop default,
-    alter column cover_image drop default, alter column gallery drop default, alter column included drop default, alter column active drop default;
+    alter column cover_image drop default;
 `;
 
 async function productionLikeDatabase(until: string = PREVIOUS) {
@@ -98,12 +103,22 @@ test("com a migration: o cadastro completo do ESSÊNCIA passa no esquema de prod
   for (const [name, row] of after) assert.equal(row.status, "OK", `${name}: ${row.result}`);
   for (const key of ["ASSINATURA_DAS_FUNCOES", "EXPERIENCIAS_POR_TIPO_E_STATUS", "RESERVAS_POR_STATUS"]) assert.equal(after.get(key)?.result, before.get(key)?.result, key);
 
+  const activeBefore = await report(db, ACTIVE_PREFLIGHT);
+  for (const [name, row] of activeBefore) assert.equal(row.status, "OK", `${name}: ${row.result}`);
+  assert.equal(activeBefore.get("COLUNA_ACTIVE")?.result, "boolean, nula=NO, padrão=true");
+  await applyMigration(db, ACTIVE_MIGRATION);
+  const activeAfter = await report(db, ACTIVE_POSTCHECK);
+  for (const [name, row] of activeAfter) assert.equal(row.status, "OK", `${name}: ${row.result}`);
+  for (const key of ["ASSINATURA_DAS_OUTRAS_FUNCOES", "LINHAS_ATIVAS_FORA_DE_PUBLICADO", "EXPERIENCIAS_POR_TIPO_E_STATUS", "RESERVAS_POR_STATUS", "GATILHO_SO_EM_INSERT"]) assert.equal(activeAfter.get(key)?.result, activeBefore.get(key)?.result, key);
+  assert.equal(activeBefore.get("ASSINATURA_DAS_OUTRAS_FUNCOES")?.result, before.get("ASSINATURA_DAS_FUNCOES")?.result, "mesma assinatura do preflight anterior");
+
   const pre = await report(db, CADASTRO_PREFLIGHT);
   for (const [name, row] of pre) assert.equal(row.status, "OK", `${name}: ${row.result}`);
   await db.exec(CADASTRO);
   const post = await report(db, CADASTRO_POSTCHECK);
   for (const [name, row] of post) assert.equal(row.status, "OK", `${name}: ${row.result}`);
   assert.equal(post.get("EVENTO_EM_RASCUNHO")?.result, "EVENT/DRAFT na base concha-acustica");
+  assert.equal(post.get("RASCUNHO_INATIVO")?.result, "active=false");
   assert.equal(post.get("SESSAO_FECHADA")?.result, "CLOSED 07/11/2026 05:30 210min 15000 centavos 24 vagas");
   assert.equal(post.get("LIMITE_POR_PEDIDO_E_PRAZO")?.result, "até 6 por pedido; cancelamento até 2026-11-05T12:00:00-03:00");
   for (const key of ["LISTAGENS_REGULARES", "RESERVAS_POR_STATUS", "INSCRICOES_DA_LISTA_POR_STATUS"]) assert.equal(post.get(key)?.result, pre.get(key)?.result, key);
@@ -130,6 +145,7 @@ test("com a migration: o cadastro completo do ESSÊNCIA passa no esquema de prod
 test("valor informado nunca é trocado; experiências existentes não mudam; experiência regular pelo painel também passa", async () => {
   const { db, fx } = await productionLikeDatabase();
   await applyMigration(db, MIGRATION);
+  await applyMigration(db, ACTIVE_MIGRATION);
   const snapshot = async () => (await db.query(`select id, eyebrow, short_description, location, cover_image, gallery, included, active, kind, status from public.experiences order by id`)).rows;
   const existing = await snapshot();
 
@@ -141,7 +157,7 @@ test("valor informado nunca é trocado; experiências existentes não mudam; exp
   assert.deepEqual([regular.kind, regular.eyebrow, regular.short_description, regular.cover_image, regular.active], ["REGULAR", "Remada Teste", "Uma remada de teste para o legado.", "", false]);
 
   await db.query(`insert into public.experiences (slug, title, summary, description, status, display_order, base_id, eyebrow, short_description, location, cover_image, gallery, included, active)
-                  values ('valores-proprios', 'Valores', 'Resumo com valores próprios', 'Resumo com valores próprios', 'DRAFT', 0, $1::uuid, 'Meu eyebrow', 'Minha descrição', 'Meu local', '/x.webp', '["a"]'::jsonb, '["b"]'::jsonb, true)`, [fx.SUNSET_CONCHA.base_id]);
+                  values ('valores-proprios', 'Valores', 'Resumo com valores próprios', 'Resumo com valores próprios', 'PUBLISHED', 0, $1::uuid, 'Meu eyebrow', 'Minha descrição', 'Meu local', '/x.webp', '["a"]'::jsonb, '["b"]'::jsonb, true)`, [fx.SUNSET_CONCHA.base_id]);
   const own = (await db.query<Row>(`select eyebrow, short_description, location, cover_image, gallery, included, active from public.experiences where slug = 'valores-proprios'`)).rows[0];
   assert.deepEqual(own, { eyebrow: "Meu eyebrow", short_description: "Minha descrição", location: "Meu local", cover_image: "/x.webp", gallery: ["a"], included: ["b"], active: true });
 
@@ -173,6 +189,68 @@ test("migration: aditiva — nenhuma função existente muda, só uma função e
   assert.doesNotMatch(migration, /(insert into|update|delete from) public\./i);
   assert.doesNotMatch(migration, /alter table|drop constraint|drop not null|set default|cron\.|create extension/i);
   await before.close();
+});
+
+test("active com padrão true: sem a 202610310003 o rascunho nasceria legível pela chave pública, e o roteiro recusa", async () => {
+  const { db, fx } = await productionLikeDatabase();
+  await applyMigration(db, MIGRATION);
+  // A política de produção. O SELECT de `anon` simula os privilégios padrão do
+  // Supabase; o que produção concede de fato entra na auditoria de RLS.
+  await db.exec(`grant select on public.experiences to anon;
+                 create policy legado_active on public.experiences for select to anon, authenticated using (active = true)`);
+  const anonSees = async (slug: string) => {
+    await db.exec(`set role anon`);
+    const n = await count(db, `select count(*)::int as n from public.experiences where slug = '${slug}'`);
+    await db.exec(`reset role`);
+    return n;
+  };
+  const create = (slug: string, status: string) => fx.call(
+    `public.admin_create_experience($1::uuid, $2, 'Remada Teste', 'Uma remada de teste para o legado.', $3, null, 0, 'Uma remada de teste para o legado.', 90, 9000, 6, '{}'::jsonb, $4::uuid)`,
+    [ADMIN, slug, status, fx.SUNSET_CONCHA.base_id],
+  );
+
+  await create("rascunho-sem-regra", "DRAFT");
+  assert.equal((await db.query<Row>(`select active from public.experiences where slug = 'rascunho-sem-regra'`)).rows[0].active, true, "o bug");
+  assert.equal(await anonSees("rascunho-sem-regra"), 1, "legível pela chave pública");
+  assert.equal((await report(db, CADASTRO_PREFLIGHT)).get("RASCUNHO_NASCE_INATIVO")?.status, "FALHOU");
+  await assert.rejects(db.exec(CADASTRO), /ESSENCIA_ATIVO/);
+  await db.exec("rollback").catch(() => undefined);
+  assert.equal(await count(db, `select count(*)::int as n from public.experiences where slug = 'essencia'`), 0, "nada parcial");
+
+  await applyMigration(db, ACTIVE_MIGRATION);
+  await create("rascunho-com-regra", "DRAFT");
+  assert.equal((await db.query<Row>(`select active from public.experiences where slug = 'rascunho-com-regra'`)).rows[0].active, false);
+  assert.equal(await anonSees("rascunho-com-regra"), 0);
+  assert.equal((await db.query<Row>(`select active from public.experiences where slug = 'rascunho-sem-regra'`)).rows[0].active, true, "linha existente não é tocada");
+
+  await create("em-breve-pelo-painel", "COMING_SOON");
+  assert.equal((await db.query<Row>(`select active from public.experiences where slug = 'em-breve-pelo-painel'`)).rows[0].active, false, "em breve também não nasce ativa");
+  await db.close();
+});
+
+test("migration do active: só muda a função do gatilho; preflight reprova função alterada; rollback devolve e reaplica", async () => {
+  const { db } = await productionLikeDatabase();
+  await applyMigration(db, MIGRATION);
+  const bodies = async () => (await db.query<{ name: string; src: string }>(`select p.oid::regprocedure::text as name, md5(p.prosrc) as src from pg_proc p where p.pronamespace = 'public'::regnamespace order by 1`)).rows;
+  const old = await bodies();
+  await applyMigration(db, ACTIVE_MIGRATION);
+  await applyMigration(db, ACTIVE_MIGRATION);
+  const current = await bodies();
+  assert.deepEqual(current.map((row) => row.name), old.map((row) => row.name), "nenhuma função nova ou removida");
+  assert.deepEqual(current.filter((row) => old.find((item) => item.name === row.name)?.src !== row.src).map((row) => row.name), ["experiences_fill_legacy_columns()"]);
+  assert.equal((await report(db, ACTIVE_PREFLIGHT)).get("FUNCAO_DA_202610310002")?.status, "ATENCAO", "já aplicada");
+  const migration = source(`supabase/migrations/${ACTIVE_MIGRATION}`).split("\n").filter((line) => !line.trimStart().startsWith("--")).join("\n");
+  assert.doesNotMatch(migration, /(insert into|update|delete from) public\.|alter table|create trigger|drop trigger|create policy|drop policy|grant |revoke /i);
+
+  await db.exec(ACTIVE_ROLLBACK);
+  assert.equal((await bodies()).find((row) => row.name === "experiences_fill_legacy_columns()")?.src, old.find((row) => row.name === "experiences_fill_legacy_columns()")?.src);
+  assert.equal((await report(db, POSTCHECK)).get("EXPERIENCIAS_LEGADO_POSTCHECK_OK")?.status, "OK", "volta ao estado da 202610310002");
+  await applyMigration(db, ACTIVE_MIGRATION);
+  assert.equal((await report(db, ACTIVE_POSTCHECK)).get("EXPERIENCIAS_ACTIVE_POSTCHECK_OK")?.status, "OK");
+
+  await db.exec(`create or replace function public.experiences_fill_legacy_columns() returns trigger language plpgsql set search_path = public as $$ begin return new; end; $$`);
+  assert.equal((await report(db, ACTIVE_PREFLIGHT)).get("EXPERIENCIAS_ACTIVE_PREFLIGHT_OK")?.status, "FALHOU");
+  await db.close();
 });
 
 test("preflight reprova coluna obrigatória que nem o painel nem o gatilho preenchem", async () => {
