@@ -139,6 +139,16 @@ export function eventTimeRange(startsAt: string, durationMinutes: number) {
 }
 
 /** "05h30" a partir de "05:30" da programação. */
+/** O horário geral: o rótulo do conteúdo, quando há, ou o intervalo calculado pela duração. */
+export function eventScheduleLabel(scheduleLabel: string | null | undefined, startsAt: string, durationMinutes: number) {
+  return scheduleLabel ? scheduleLabel.toUpperCase() : eventTimeRange(startsAt, durationMinutes);
+}
+
+/** O horário de uma atividade: o rótulo flexível, quando há, ou o horário exato. */
+export function programItemTime(item: { time: string | null; timeLabel: string | null }) {
+  return item.timeLabel ?? (item.time ? programTimeLabel(item.time) : "");
+}
+
 export function programTimeLabel(time: string) {
   const [hour, minute] = time.split(":");
   return minute === "00" ? `${hour}h` : `${hour}h${minute}`;

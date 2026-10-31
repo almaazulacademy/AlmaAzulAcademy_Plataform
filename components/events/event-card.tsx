@@ -3,7 +3,7 @@ import { ArrowUpRight, CalendarDays, MapPin } from "lucide-react";
 
 import { EditorialImage } from "@/components/editorial-image";
 import { AvailabilityBadge } from "@/components/events/event-parts";
-import { eventDayLabel, eventPrice, eventTimeRange } from "@/lib/events/presentation";
+import { eventDayLabel, eventPrice, eventScheduleLabel } from "@/lib/events/presentation";
 import type { PublicEvent } from "@/lib/events/public";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +33,7 @@ export function EventCard({ event, href, bookingOpen, featured = false }: { even
         <p className="mt-3 font-event text-sm font-bold uppercase tracking-[0.18em] text-ember sm:text-base">{extra.subtitle}</p>
         <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-white/80">
           {session.startsAt ? (
-            <span className="flex items-center gap-2"><CalendarDays aria-hidden="true" className="size-4 text-ember" />{eventDayLabel(session.startsAt)} · {eventTimeRange(session.startsAt, session.durationMinutes)}</span>
+            <span className="flex items-center gap-2"><CalendarDays aria-hidden="true" className="size-4 text-ember" />{eventDayLabel(session.startsAt)} · {eventScheduleLabel(extra.scheduleLabel, session.startsAt, session.durationMinutes)}</span>
           ) : null}
           <span className="flex items-center gap-2"><MapPin aria-hidden="true" className="size-4 text-ember" />{event.location.baseName}</span>
           {session.priceCents ? <span className="font-semibold text-white">{eventPrice(session.priceCents)} por pessoa</span> : null}

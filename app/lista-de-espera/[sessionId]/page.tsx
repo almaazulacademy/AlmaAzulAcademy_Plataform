@@ -14,7 +14,7 @@ import { baseLocation } from "@/lib/bases/location";
 import type { RulesQueryClient } from "@/lib/events/booking";
 import { getPublicEvent } from "@/lib/events/data";
 import { isEventsWaitlistEnabled } from "@/lib/events/flags";
-import { eventDayLabel, eventTimeRange } from "@/lib/events/presentation";
+import { eventDayLabel, eventScheduleLabel } from "@/lib/events/presentation";
 import type { PublicEvent } from "@/lib/events/public";
 import { EVENT_SOLD_OUT_TITLE, loadWaitlistTarget, type WaitlistTarget } from "@/lib/events/waitlist";
 import { listPublicSessions } from "@/lib/reservations/data";
@@ -109,7 +109,7 @@ export default async function WaitlistSignupPage({ params }: { params: Promise<{
 function EventWaitlistPage({ event, slug, maxPerOrder }: { event: PublicEvent | null; slug: string; maxPerOrder: number }) {
   const session = event?.session ?? null;
   const day = session?.startsAt ? eventDayLabel(session.startsAt) : null;
-  const time = session?.startsAt && session ? eventTimeRange(session.startsAt, session.durationMinutes) : null;
+  const time = session?.startsAt && session ? eventScheduleLabel(event?.editorial.event.scheduleLabel, session.startsAt, session.durationMinutes) : null;
   return (
     <main className="min-h-screen bg-paper pt-24">
       <Navbar />

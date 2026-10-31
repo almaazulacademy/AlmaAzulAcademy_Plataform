@@ -9,7 +9,7 @@ import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { infoParagraphs, visibleInfoItems } from "@/lib/events/editorial";
 import { clockText, deadlineShortText } from "@/lib/events/policy";
-import { eventCta, eventDayLabel, eventLongDate, eventPrice, eventTimeRange, programTimeLabel, spotsLabel } from "@/lib/events/presentation";
+import { eventCta, eventDayLabel, eventLongDate, eventPrice, eventScheduleLabel, programItemTime, spotsLabel } from "@/lib/events/presentation";
 import type { PublicEvent } from "@/lib/events/public";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +35,7 @@ export function EventPage({ event, preview = false, bookingOpen = false, waitlis
   const info = visibleInfoItems(extra, preview);
   const spots = spotsLabel(session.availability, session.remainingSpots);
   const day = session.startsAt ? eventDayLabel(session.startsAt) : null;
-  const time = session.startsAt ? eventTimeRange(session.startsAt, session.durationMinutes) : null;
+  const time = session.startsAt ? eventScheduleLabel(extra.scheduleLabel, session.startsAt, session.durationMinutes) : null;
   const place = `${event.location.baseName} · Brasília`;
 
   return (
@@ -107,7 +107,7 @@ export function EventPage({ event, preview = false, bookingOpen = false, waitlis
                 <div className={cn("relative border-l border-ember/40 pl-6 sm:pl-10", item.image && index % 2 === 1 && "lg:order-2")}>
                   <span aria-hidden="true" className="absolute -left-[5px] top-3 size-[9px] rounded-full bg-ember" />
                   <p className="inline-flex rounded-md bg-ember px-3 py-1.5 font-event text-lg font-extrabold uppercase text-night sm:text-xl">
-                    <time>{programTimeLabel(item.time).toUpperCase()}</time>
+                    {item.time && !item.timeLabel ? <time>{programItemTime(item).toUpperCase()}</time> : programItemTime(item).toUpperCase()}
                   </p>
                   <h3 className="mt-5 font-event text-2xl font-bold uppercase leading-tight sm:text-4xl">{item.title}</h3>
                   <p className="mt-4 max-w-xl text-lg leading-8 text-white/75">{item.description}</p>

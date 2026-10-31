@@ -27,8 +27,10 @@ import {
 } from "./policy.ts";
 
 export type EventProgramItem = {
-  /** "05:30", no horário de Brasília. */
-  time: string;
+  /** "05:30", no horário de Brasília. Opcional quando há `timeLabel`. */
+  time: string | null;
+  /** Referência flexível no lugar do horário exato: "Por volta das 09h", "Na sequência". */
+  timeLabel: string | null;
   title: string;
   description: string;
   /** Quem conduz, como informado pela organização. */
@@ -60,6 +62,8 @@ export type EventContent = {
   subtitle: string;
   tagline: string;
   highlights: string[];
+  /** Horário geral sem fim fixo ("A partir das 05h30"): substitui o intervalo calculado pela duração. */
+  scheduleLabel: string | null;
   /** Foto do Hero para telas estreitas; sem ela, usa a do Hero. */
   heroImageMobile: EditorialImage | null;
   /** Foto do card na listagem; sem ela, usa a do Hero. */
@@ -140,10 +144,12 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
   const reservation = record(root.reservation);
 
   const programItems = list(program?.items).map((item, index): EventProgramItem => {
-    const time = text(item.time);
-    if (!TIME.test(time)) errors.push(`Horário ${index + 1} da programação deve ser HH:MM.`);
+    const time = text(item.time) || null;
+    const timeLabel = text(item.timeLabel) || null;
+    if (time ? !TIME.test(time) : !timeLabel) errors.push(`Horário ${index + 1} da programação deve ser HH:MM.`);
     return {
       time,
+      timeLabel,
       title: need(text(item.title), `Título da atividade ${index + 1}`),
       description: need(text(item.description), `Descrição da atividade ${index + 1}`),
       hosts: texts(item.hosts),
@@ -152,8 +158,9 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
     };
   });
   if (!programItems.length) errors.push("A programação precisa de pelo menos uma atividade.");
-  for (let index = 1; index < programItems.length; index += 1) {
-    if (programItems[index].time < programItems[index - 1].time) errors.push("A programação deve estar em ordem de horário.");
+  const programTimes = programItems.flatMap((item) => item.time ?? []);
+  for (let index = 1; index < programTimes.length; index += 1) {
+    if (programTimes[index] < programTimes[index - 1]) errors.push("A programação deve estar em ordem de horário.");
   }
 
   const partnerItems = list(partners?.items).map((item, index): EventPartner => ({
@@ -215,6 +222,7 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
     subtitle: need(text(root.subtitle), "Subtítulo do evento"),
     tagline: need(text(root.tagline), "Descrição do Hero do evento"),
     highlights: texts(root.highlights),
+    scheduleLabel: text(root.scheduleLabel) || null,
     heroImageMobile: image(root.heroImageMobile),
     cardImage: image(root.cardImage),
     intro: {

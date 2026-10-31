@@ -214,9 +214,9 @@ test("resumo do ingresso: programação, incluso, chegada e política exata ante
   assert.equal(context.slug, "essencia");
   assert.equal(context.title, "ESSÊNCIA");
   assert.equal(context.dayLabel, "07 NOV · SÁBADO");
-  assert.equal(context.timeRange, "05H30 ÀS 09H");
+  assert.equal(context.timeRange, "A PARTIR DAS 05H30");
   assert.equal(context.arrivalNote, "Início às 05h30, com tolerância de chegada até 05h50.");
-  assert.deepEqual(context.program.map((item) => item.time), ["05h30", "07h30", "07h45", "09h"]);
+  assert.deepEqual(context.program.map((item) => item.time), ["05h30", "Por volta das 07h30", "Na sequência", "Por volta das 09h"]);
   assert.equal(context.included.length, 5);
   assert.equal(context.maxPerOrder, 6);
   assert.equal(

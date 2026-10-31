@@ -174,7 +174,7 @@ function eventRows(title: string, startsAt: string, event: WaitlistEvent, baseNa
   return [
     ["Evento", title],
     ["Data", formatSessionDate(startsAt)],
-    ["Horário", timeRange(startsAt, event.durationMinutes)],
+    ["Horário", event.content.scheduleLabel ?? timeRange(startsAt, event.durationMinutes)],
     ...(place ? [["Local", place] as [string, string]] : []),
     ["Participantes", participants(quantity)],
     ...extra,
