@@ -1,5 +1,9 @@
 # Changelog
 
+## ESSÊNCIA — roteiro de publicação sem vendas
+
+- **Nada executado**: preflight, publicação, postcheck, conferência como `anon` e desfazer, gerados da fixture e testados. Sessão segue `CLOSED`; nenhuma variável muda. Detalhes em [docs/essencia-abertura.md](docs/essencia-abertura.md).
+
 ## Eventos especiais — migration de segurança aplicada
 
 - **Migration `202610310004` aplicada em produção em 31/10/2026**: postcheck sem falhas, regulares e contagens idênticas. Teste real como `anon` aprovado: ESSÊNCIA e eventos invisíveis, 8 regulares visíveis, `create_reservation` não executável.

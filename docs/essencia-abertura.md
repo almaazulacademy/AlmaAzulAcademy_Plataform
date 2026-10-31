@@ -45,6 +45,21 @@ Depois do cadastro o site não muda: o evento está em rascunho, o interruptor d
 
 Para tirar do ar a qualquer momento: desligar o interruptor (imediato: página, venda, inscrição e avisos saem), remover as variáveis + redeploy, ou voltar o evento a rascunho.
 
+## Publicação sem vendas (roteiro; nada executado)
+
+Scripts gerados por `pnpm events:essencia-publicacao-sql` e testados em `tests/special-events-essencia-publicacao.test.ts`. **Cada etapa exige autorização específica.**
+
+1. **Pré-condições:** estado do ESSÊNCIA conferido no banco, logs das execuções automáticas sem 401 e escopo de Deployment Protection confirmado.
+2. **Preflight:** `supabase/diagnostics/essencia_publicacao_preflight.sql`.
+3. **Publicação:** `supabase/maintenance/essencia_publicacao.sql`. Liga o interruptor e publica numa transação; a sessão continua `CLOSED`. O site não muda, mas o conteúdo fica legível pela chave pública.
+4. **Postcheck e conferência como `anon`:** `essencia_publicacao_postcheck.sql` e `essencia_publicacao_anon_check.sql`.
+5. **Página no ar, em etapa separada:** `EVENTS_PUBLIC_ENABLED=true` só em Production + redeploy. `EVENT_BOOKING_OPEN` e `EVENTS_WAITLIST_ENABLED` continuam ausentes.
+6. **Conferência de conteúdo e imagens** em celular e computador, antes de qualquer decisão de venda.
+
+**Barreiras contra reserva:** sessão `CLOSED` no banco; `POST /api/reservations` recusa evento com `EVENT_BOOKING_OPEN` ausente; a chave pública não executa `create_pre_reservation`.
+
+**Desfazer:** remover `EVENTS_PUBLIC_ENABLED` + redeploy, se estiver ligada; depois `supabase/rollback/essencia_publicacao.rollback.sql`, que volta a rascunho e desliga o interruptor. Recusa se houver sessão aberta, reserva ou inscrição.
+
 ## 3. Rotação do `CRON_SECRET`
 
 **Por quê:** o valor atual pode ter sido exposto numa captura de tela (27/10/2026). Ninguém deve exibir, copiar para chat, colar em arquivo ou registrar o valor antigo ou o novo.
