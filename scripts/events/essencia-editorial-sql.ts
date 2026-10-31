@@ -1,7 +1,7 @@
 /**
- * Gera a atualização do conteúdo do ESSÊNCIA já cadastrado em rascunho: preflight,
- * atualização, postcheck e rollback. De (`essencia-editorial-v1.json`, a versão que
- * está em produção) para (a fixture atual). O teste
+ * HISTÓRICO, já aplicado em 31/10/2026: atualização do ESSÊNCIA em rascunho, de
+ * `essencia-editorial-v1.json` para `essencia-editorial-v2.json`. Não vale para o
+ * evento publicado: use `essencia-editorial-publicado-sql.ts`. O teste
  * `tests/special-events-essencia-editorial.test.ts` falha se o SQL divergir.
  *
  *   pnpm events:essencia-editorial-sql
@@ -13,11 +13,11 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 import { validateEventEditorial } from "../../lib/events/editorial.ts";
-import { ESSENCIA_CAPACITY, ESSENCIA_EDITORIAL, ESSENCIA_SLUG, ESSENCIA_STARTS_AT } from "../../lib/events/fixtures/essencia.ts";
+import { ESSENCIA_CAPACITY, ESSENCIA_SLUG, ESSENCIA_STARTS_AT } from "../../lib/events/fixtures/essencia.ts";
 import { ESSENCIA_ADMIN_EMAIL } from "./essencia-cadastro-sql.ts";
 
 const V1 = JSON.stringify(JSON.parse(readFileSync(new URL("./essencia-editorial-v1.json", import.meta.url), "utf8")));
-const V2 = JSON.stringify(ESSENCIA_EDITORIAL);
+const V2 = JSON.stringify(JSON.parse(readFileSync(new URL("./essencia-editorial-v2.json", import.meta.url), "utf8")));
 
 const SESSION = `s.status = 'CLOSED' and to_char(s.starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI') = '${ESSENCIA_STARTS_AT.slice(0, 16)}' and s.duration_minutes = 210 and s.price_cents = 15000 and s.capacity = ${ESSENCIA_CAPACITY}`;
 const ACTOR = `from public.admin_users au join auth.users u on u.id = au.user_id
@@ -155,7 +155,7 @@ export function editorialPreflightSql() {
 }
 
 export function editorialUpdateSql() {
-  const editorial = validateEventEditorial(ESSENCIA_EDITORIAL);
+  const editorial = validateEventEditorial(JSON.parse(V2));
   if (!editorial.success) throw new Error(`Conteúdo do ESSÊNCIA inválido: ${editorial.errors.join("; ")}`);
   return `-- ESSÊNCIA — ATUALIZAÇÃO DO CONTEÚDO EM RASCUNHO (GERADO; NÃO EDITAR À MÃO)
 --

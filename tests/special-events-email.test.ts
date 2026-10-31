@@ -91,9 +91,9 @@ test("confirmação do evento: todo o conteúdo obrigatório, no horário de Bra
     "Em frente ao Cápsula Bar — Concha Acústica",
     "SHTN Trecho 1, Lote 8 — Brasília/DF",
     "05h30 — Canoa havaiana ao nascer do sol",
-    "Por volta das 07h30 — Meditação sensorial e aromaterapia (com Rapha Dantas e Fernanda Garcia)",
+    "Por volta das 07h30 — Meditação sensorial e aromaterapia (com Fernanda Garcia)",
     "Na sequência — Superioga (com Rapha Dantas)",
-    "Por volta das 09h — Happy Hour de Conexões",
+    "Por volta das 09h — Encerramento com lanche saudável",
     "roupas confortáveis",
     "garrafa de água, protetor solar",
     "Para participar da prática de Superioga, traga seu próprio tapete. A organização não disponibilizará tapetes para essa atividade.",
@@ -106,7 +106,7 @@ test("confirmação do evento: todo o conteúdo obrigatório, no horário de Bra
     "https://www.almaazulacademy.com.br/checkin/3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b",
   ];
   for (const text of required) assert.ok(email.text.includes(text), `texto puro sem: ${text}`);
-  for (const text of ["Ingresso confirmado", "ESS7K2M9QX", "até 05h50", "traga seu próprio tapete", "colete salva-vidas", "Nutre, servido no Happy Hour de Conexões", "5 de novembro de 2026, às 12h00", "Como chegar — Google Maps"]) {
+  for (const text of ["Ingresso confirmado", "ESS7K2M9QX", "até 05h50", "traga seu próprio tapete", "colete salva-vidas", "Nutre, servido no encerramento", "5 de novembro de 2026, às 12h00", "Como chegar — Google Maps"]) {
     assert.ok(email.html.includes(text), `HTML sem: ${text}`);
   }
   assertNoGeneric(email, "confirmação");
