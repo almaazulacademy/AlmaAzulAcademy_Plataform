@@ -141,7 +141,7 @@ test("confirmação do evento: nome, data, horário, local, participantes, não 
     "Recebemos sua inscrição na lista de espera do evento:",
     "Evento: ESSÊNCIA — Corpo, Mente e Natureza",
     "Data: sábado, 07 de novembro de 2026",
-    "Horário: 05h30 às 09h00",
+    "Horário: A partir das 05h30",
     "Local: Em frente ao Cápsula Bar — Concha Acústica — SHTN Trecho 1, Lote 8 — Brasília/DF",
     "Participantes: 3 participantes",
     "ISTO NÃO É UM INGRESSO",
@@ -161,7 +161,7 @@ test("aviso de vaga do evento: surgiu disponibilidade, não garantida, GARANTIR 
   assert.equal(eventWaitlistReserveUrl("essencia", ORIGIN), `${ORIGIN}/eventos/essencia#reserva`);
   for (const text of [
     "Surgiu disponibilidade no evento",
-    "Horário: 05h30 às 09h00",
+    "Horário: A partir das 05h30",
     "Participantes: 2 participantes",
     "A VAGA NÃO ESTÁ GARANTIDA",
     "a disponibilidade pode mudar até a conclusão da compra",

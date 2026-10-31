@@ -65,7 +65,7 @@ test("conteúdo: o ESSÊNCIA é um documento de evento completo e publicável", 
   assert.equal(event.subtitle, "Corpo, mente e natureza");
   assert.equal(event.badge, "Evento especial · 1ª edição");
   assert.deepEqual(event.highlights, ["Canoa havaiana", "Meditação", "Superioga"]);
-  assert.deepEqual(event.program.items.map((item) => item.time), ["05:30", "07:30", "07:45", "09:00"]);
+  assert.deepEqual(event.program.items.map((item) => item.time), ["05:30", "07:30", null, "09:00"]);
   assert.deepEqual(event.program.items[1].hosts, ["Rapha Dantas", "Fernanda Garcia"]);
   assert.deepEqual(event.program.items[2].hosts, ["Rapha Dantas"]);
   assert.equal(event.program.items[0].note, "Não é necessário ter experiência prévia.");
@@ -73,10 +73,10 @@ test("conteúdo: o ESSÊNCIA é um documento de evento completo e publicável", 
     "Canoa havaiana ao nascer do sol",
     "Meditação sensorial com aromaterapia",
     "Superioga",
-    "Momento de integração",
+    "Happy Hour de Conexões",
     "Lanche saudável da Nutre",
   ]);
-  assert.deepEqual(event.partners.items.map((partner) => partner.name), ["Cure-se Bem", "Alma Azul Academy", "Cápsula Bar", "Rapha Dantas", "Nutre Congelados Saudáveis"]);
+  assert.deepEqual(event.partners.items.map((partner) => partner.name), ["Cure-se Bem", "Alma Azul Academy", "Cápsula Bar", "Rapha Dantas", "Fernanda Garcia", "Nutre"]);
   // Sem logo fornecido, sem logo inventado.
   assert.equal(event.partners.items.find((partner) => partner.name === "Rapha Dantas")?.logo, null);
 });
@@ -131,13 +131,14 @@ test("informações do ESSÊNCIA: os sete textos aprovados, todos publicáveis",
   assert.deepEqual(infoParagraphs(byId("chegada")), [
     "Nossa experiência começa às 05h30, no Cápsula Bar, às margens do Lago Paranoá.",
     "Recomendamos chegar com alguns minutos de antecedência para aproveitar cada momento. Haverá tolerância de chegada até às 05h50.",
+    "As práticas terminam aproximadamente entre 08h30 e 09h. Na sequência, acontece o Happy Hour de Conexões.",
   ]);
   assert.match(byId("o-que-levar"), /Venha com roupas confortáveis, adequadas para atividades físicas\. Recomendamos trazer garrafa de água, protetor solar e seus itens pessoais\./);
   assert.match(byId("o-que-levar"), /Para participar da prática de Superioga, traga seu próprio tapete\. A organização não disponibilizará tapetes para essa atividade\./);
   // Regra antiga (materiais fornecidos pela equipe) não pode sobrar em lugar nenhum do conteúdo.
   assert.doesNotMatch(JSON.stringify(ESSENCIA_EDITORIAL), /fornecid[oa]s? pela equipe|materiais necessários/i);
   assert.match(byId("seguranca"), /O uso de colete salva-vidas é obrigatório/);
-  assert.match(byId("alimentacao"), /Nutre Congelados Saudáveis/);
+  assert.match(byId("alimentacao"), /lanche saudável oferecido pela Nutre, servido no Happy Hour de Conexões/);
   assert.match(byId("clima"), /o evento será reagendado e os participantes serão comunicados pela organização/);
   assert.deepEqual(infoParagraphs(byId("cancelamento")), [
     "Você pode solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (horário de Brasília), escolhendo entre crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe.",

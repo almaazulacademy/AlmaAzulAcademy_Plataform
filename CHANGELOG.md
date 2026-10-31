@@ -1,5 +1,11 @@
 # Changelog
 
+## ESSÊNCIA — programação fluida
+
+- **Conteúdo**: Happy Hour de Conexões, Superioga na sequência, referências de horário flexíveis, aromaterapia com Fernanda Garcia e "Nutre" padronizado. Sem fim fixo às 09h em página, reserva ou e-mail.
+- **Campos opcionais** `event.scheduleLabel` e `program.items[].timeLabel`; eventos sem eles não mudam.
+- **Atualização do rascunho**: preflight, atualização, postcheck e rollback, **não executados**. Sessão, preço, vagas e os 210 minutos técnicos não mudam.
+
 ## Eventos especiais — "Reservas abrem em breve" antes da abertura comercial
 
 - Com `EVENT_BOOKING_OPEN` desligada, evento com sessão aberta ou fechada mostra "Reservas abrem em breve" no selo, no botão e nos cards, em vez de "Reservas encerradas" ou "Vagas abertas". Esgotado, realizado, cancelado e regulares não mudam. Sem migration, sem mudança de conteúdo ou variável.

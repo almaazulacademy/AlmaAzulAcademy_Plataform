@@ -7,7 +7,9 @@
  * Nada deste arquivo é gravado no banco nem aparece em Production.
  *
  * Textos e créditos vêm do briefing aprovado e do carrossel oficial. As
- * informações operacionais são os textos definitivos aprovados em 29/10/2026.
+ * informações operacionais foram aprovadas em 29/10/2026; a programação fluida,
+ * sem horários rígidos de encerramento, em 31/10/2026. A versão cadastrada antes
+ * disso está em `scripts/events/essencia-editorial-v1.json`, para o rollback.
  *
  * Módulo puro, sem imports de aplicação: é lido pelo Next e pelos testes.
  */
@@ -31,11 +33,11 @@ export const ESSENCIA_EDITORIAL = {
     },
     primaryCta: { label: "Garantir minha vaga", href: "#reserva" },
     secondaryCta: { label: "Ver a programação", href: "#programacao" },
-    details: ["07 de novembro de 2026", "05h30 às 09h", "Cápsula Bar · Brasília"],
+    details: ["07 de novembro de 2026", "A partir das 05h30", "Cápsula Bar · Brasília"],
   },
   quickFacts: [
     { label: "Data", value: "07/11/2026" },
-    { label: "Horário", value: "05h30 às 09h" },
+    { label: "Horário", value: "A partir das 05h30" },
     { label: "Local", value: "Cápsula Bar" },
     { label: "Ingresso", value: "R$ 150 por pessoa" },
   ],
@@ -68,6 +70,7 @@ export const ESSENCIA_EDITORIAL = {
     subtitle: "Corpo, mente e natureza",
     tagline: "Uma manhã para desacelerar, se reconectar e viver o que realmente importa.",
     highlights: ["Canoa havaiana", "Meditação", "Superioga"],
+    scheduleLabel: "A partir das 05h30",
     heroImageMobile: {
       src: "/images/bases/concha-acustica/concha-hero-nascer-do-sol-mobile.webp",
       alt: "Canoa havaiana com remadores em silhueta no Lago Paranoá ao nascer do sol",
@@ -105,8 +108,9 @@ export const ESSENCIA_EDITORIAL = {
         },
         {
           time: "07:30",
-          title: "Meditação sensorial",
-          description: "Um convite para respirar, sentir e se conectar com o presente, através da aromaterapia.",
+          timeLabel: "Por volta das 07h30",
+          title: "Meditação sensorial e aromaterapia",
+          description: "Um convite para respirar, sentir e se conectar com o presente. Um diferencial da experiência é a dinâmica de aromaterapia com óleos essenciais, com a participação de Fernanda Garcia.",
           hosts: ["Rapha Dantas", "Fernanda Garcia"],
           image: {
             src: "/images/eventos/essencia/capsula-deck-lago.jpg",
@@ -114,15 +118,16 @@ export const ESSENCIA_EDITORIAL = {
           },
         },
         {
-          time: "07:45",
+          timeLabel: "Na sequência",
           title: "Superioga",
-          description: "Movimento, força e respiração em uma prática que integra corpo e mente.",
+          description: "Na sequência da meditação, movimento, força e respiração em uma prática que integra corpo e mente.",
           hosts: ["Rapha Dantas"],
         },
         {
           time: "09:00",
-          title: "Encerramento e conexão",
-          description: "O bem-estar também está nos encontros. Momento de integração e lanche saudável oferecido pela Nutre.",
+          timeLabel: "Por volta das 09h",
+          title: "Happy Hour de Conexões",
+          description: "O bem-estar também está nos encontros. Um momento descontraído de integração, troca de experiências e lanche saudável oferecido pela Nutre.",
           hosts: [],
           image: {
             src: "/images/eventos/essencia/capsula-mesas-encontro.jpg",
@@ -139,7 +144,7 @@ export const ESSENCIA_EDITORIAL = {
         "Canoa havaiana ao nascer do sol",
         "Meditação sensorial com aromaterapia",
         "Superioga",
-        "Momento de integração",
+        "Happy Hour de Conexões",
         "Lanche saudável da Nutre",
       ],
     },
@@ -151,7 +156,8 @@ export const ESSENCIA_EDITORIAL = {
         { name: "Alma Azul Academy", role: "Canoa havaiana ao nascer do sol", logo: { src: "/images/branding/alma-azul-logo-dark.png", alt: "Logo Alma Azul Academy" } },
         { name: "Cápsula Bar", role: "Local do evento", logo: { src: "/images/bases/concha-acustica/capsula-bar-logo.webp", alt: "Logo Cápsula Bar" } },
         { name: "Rapha Dantas", role: "Superioga e meditação sensorial" },
-        { name: "Nutre Congelados Saudáveis", role: "Parceira de alimentação · lanche saudável", logo: { src: "/images/eventos/essencia/logo-nutre.png", alt: "Logo Nutre" } },
+        { name: "Fernanda Garcia", role: "Dinâmica de aromaterapia com óleos essenciais · Cure-se Bem" },
+        { name: "Nutre", role: "Parceira de alimentação · lanche saudável", logo: { src: "/images/eventos/essencia/logo-nutre.png", alt: "Logo Nutre" } },
       ],
     },
     info: {
@@ -161,7 +167,7 @@ export const ESSENCIA_EDITORIAL = {
         {
           id: "chegada",
           title: "Horário e chegada",
-          body: "Nossa experiência começa às 05h30, no Cápsula Bar, às margens do Lago Paranoá.\n\nRecomendamos chegar com alguns minutos de antecedência para aproveitar cada momento. Haverá tolerância de chegada até às 05h50.",
+          body: "Nossa experiência começa às 05h30, no Cápsula Bar, às margens do Lago Paranoá.\n\nRecomendamos chegar com alguns minutos de antecedência para aproveitar cada momento. Haverá tolerância de chegada até às 05h50.\n\nAs práticas terminam aproximadamente entre 08h30 e 09h. Na sequência, acontece o Happy Hour de Conexões.",
         },
         {
           id: "o-que-levar",
@@ -181,7 +187,7 @@ export const ESSENCIA_EDITORIAL = {
         {
           id: "alimentacao",
           title: "Alimentação inclusa",
-          body: "Ao final da programação, teremos um momento especial de integração com lanche saudável oferecido pela Nutre Congelados Saudáveis.",
+          body: "O ingresso inclui lanche saudável oferecido pela Nutre, servido no Happy Hour de Conexões, depois das práticas.",
         },
         {
           id: "clima",

@@ -22,7 +22,7 @@
 import { infoParagraphs, validateEventEditorial, type EventEditorial } from "./editorial.ts";
 import { isEventEmailReady } from "./email-readiness.ts";
 import { deadlineShortText, clockText } from "./policy.ts";
-import { eventDayLabel, eventTimeRange, programTimeLabel } from "./presentation.ts";
+import { eventDayLabel, eventScheduleLabel, programItemTime } from "./presentation.ts";
 import type { PublicEvent } from "./public.ts";
 
 export type SessionBookingRules =
@@ -135,10 +135,10 @@ export function eventBookingContext(event: PublicEvent): EventBookingContext {
     title: content.hero.title,
     subtitle: extra.subtitle,
     dayLabel: event.session.startsAt ? eventDayLabel(event.session.startsAt) : null,
-    timeRange: event.session.startsAt ? eventTimeRange(event.session.startsAt, event.session.durationMinutes) : null,
+    timeRange: event.session.startsAt ? eventScheduleLabel(extra.scheduleLabel, event.session.startsAt, event.session.durationMinutes) : null,
     arrivalNote: extra.arrival ? `Início às ${clockText(extra.arrival.startTime)}, com tolerância de chegada até ${clockText(extra.arrival.toleranceUntil)}.` : null,
     included: extra.included.items,
-    program: extra.program.items.map((item) => ({ time: programTimeLabel(item.time), title: item.title })),
+    program: extra.program.items.map((item) => ({ time: programItemTime(item), title: item.title })),
     cancellationShort: extra.cancellation ? `Cancelamento até ${deadlineShortText(extra.cancellation.deadline)}: ${extra.cancellation.summary}.` : null,
     cancellationParagraphs: infoParagraphs(policy?.body ?? null),
     maxPerOrder: extra.reservation.maxPerOrder,

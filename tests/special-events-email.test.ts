@@ -86,20 +86,19 @@ test("confirmação do evento: todo o conteúdo obrigatório, no horário de Bra
     "sábado, 07 de novembro de 2026",
     "Início: 05h30",
     "Tolerância de chegada: até 05h50",
-    "Encerramento previsto: 09h00",
     "Participantes: 2 participantes",
     "Código da reserva: ESS7K2M9QX",
     "Em frente ao Cápsula Bar — Concha Acústica",
     "SHTN Trecho 1, Lote 8 — Brasília/DF",
     "05h30 — Canoa havaiana ao nascer do sol",
-    "07h30 — Meditação sensorial (com Rapha Dantas e Fernanda Garcia)",
-    "07h45 — Superioga (com Rapha Dantas)",
-    "09h — Encerramento e conexão",
+    "Por volta das 07h30 — Meditação sensorial e aromaterapia (com Rapha Dantas e Fernanda Garcia)",
+    "Na sequência — Superioga (com Rapha Dantas)",
+    "Por volta das 09h — Happy Hour de Conexões",
     "roupas confortáveis",
     "garrafa de água, protetor solar",
     "Para participar da prática de Superioga, traga seu próprio tapete. A organização não disponibilizará tapetes para essa atividade.",
     "O uso de colete salva-vidas é obrigatório durante a atividade na água.",
-    "lanche saudável oferecido pela Nutre Congelados Saudáveis",
+    "lanche saudável oferecido pela Nutre",
     "Você pode solicitar o cancelamento até 5 de novembro de 2026, às 12h00 (horário de Brasília), escolhendo entre crédito para utilizar em outras experiências da Alma Azul ou solicitação de reembolso com nossa equipe.",
     "Prazo: 05/11/2026 às 12h00 (horário de Brasília).",
     "SEU QR CODE DE CHECK-IN",
@@ -107,7 +106,7 @@ test("confirmação do evento: todo o conteúdo obrigatório, no horário de Bra
     "https://www.almaazulacademy.com.br/checkin/3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b",
   ];
   for (const text of required) assert.ok(email.text.includes(text), `texto puro sem: ${text}`);
-  for (const text of ["Ingresso confirmado", "ESS7K2M9QX", "até 05h50", "09h00", "traga seu próprio tapete", "colete salva-vidas", "Nutre Congelados Saudáveis", "5 de novembro de 2026, às 12h00", "Como chegar — Google Maps"]) {
+  for (const text of ["Ingresso confirmado", "ESS7K2M9QX", "até 05h50", "traga seu próprio tapete", "colete salva-vidas", "Nutre, servido no Happy Hour de Conexões", "5 de novembro de 2026, às 12h00", "Como chegar — Google Maps"]) {
     assert.ok(email.html.includes(text), `HTML sem: ${text}`);
   }
   assertNoGeneric(email, "confirmação");
@@ -119,11 +118,11 @@ test("confirmação do evento: dados do cliente escapados no HTML", () => {
   assert.ok(email.html.includes("&lt;script&gt;"));
 });
 
-test("horário: a mesma sessão em outro instante muda início e fim; tolerância só quando combina", () => {
+test("horário: a mesma sessão em outro instante muda o início; tolerância só quando combina", () => {
   // 06h00 em Brasília: a regra de chegada (05h30/05h50) não combina e some.
   const later = buildReservationConfirmationEmail(eventData({ startsAt: "2026-11-07T09:00:00.000Z" }));
   assert.ok(later.text.includes("Início: 06h00"));
-  assert.ok(later.text.includes("Encerramento previsto: 09h30"));
+  assert.ok(!later.text.includes("Encerramento previsto"), "conteúdo com horário geral não anuncia fim");
   assert.ok(!later.text.includes("Tolerância de chegada"), "nunca um horário de chegada que não combina com a sessão");
 });
 

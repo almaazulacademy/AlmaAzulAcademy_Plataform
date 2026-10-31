@@ -72,6 +72,18 @@ Scripts gerados por `pnpm events:essencia-publicacao-sql` e testados em `tests/s
 
 **Para encerrar as vendas de verdade: fechar a sessão com a variável ligada.** Remover `EVENT_BOOKING_OPEN` depois que a venda já começou faz a página voltar a "Reservas abrem em breve". Se precisar parar a venda sem esse texto, feche a sessão e mantenha a variável; para tirar a página do ar, desligue o interruptor.
 
+## Programação fluida e atualização do rascunho (31/10/2026)
+
+**Decisão:** a experiência não comunica horários rígidos de encerramento. Início às 05h30; meditação e aromaterapia por volta das 07h30; Superioga na sequência; Happy Hour de Conexões por volta das 09h; práticas terminam aproximadamente entre 08h30 e 09h.
+
+**Como aparece:** `event.scheduleLabel` ("A partir das 05h30") substitui o intervalo calculado na página, nos cards, no destaque, na reserva, na lista de espera e nos e-mails, e tira o "Encerramento previsto" do e-mail de confirmação. `timeLabel` dá a referência de cada atividade. Evento sem esses campos segue com o intervalo calculado.
+
+**A duração técnica continua 210 minutos.** Com o rótulo, ela não aparece para o cliente. Hoje é usada em: conferência da tolerância de chegada (precisa ser maior que 20 minutos), painel e planilha (dado da sessão), intervalo de fallback e nos scripts de cadastro, publicação e atualização, que recusam outro valor. Nenhuma regra de vaga, cancelamento ou pagamento depende dela. Mudar exigiria script próprio e nova autorização.
+
+**Ordem:** merge e deploy deste código → `essencia_editorial_preflight.sql` → `essencia_editorial_update.sql` → `essencia_editorial_postcheck.sql` → só então o roteiro de publicação. A publicação recusa o conteúdo anterior. Cada passo com autorização. Rollback, ainda em rascunho: `essencia_editorial_update.rollback.sql`, com a versão anterior guardada em `scripts/events/essencia-editorial-v1.json`.
+
+**Scripts de cadastro:** regenerados da fixture para os testes continuarem coerentes. O cadastro já foi feito em 31/10; não rodar de novo.
+
 ## 3. Rotação do `CRON_SECRET`
 
 **Por quê:** o valor atual pode ter sido exposto numa captura de tela (27/10/2026). Ninguém deve exibir, copiar para chat, colar em arquivo ou registrar o valor antigo ou o novo.

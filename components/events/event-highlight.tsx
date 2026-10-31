@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 
 import { AvailabilityBadge } from "@/components/events/event-parts";
 import { eventDisplayFont } from "@/components/events/fonts";
-import { eventDayLabel, eventPrice, eventTimeRange } from "@/lib/events/presentation";
+import { eventDayLabel, eventPrice, eventScheduleLabel } from "@/lib/events/presentation";
 import type { PublicEvent } from "@/lib/events/public";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +35,7 @@ export function EventHighlight({ event, bookingOpen }: { event: PublicEvent; boo
             <p className="mt-3 font-event text-sm font-bold uppercase tracking-[0.18em] text-ember">{extra.subtitle}</p>
             <p className="mt-5 text-base leading-7 text-white/75">{extra.tagline}</p>
             <p className="mt-6 text-sm font-semibold uppercase tracking-[0.1em] text-white/80">
-              {[session.startsAt ? `${eventDayLabel(session.startsAt)} · ${eventTimeRange(session.startsAt, session.durationMinutes)}` : null, session.priceCents ? `${eventPrice(session.priceCents)} por pessoa` : null].filter(Boolean).join(" · ")}
+              {[session.startsAt ? `${eventDayLabel(session.startsAt)} · ${eventScheduleLabel(extra.scheduleLabel, session.startsAt, session.durationMinutes)}` : null, session.priceCents ? `${eventPrice(session.priceCents)} por pessoa` : null].filter(Boolean).join(" · ")}
             </p>
             <span className="mt-8 inline-flex items-center gap-2 font-semibold">
               Conhecer o evento

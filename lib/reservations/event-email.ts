@@ -16,7 +16,7 @@
 
 import { infoParagraphs, type EventContent } from "../events/editorial.ts";
 import { arrivalMatchesSession, clockText, deadlineShortText, sessionStartClock } from "../events/policy.ts";
-import { programTimeLabel } from "../events/presentation.ts";
+import { programItemTime } from "../events/presentation.ts";
 import { checkinQrImageUrl, checkinUrl } from "../checkin/token.ts";
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE } from "../contact.ts";
 import { formatSessionDate } from "../sessions/date-time.ts";
@@ -53,7 +53,8 @@ export const EVENT_CLOSING = [
 export function eventTimes(data: ReservationConfirmationData, content: EventContent) {
   const start = sessionStartClock(data.startsAt);
   const minutes = data.durationMinutes ?? 0;
-  const end = minutes > 0 ? sessionStartClock(new Date(new Date(data.startsAt).getTime() + minutes * 60_000).toISOString()) : null;
+  // Com horário geral sem fim fixo, o e-mail não anuncia encerramento.
+  const end = minutes > 0 && !content.scheduleLabel ? sessionStartClock(new Date(new Date(data.startsAt).getTime() + minutes * 60_000).toISOString()) : null;
   // A tolerância só aparece quando combina com a sessão cadastrada: uma sessão
   // remarcada sem o conteúdo atualizado não manda um horário de chegada errado.
   const tolerance = content.arrival && minutes > 0 && arrivalMatchesSession(content.arrival, data.startsAt, minutes) ? content.arrival.toleranceUntil : null;
@@ -72,7 +73,7 @@ function info(content: EventContent, id: string) {
 function programLines(content: EventContent) {
   return content.program.items.map((item) => {
     const hosts = item.hosts.length ? ` (com ${item.hosts.length === 1 ? item.hosts[0] : `${item.hosts.slice(0, -1).join(", ")} e ${item.hosts[item.hosts.length - 1]}`})` : "";
-    return `${programTimeLabel(item.time)} — ${item.title}${hosts}`;
+    return `${programItemTime(item)} — ${item.title}${hosts}`;
   });
 }
 

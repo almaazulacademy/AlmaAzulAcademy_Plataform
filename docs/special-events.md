@@ -245,8 +245,8 @@ Evento publicado sem o bloco completo não aparece no site. O conteúdo do ESSÊ
 | `bases/concha-acustica/concha-hero-nascer-do-sol-{desktop,mobile}.webp` | Repositório (mesma foto do slide 1 do carrossel) | Hero e card |
 | `bases/concha-acustica/capsula-lago-por-do-sol-desktop.webp` | Repositório | Apresentação e Hero de `/eventos` |
 | `experiences/remada-nascer-do-sol/remada-nascer-do-sol-galeria-02.webp` | Repositório | 05h30 — canoa havaiana |
-| `eventos/essencia/capsula-deck-lago.jpg` | Pasta do Cápsula Bar (`DSC00153`, fundo do slide 3) | 07h30 — meditação |
-| `eventos/essencia/capsula-mesas-encontro.jpg` | Pasta do Cápsula Bar (`DSC07470`, fundo do slide 4) | 09h — encerramento |
+| `eventos/essencia/capsula-deck-lago.jpg` | Pasta do Cápsula Bar (`DSC00153`, fundo do slide 3) | Meditação e aromaterapia |
+| `eventos/essencia/capsula-mesas-encontro.jpg` | Pasta do Cápsula Bar (`DSC07470`, fundo do slide 4) | Happy Hour de Conexões |
 | `eventos/essencia/capsula-pier-amanhecer.jpg` | Pasta do Cápsula Bar (`DSC00386`, fundo do slide 5) | Reserva |
 | `eventos/essencia/logo-cure-se-bem.png` | `CURE-SE LOGO VETOR.pdf` | Parceiros |
 | `eventos/essencia/logo-nutre.png` | Logo enviado pela organização | Parceiros |
@@ -392,7 +392,7 @@ Mesma fila, mesma reivindicação exclusiva, mesma mensagem congelada antes do e
 
 | E-mail | Assunto | Conteúdo |
 | --- | --- | --- |
-| Confirmação | "Você está na lista de espera — {evento}" | Evento, data, horário (05h30 às 09h00), local, participantes; **"Isto não é um ingresso"** (nem reserva garantida, sem cobrança); como funciona o aviso; link para sair |
+| Confirmação | "Você está na lista de espera — {evento}" | Evento, data, horário ("A partir das 05h30" no ESSÊNCIA), local, participantes; **"Isto não é um ingresso"** (nem reserva garantida, sem cobrança); como funciona o aviso; link para sair |
 | Aviso de vaga | "Surgiu uma vaga: {evento}" | Surgiu disponibilidade; evento, data, horário, local, participantes, ingresso por participante; **"A vaga não está garantida"** (a disponibilidade pode mudar até a conclusão da compra); botão **GARANTIR MEU INGRESSO** → `/eventos/<slug>#reserva`; como garantir; link para sair |
 
 **O aviso do evento só é reivindicado com a venda aberta.** A rota de envio pede `claim_pending_waitlist_spot_emails_by_kind` com `REGULAR` e, só com `isEventsWaitlistEnabled()` (lista dos eventos + venda aberta + seção pública), também `EVENT`. Fechada a venda, o aviso do evento **não é tocado**: sem tentativa gasta, sem envio contado, continua `QUEUED`. Quando a venda abrir, a reivindicação confere de novo, como sempre: inscrição ativa, sessão aberta e futura, experiência publicada, abertura ainda aberta, vagas para o grupo inteiro (`waitlist_detection_spots`), 3 avisos e 12 h. Evento despublicado antes do envio: `SKIPPED` (`SESSION_UNAVAILABLE`), sem contar envio. As inscrições e avisos regulares seguem exatamente como antes (`REGULAR` é sempre pedido; a variável `WAITLIST_NOTIFY_ENABLED` continua sendo a da rota).

@@ -84,7 +84,7 @@ function EventSummary({ session, quantity, event }: { session: BookingSession; q
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sand">Programação</p>
           <ol className="mt-3 space-y-2 text-sm text-white/80">
             {event.program.map((item) => (
-              <li key={`${item.time}-${item.title}`} className="flex gap-3"><span className="w-12 shrink-0 font-semibold text-white">{item.time}</span><span>{item.title}</span></li>
+              <li key={`${item.time}-${item.title}`} className="flex gap-3"><span className="w-28 shrink-0 font-semibold text-white">{item.time}</span><span>{item.title}</span></li>
             ))}
           </ol>
         </div>
