@@ -1,5 +1,11 @@
 # Changelog
 
+## ESSÊNCIA — lançamento
+
+- **Em produção desde 31/10/2026**: evento publicado, página no ar e inscrições abertas, só em Production; lista de espera desligada.
+- **Validação**: compra real aprovada automaticamente pela InfinitePay (webhook, `PAYMENT_CONFIRMED`, 15000 centavos); teste administrativo aprovado à parte, sem receita; integrações `SYNCED`; `CRON_SECRET` validado por execuções automáticas com HTTP 200.
+- **Limites**: entrega de e-mail, QR Code, painéis e planilha dependem de conferência manual. Detalhes em [docs/essencia-abertura.md](docs/essencia-abertura.md).
+
 ## ESSÊNCIA — programação fluida
 
 - **Conteúdo**: Happy Hour de Conexões, Superioga na sequência, referências de horário flexíveis, aromaterapia com Fernanda Garcia e "Nutre" padronizado. Sem fim fixo às 09h em página, reserva ou e-mail.

@@ -2,7 +2,34 @@
 
 [Eventos especiais](special-events.md) · [Lista de espera](waitlist.md)
 
-Roteiro para levar o ESSÊNCIA — Corpo, Mente e Natureza (07/11/2026) do repositório à venda, **um passo por vez e cada um com autorização**. **Estado em 31/10/2026: ESSÊNCIA cadastrado em produção, `EVENT/DRAFT`, `active = false`, sessão `CLOSED`, 24 vagas, sem reservas nem inscrições (postcheck do cadastro OK).** Vendas e publicação desligadas: interruptor desligado, variáveis dos eventos ausentes, nenhum agendamento da lista de espera ativo. Migrations `202610310002`, `202610310003` e `202610310004` (segurança) aplicadas em 31/10, com o teste real de permissões como `anon` aprovado.
+Roteiro para levar o ESSÊNCIA — Corpo, Mente e Natureza (07/11/2026) do repositório à venda, **um passo por vez e cada um com autorização**.
+
+## Estado do lançamento (31/10/2026, 20:22 em Brasília)
+
+**Lançamento técnico concluído: página publicada e inscrições abertas em Production.** ESSÊNCIA `EVENT/PUBLISHED`; sessão `OPEN`, 24 vagas, 22 disponíveis na conferência, R$ 150, até 6 por pedido, 210 minutos técnicos. `EVENTS_PUBLIC_ENABLED=true` e `EVENT_BOOKING_OPEN=true` só em Production; `EVENTS_WAITLIST_ENABLED` ausente; sem agendamento da lista de espera.
+
+| Verificação | Resultado | Evidência |
+| --- | --- | --- |
+| Segurança | Migrations `202610310002`, `202610310003` e `202610310004` aplicadas; conferência como `anon` aprovada | Postchecks e consulta no Supabase |
+| `CRON_SECRET` | Girado; `confirmation-emails` 200 às 12:12:39 UTC e `payment-reconciliation` 200 às 13:05:16 UTC, em 31/10 | Logs da Vercel |
+| Teste administrativo | Reserva `CONFIRMED` por `PAYMENT_CONFIRMED_MANUAL`, sem recebimento financeiro | Supabase |
+| Compra real | Reserva `CONFIRMED`, `PAYMENT_WEBHOOK_RECEIVED` e `PAYMENT_CONFIRMED` por `INFINITEPAY`, 15000 centavos, sem confirmação manual | Supabase |
+| Webhook | `POST` com 200 às 23:19:23 UTC, depois da reserva criada às 23:15:02 UTC | Logs da Vercel; o log não identifica a reserva, a ligação vem do Supabase |
+| Integrações das duas reservas | `GOOGLE_SHEETS=SYNCED`, `RESERVATION_CONFIRMATION_EMAIL=SYNCED`, QR Code registrado | Supabase |
+
+**Receita confirmada pela InfinitePay nesta validação: R$ 150,00 (1 ingresso).** A reserva administrativa ocupa 1 vaga e tem valor nominal de R$ 150, mas não é receita recebida.
+
+**Limites:** `SYNCED` não prova que o e-mail chegou nem o conteúdo da linha da planilha. Ter QR Code registrado não prova que ele abre nem testa o check-in. O retorno do checkout (`/pagamento/retorno`) não apareceu nos logs depois da compra real. Conferência manual pendente: e-mail, QR Code sem check-in, painel administrativo, painel do instrutor e planilha.
+
+### Operação
+
+- **Parar novas inscrições:** painel → Sessões → ESSÊNCIA → **Fechar**. Só essa sessão; reservas confirmadas ficam preservadas. A página passa a mostrar "Reservas encerradas".
+- **Não remover `EVENT_BOOKING_OPEN` para encerrar vendas:** a página voltaria a dizer "Reservas abrem em breve".
+- **Tirar a página do ar, só se necessário:** desligar o interruptor no banco tem efeito imediato; remover `EVENTS_PUBLIC_ENABLED` exige redeploy. O rollback da publicação (`essencia_publicacao.rollback.sql`) recusa evento com reserva ou sessão aberta.
+- **Pagamento em dúvida:** conferir na InfinitePay e usar **Verificar pagamento** antes de qualquer confirmação administrativa. Nunca confirmar manualmente sem comprovação.
+- **Cancelamentos, créditos e reembolsos:** atendimento manual, com solicitações até 05/11/2026 às 12h00 de Brasília. Depois disso, avaliação caso a caso.
+- **Não executar rotinas de cron manualmente** nem alterar sessões regulares para operar o evento.
+- **Redeploy:** usar a URL do deploy ativo; não usar rollback da Vercel, porque deploys anteriores têm outras variáveis.
 
 ## 1. Cadastro em estado fechado
 
@@ -34,7 +61,7 @@ Depois do cadastro o site não muda: o evento está em rascunho, o interruptor d
 ## 2. Ordem recomendada até a venda
 
 1. ~~Segurança: migration `202610310004`~~ — feita em 31/10/2026.
-2. **Rotação do `CRON_SECRET`** (seção 3) — obrigatória antes da 5C-3; recomendável antes de abrir a venda, porque a conciliação de pagamentos é uma das rotinas que ele protege.
+2. ~~Rotação do `CRON_SECRET`~~ — feita em 31/10/2026; execuções automáticas com 200.
    ~~Cadastro fechado~~ — feito em 31/10/2026.
 3. **Revisão do conteúdo**: a prévia `/eventos/demonstracao/essencia` no Preview mostra exatamente o mesmo conteúdo (é a mesma fixture); a página real só aparece depois do passo 5.
 4. **Publicação no banco**: ligar o interruptor (`update public.special_event_settings set publication_enabled = true, updated_at = now();`) e publicar pela RPC do painel (`admin_update_event(..., 'PUBLISHED', ...)`). Com `EVENTS_PUBLIC_ENABLED` ausente o site continua igual.
