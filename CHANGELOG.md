@@ -1,5 +1,9 @@
 # Changelog
 
+## Eventos especiais — "Reservas abrem em breve" antes da abertura comercial
+
+- Com `EVENT_BOOKING_OPEN` desligada, evento com sessão aberta ou fechada mostra "Reservas abrem em breve" no selo, no botão e nos cards, em vez de "Reservas encerradas" ou "Vagas abertas". Esgotado, realizado, cancelado e regulares não mudam. Sem migration, sem mudança de conteúdo ou variável.
+
 ## ESSÊNCIA — roteiro de publicação sem vendas
 
 - **Nada executado**: preflight, publicação, postcheck, conferência como `anon` e desfazer, gerados da fixture e testados. Sessão segue `CLOSED`; nenhuma variável muda. Detalhes em [docs/essencia-abertura.md](docs/essencia-abertura.md).

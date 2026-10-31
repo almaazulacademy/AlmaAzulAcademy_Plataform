@@ -231,7 +231,7 @@ export function EventPage({ event, preview = false, bookingOpen = false, waitlis
           <div className="max-w-3xl">
             {extra.reservation.eyebrow ? <EventEyebrow>{extra.reservation.eyebrow}</EventEyebrow> : null}
             <h2 id="evento-reserva" className="mt-6 font-event text-4xl font-extrabold uppercase leading-[0.95] sm:text-6xl">{extra.reservation.title}</h2>
-            <div className="mt-6"><AvailabilityBadge availability={session.availability} remainingSpots={session.remainingSpots} /></div>
+            <div className="mt-6"><AvailabilityBadge availability={session.availability} remainingSpots={session.remainingSpots} bookingOpen={bookingOpen} /></div>
             <dl className="mt-10 grid gap-6 border-y border-white/15 py-8 sm:grid-cols-2">
               {day ? <SummaryRow icon={<CalendarDays className="size-5" />} label="Data" value={day} /> : null}
               {time ? <SummaryRow icon={<Clock className="size-5" />} label="Horário" value={time} /> : null}

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { EventsIndex } from "@/components/events/events-index";
 import { listPublicEvents } from "@/lib/events/data";
-import { isEventsPublicEnabled } from "@/lib/events/flags";
+import { isEventBookingOpen, isEventsPublicEnabled } from "@/lib/events/flags";
 import { splitEvents } from "@/lib/events/public";
 
 export const dynamic = "force-dynamic";
@@ -21,5 +21,5 @@ export function generateMetadata(): Metadata {
 export default async function EventsPage() {
   if (!isEventsPublicEnabled()) notFound();
   const { upcoming, past } = splitEvents(await listPublicEvents());
-  return <EventsIndex upcoming={upcoming} past={past} />;
+  return <EventsIndex upcoming={upcoming} past={past} bookingOpen={isEventBookingOpen()} />;
 }

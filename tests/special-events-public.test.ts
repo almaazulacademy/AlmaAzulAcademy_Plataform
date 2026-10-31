@@ -255,13 +255,13 @@ test("apresentação: data, horário e preço do ESSÊNCIA no horário de Brasí
 });
 
 test("apresentação: situação das vagas e botão em cada estado; nunca checkout nesta fase", () => {
-  assert.deepEqual(availabilityBadge("AVAILABLE", 12), { label: "Vagas abertas", tone: "open" });
-  assert.deepEqual(availabilityBadge("AVAILABLE", 3), { label: "Últimas 3 vagas", tone: "last" });
-  assert.deepEqual(availabilityBadge("AVAILABLE", 1), { label: "Última vaga", tone: "last" });
-  assert.equal(availabilityBadge("SOLD_OUT", 0).label, "Esgotado");
-  assert.equal(availabilityBadge("CLOSED", null).label, "Reservas encerradas");
-  assert.equal(availabilityBadge("ENDED", null).label, "Evento realizado");
-  assert.equal(availabilityBadge("CANCELLED", null).label, "Evento cancelado");
+  assert.deepEqual(availabilityBadge("AVAILABLE", 12, true), { label: "Vagas abertas", tone: "open" });
+  assert.deepEqual(availabilityBadge("AVAILABLE", 3, true), { label: "Últimas 3 vagas", tone: "last" });
+  assert.deepEqual(availabilityBadge("AVAILABLE", 1, true), { label: "Última vaga", tone: "last" });
+  assert.equal(availabilityBadge("SOLD_OUT", 0, true).label, "Esgotado");
+  assert.equal(availabilityBadge("CLOSED", null, true).label, "Reservas encerradas");
+  assert.equal(availabilityBadge("ENDED", null, true).label, "Evento realizado");
+  assert.equal(availabilityBadge("CANCELLED", null, true).label, "Evento cancelado");
   assert.equal(parseAvailability("QUALQUER"), "NO_SESSION");
   assert.deepEqual(["AVAILABLE", "SOLD_OUT", "CLOSED", "ENDED", "CANCELLED"].map((state) => isUpcoming(parseAvailability(state))), [true, true, true, false, false]);
 
@@ -413,7 +413,7 @@ test("navegação e home: Eventos só aparece com a seção ligada e evento publ
   assert.doesNotMatch(navbar, /"use client"/);
   const home = source("app/page.tsx");
   assert.match(home, /isEventsPublicEnabled\(\) \? listPublicEvents\(\) : Promise\.resolve\(\[\]\)/);
-  assert.match(home, /\{nextEvent \? <EventHighlight event=\{nextEvent\} \/> : null\}/);
+  assert.match(home, /\{nextEvent \? <EventHighlight event=\{nextEvent\} bookingOpen=\{isEventBookingOpen\(\)\} \/> : null\}/);
   // /experiencias/[slug] de um evento leva à página do evento, só com a seção ligada.
   assert.match(source("app/experiencias/[slug]/page.tsx"), /if \(isEventsPublicEnabled\(\) && \(await getPublicEvent\(slug\)\)\) redirect\(`\/eventos\/\$\{slug\}`\);/);
 });

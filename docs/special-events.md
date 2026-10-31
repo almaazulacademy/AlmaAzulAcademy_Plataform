@@ -198,7 +198,7 @@ Só código; nenhuma migration e nenhum dado gravado. Tudo atrás de `EVENTS_PUB
 | --- | --- |
 | `EVENTS_PUBLIC_ENABLED=true` | Expõe `/eventos`, `/eventos/[slug]`, o item "Eventos" no menu e o destaque na home. Ausente: as rotas respondem **404** e nada de evento aparece; a home e o menu nem consultam o banco |
 | `special_event_settings.publication_enabled` (banco) | Sem ele nenhum evento é publicado; mesmo com a variável ligada, a seção mostra o estado vazio e o menu não ganha o item |
-| `EVENT_BOOKING_OPEN` (`lib/events/flags.ts`) | `false` nesta fase: o botão "Garantir minha vaga" aparece, desativado, com "As reservas pelo site abrem em breve". Na fase 5 vira link para `/reservar/[sessionId]` |
+| `EVENT_BOOKING_OPEN` (`lib/events/flags.ts`) | Ausente: selo e botão desativado com "Reservas abrem em breve", com a sessão aberta ou fechada; esgotado continua "Esgotado". Ligada: botão de reserva para `/reservar/[sessionId]`, e sessão fechada mostra "Reservas encerradas" ([regra](essencia-abertura.md)) |
 
 O item do menu e o destaque da home só aparecem com a variável ligada **e** pelo menos um evento publicado.
 
