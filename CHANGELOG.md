@@ -1,5 +1,10 @@
 # Changelog
 
+## ESSÊNCIA — ajustes editoriais com o evento publicado
+
+- **Conteúdo**: Fernanda Garcia na meditação e aromaterapia, Rapha Dantas só na Superioga, "Encerramento com lanche saudável" no lugar de "Happy Hour de Conexões" e logos nos cards dos dois.
+- **Atualização em produção**: scripts `essencia_editorial_publicado_*`, **não executados**, para evento publicado com reservas. Sessão, preço, vagas, reservas e pagamentos não mudam.
+
 ## ESSÊNCIA — programação fluida
 
 - **Conteúdo**: Happy Hour de Conexões, Superioga na sequência, referências de horário flexíveis, aromaterapia com Fernanda Garcia e "Nutre" padronizado. Sem fim fixo às 09h em página, reserva ou e-mail.

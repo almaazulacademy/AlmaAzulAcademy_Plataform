@@ -84,6 +84,23 @@ Scripts gerados por `pnpm events:essencia-publicacao-sql` e testados em `tests/s
 
 **Scripts de cadastro:** regenerados da fixture para os testes continuarem coerentes. O cadastro já foi feito em 31/10; não rodar de novo.
 
+## Atualização do conteúdo com o evento publicado (31/10/2026)
+
+**Para evento `PUBLISHED`, com sessão aberta e reservas, use só os scripts `essencia_editorial_publicado_*`.** Os de cadastro, publicação e `essencia_editorial_{preflight,update,postcheck}` são históricos, já aplicados: exigem rascunho ou ausência de reservas.
+
+**Ordem, cada passo com autorização:**
+
+1. Merge e deploy do código. Até aqui o site segue com o conteúdo anterior, e a logo nova já está disponível.
+2. `essencia_editorial_publicado_preflight.sql`.
+3. `essencia_editorial_publicado_update.sql`: o conteúdo vale na hora, sem novo deploy.
+4. `essencia_editorial_publicado_postcheck.sql` e conferência da página.
+
+**Não inverter 1 e 3:** com o conteúdo novo antes do deploy, o card de Rapha Dantas apontaria para uma logo que ainda não existe no site.
+
+**O que muda:** só `editorial_content`, pela função do painel, com auditoria. Sessão, preço, vagas, duração, reservas, pagamentos, QR Codes e variáveis não mudam. E-mails enviados depois da atualização usam os textos novos; os já enviados não mudam.
+
+**Rollback:** `essencia_editorial_publicado_update.rollback.sql` devolve o conteúdo anterior (`scripts/events/essencia-editorial-v2.json`), com o evento publicado e sem tocar em reservas.
+
 ## 3. Rotação do `CRON_SECRET`
 
 **Por quê:** o valor atual pode ter sido exposto numa captura de tela (27/10/2026). Ninguém deve exibir, copiar para chat, colar em arquivo ou registrar o valor antigo ou o novo.

@@ -1,5 +1,5 @@
 /**
- * Gera o roteiro de publicação do ESSÊNCIA sem vendas: preflight, publicação,
+ * HISTÓRICO, já aplicado em 31/10/2026; não rodar de novo. Roteiro de publicação do ESSÊNCIA sem vendas: preflight, publicação,
  * postcheck, conferência como `anon` e desfazer. O conteúdo aprovado sai da
  * fixture (`lib/events/fixtures/essencia.ts`), e
  * `tests/special-events-essencia-publicacao.test.ts` falha se o SQL divergir.
@@ -19,7 +19,7 @@ import { ESSENCIA_ADMIN_EMAIL } from "./essencia-cadastro-sql.ts";
 const PRICE_CENTS = 15000;
 const DURATION = 210;
 const SESSION = `to_char(s.starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI') = '${ESSENCIA_STARTS_AT.slice(0, 16)}' and s.duration_minutes = ${DURATION} and s.price_cents = ${PRICE_CENTS} and s.capacity = ${ESSENCIA_CAPACITY}`;
-const COUNTS = `
+const counts = (content: unknown) => `
   union all
   select 'ASSINATURA_DAS_FUNCOES',
          (select count(*)::text || ' funções, ' || md5(string_agg(p.oid::regprocedure::text || ':' || md5(p.prosrc), '|' order by p.oid::regprocedure::text)) from pg_proc p where p.pronamespace = 'public'::regnamespace),
@@ -46,8 +46,8 @@ const COUNTS = `
          case when (select count(*) from sess s where s.status = 'CLOSED' and ${SESSION}) = 1 and (select count(*) from sess) = 1 then 'OK' else 'FALHOU' end
   union all
   select 'CONTEUDO_EDITORIAL_APROVADO',
-         case when (select editorial_content = $json$${JSON.stringify(ESSENCIA_EDITORIAL)}$json$::jsonb from ev) then 'idêntico ao aprovado' else 'diferente' end,
-         case when (select editorial_content = $json$${JSON.stringify(ESSENCIA_EDITORIAL)}$json$::jsonb from ev) and (select public.experience_editorial_is_publishable(editorial_content) from ev) then 'OK' else 'FALHOU' end
+         case when (select editorial_content = $json$${JSON.stringify(content)}$json$::jsonb from ev) then 'idêntico ao aprovado' else 'diferente' end,
+         case when (select editorial_content = $json$${JSON.stringify(content)}$json$::jsonb from ev) and (select public.experience_editorial_is_publishable(editorial_content) from ev) then 'OK' else 'FALHOU' end
   union all
   select 'AGENDAMENTOS_DA_LISTA',
          coalesce((select string_agg(jobname, ', ') from cron.job where jobname like 'waitlist%'), 'nenhum'),
@@ -74,7 +74,7 @@ sess as (
 const ACTOR = `from public.admin_users au join auth.users u on u.id = au.user_id
   where lower(u.email) = '${ESSENCIA_ADMIN_EMAIL}' and au.is_active and au.role = 'ADMIN'`;
 
-export function publicacaoPreflightSql() {
+export function publicacaoPreflightSql(content: unknown = ESSENCIA_EDITORIAL) {
   return `-- ESSÊNCIA — PUBLICAÇÃO SEM VENDAS — PREFLIGHT (GERADO; SOMENTE LEITURA)
 --
 -- Gerado por \`pnpm events:essencia-publicacao-sql\`. A última linha,
@@ -107,10 +107,10 @@ checks as (
          (select count(*)::text || ' de 2 políticas' from pg_policy where not polpermissive and polname in ('events hidden until published', 'event sessions hidden until published')),
          case when (select count(*) from pg_policy where not polpermissive and polname in ('events hidden until published', 'event sessions hidden until published')) = 2
                and to_regprocedure('public.event_publication_allows(text)') is not null then 'OK' else 'FALHOU' end
-${COUNTS}${closing("ESSENCIA_PUBLICACAO_PREFLIGHT_OK")}`;
+${counts(content)}${closing("ESSENCIA_PUBLICACAO_PREFLIGHT_OK")}`;
 }
 
-export function publicacaoSql() {
+export function publicacaoSql(content: unknown = ESSENCIA_EDITORIAL) {
   return `-- ESSÊNCIA — PUBLICAÇÃO SEM VENDAS (GERADO; NÃO EDITAR À MÃO)
 --
 -- Rodar no SQL Editor SÓ COM AUTORIZAÇÃO ESPECÍFICA, depois de
@@ -142,7 +142,7 @@ begin
   if not found or target.status <> 'DRAFT' then
     raise exception 'ESSENCIA_ESTADO: evento ausente ou fora do rascunho';
   end if;
-  if target.editorial_content <> $json$${JSON.stringify(ESSENCIA_EDITORIAL)}$json$::jsonb
+  if target.editorial_content <> $json$${JSON.stringify(content)}$json$::jsonb
      or not public.experience_editorial_is_publishable(target.editorial_content) then
     raise exception 'ESSENCIA_CONTEUDO: conteúdo diferente do aprovado';
   end if;
@@ -220,7 +220,7 @@ checks as (
   select 'AUDITORIA_DA_PUBLICACAO',
          (select count(*)::text from public.admin_audit_log a join ev on a.entity_id = ev.id where a.action = 'EVENT_UPDATED' and a.metadata ->> 'status' = 'PUBLISHED'),
          case when exists (select 1 from public.admin_audit_log a join ev on a.entity_id = ev.id where a.action = 'EVENT_UPDATED' and a.metadata ->> 'status' = 'PUBLISHED') then 'OK' else 'FALHOU' end
-${COUNTS}${closing("ESSENCIA_PUBLICACAO_POSTCHECK_OK")}`;
+${counts(ESSENCIA_EDITORIAL)}${closing("ESSENCIA_PUBLICACAO_POSTCHECK_OK")}`;
 }
 
 export function publicacaoAnonCheckSql() {

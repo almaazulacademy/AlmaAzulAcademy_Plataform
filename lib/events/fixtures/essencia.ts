@@ -8,8 +8,9 @@
  *
  * Textos e créditos vêm do briefing aprovado e do carrossel oficial. As
  * informações operacionais foram aprovadas em 29/10/2026; a programação fluida,
- * sem horários rígidos de encerramento, em 31/10/2026. A versão cadastrada antes
- * disso está em `scripts/events/essencia-editorial-v1.json`, para o rollback.
+ * sem horários rígidos de encerramento, em 31/10/2026; os ajustes de responsáveis,
+ * encerramento e logos, em 31/10/2026. Versões anteriores, para os rollbacks:
+ * `scripts/events/essencia-editorial-v1.json` e `essencia-editorial-v2.json`.
  *
  * Módulo puro, sem imports de aplicação: é lido pelo Next e pelos testes.
  */
@@ -110,8 +111,8 @@ export const ESSENCIA_EDITORIAL = {
           time: "07:30",
           timeLabel: "Por volta das 07h30",
           title: "Meditação sensorial e aromaterapia",
-          description: "Um convite para respirar, sentir e se conectar com o presente. Um diferencial da experiência é a dinâmica de aromaterapia com óleos essenciais, com a participação de Fernanda Garcia.",
-          hosts: ["Rapha Dantas", "Fernanda Garcia"],
+          description: "Um momento para desacelerar, respirar e se conectar com o presente, acompanhado por uma experiência sensorial com óleos essenciais.",
+          hosts: ["Fernanda Garcia"],
           image: {
             src: "/images/eventos/essencia/capsula-deck-lago.jpg",
             alt: "Deck do Cápsula Bar de frente para o Lago Paranoá, com árvores e o píer ao fundo",
@@ -126,8 +127,8 @@ export const ESSENCIA_EDITORIAL = {
         {
           time: "09:00",
           timeLabel: "Por volta das 09h",
-          title: "Happy Hour de Conexões",
-          description: "O bem-estar também está nos encontros. Um momento descontraído de integração, troca de experiências e lanche saudável oferecido pela Nutre.",
+          title: "Encerramento com lanche saudável",
+          description: "Para fechar nossa manhã, um momento de integração e troca de experiências, acompanhado de um lanche saudável oferecido pela Nutre.",
           hosts: [],
           image: {
             src: "/images/eventos/essencia/capsula-mesas-encontro.jpg",
@@ -144,7 +145,7 @@ export const ESSENCIA_EDITORIAL = {
         "Canoa havaiana ao nascer do sol",
         "Meditação sensorial com aromaterapia",
         "Superioga",
-        "Happy Hour de Conexões",
+        "Momento de integração e troca de experiências",
         "Lanche saudável da Nutre",
       ],
     },
@@ -155,8 +156,8 @@ export const ESSENCIA_EDITORIAL = {
         { name: "Cure-se Bem", role: "Meditação sensorial com aromaterapia", logo: { src: "/images/eventos/essencia/logo-cure-se-bem.png", alt: "Logo Cure-se Bem" } },
         { name: "Alma Azul Academy", role: "Canoa havaiana ao nascer do sol", logo: { src: "/images/branding/alma-azul-logo-dark.png", alt: "Logo Alma Azul Academy" } },
         { name: "Cápsula Bar", role: "Local do evento", logo: { src: "/images/bases/concha-acustica/capsula-bar-logo.webp", alt: "Logo Cápsula Bar" } },
-        { name: "Rapha Dantas", role: "Superioga e meditação sensorial" },
-        { name: "Fernanda Garcia", role: "Dinâmica de aromaterapia com óleos essenciais · Cure-se Bem" },
+        { name: "Rapha Dantas", role: "Superioga", logo: { src: "/images/eventos/essencia/logo-superioga-rapha-dantas.jpg", alt: "Logo Superioga — Rapha Dantas" } },
+        { name: "Fernanda Garcia", role: "Meditação sensorial e aromaterapia com óleos essenciais", logo: { src: "/images/eventos/essencia/logo-cure-se-bem.png", alt: "Logo Cure-se Bem" } },
         { name: "Nutre", role: "Parceira de alimentação · lanche saudável", logo: { src: "/images/eventos/essencia/logo-nutre.png", alt: "Logo Nutre" } },
       ],
     },
@@ -167,7 +168,7 @@ export const ESSENCIA_EDITORIAL = {
         {
           id: "chegada",
           title: "Horário e chegada",
-          body: "Nossa experiência começa às 05h30, no Cápsula Bar, às margens do Lago Paranoá.\n\nRecomendamos chegar com alguns minutos de antecedência para aproveitar cada momento. Haverá tolerância de chegada até às 05h50.\n\nAs práticas terminam aproximadamente entre 08h30 e 09h. Na sequência, acontece o Happy Hour de Conexões.",
+          body: "Nossa experiência começa às 05h30, no Cápsula Bar, às margens do Lago Paranoá.\n\nRecomendamos chegar com alguns minutos de antecedência para aproveitar cada momento. Haverá tolerância de chegada até às 05h50.\n\nAs práticas terminam aproximadamente entre 08h30 e 09h. Na sequência, acontece o encerramento com lanche saudável.",
         },
         {
           id: "o-que-levar",
@@ -187,7 +188,7 @@ export const ESSENCIA_EDITORIAL = {
         {
           id: "alimentacao",
           title: "Alimentação inclusa",
-          body: "O ingresso inclui lanche saudável oferecido pela Nutre, servido no Happy Hour de Conexões, depois das práticas.",
+          body: "O ingresso inclui lanche saudável oferecido pela Nutre, servido no encerramento, depois das práticas.",
         },
         {
           id: "clima",
