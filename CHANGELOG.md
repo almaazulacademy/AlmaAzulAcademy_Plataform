@@ -1,5 +1,10 @@
 # Changelog
 
+## Eventos especiais — migration de segurança aplicada
+
+- **Migration `202610310004` aplicada em produção em 31/10/2026**: postcheck sem falhas, regulares e contagens idênticas. Teste real como `anon` aprovado: ESSÊNCIA e eventos invisíveis, 8 regulares visíveis, `create_reservation` não executável.
+- ESSÊNCIA segue em rascunho, com a sessão fechada e as vendas desligadas. Só documentação; nada muda no site.
+
 ## Eventos especiais — segurança antes da abertura
 
 - **Nada muda em produção ao publicar este código**: migration `202610310004` **não aplicada**; ESSÊNCIA em rascunho com a sessão fechada, interruptor desligado.
