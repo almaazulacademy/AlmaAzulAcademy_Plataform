@@ -566,7 +566,8 @@ test("preflight: reprova se uma função que a migration chama estiver diferente
 });
 
 test("rollback: remove só o que a migration criou; recusa enquanto houver evento; reaplicar devolve tudo", async () => {
-  const database = await fullDatabase();
+  // A 202610310004 depende de `kind` e de waitlist_entries: em produção, o rollback dela vem antes deste.
+  const database = await fullDatabase({ until: "202610310003_experiences_active_on_insert.sql" });
   const before = (await database.query<{ name: string; src: string }>(functionsSql)).rows;
 
   await database.exec(ROLLBACK);

@@ -1048,7 +1048,8 @@ test("postcheck: reprova se uma função nova ficar exposta ou divergir do repos
 });
 
 test("rollback: recusa com inscrição ativa; vazio, remove só o que a migration criou; reaplicar devolve tudo", async () => {
-  const database = await fullDatabase();
+  // A 202610310004 depende de `kind` e de waitlist_entries: em produção, o rollback dela vem antes deste.
+  const database = await fullDatabase({ until: "202610310003_experiences_active_on_insert.sql" });
   const local = await rescheduleFixtures(async (sql, params = []) => (await database.query(sql, params)).rows as Row[]);
   const session = await local.makeSession(local.IMERSAO.id, { price: local.uniquePrice(), capacity: 1 });
   const booking = await local.reserve(session, 1);

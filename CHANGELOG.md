@@ -1,5 +1,11 @@
 # Changelog
 
+## Eventos especiais — segurança antes da abertura
+
+- **Nada muda em produção ao publicar este código**: migration `202610310004` **não aplicada**; ESSÊNCIA em rascunho com a sessão fechada, interruptor desligado.
+- **Migration `202610310004`**: seis leituras públicas conferem o interruptor; políticas restritivas nas tabelas `experiences` e `sessions`; `create_reservation` legada sem execução pela API; gatilhos recusam reserva e inscrição em evento oculto (`EVENT_NOT_PUBLIC`). Experiências regulares: resultado idêntico por papel, em teste.
+- **Testes de permissão** com `set role` para `anon`, `authenticated` e `service_role`, com as políticas legadas e a `create_reservation` de produção. Detalhes em [docs/special-events.md](docs/special-events.md).
+
 ## Experiências — rascunho não nasce com `active` ligado
 
 - **Causa**: em produção `active` tem padrão `true` e há a política de leitura `active = true OR is_admin()`; um rascunho criado pelo painel nasceria legível pela chave pública.

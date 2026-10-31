@@ -49,7 +49,6 @@ async function onSaleEvent(startsIn = "10 days") {
   );
   await rows(`update public.special_event_settings set publication_enabled = true`);
   await rows(`update public.experiences set status = 'PUBLISHED' where id = $1::uuid`, [created.experienceId]);
-  await rows(`update public.special_event_settings set publication_enabled = false`);
   await rows(`update public.sessions set status = 'OPEN' where id = $1::uuid`, [created.sessionId]);
   return { slug: `evento-separacao-${sequence}`, experienceId: created.experienceId as string, sessionId: created.sessionId as string };
 }

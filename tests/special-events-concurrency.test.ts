@@ -57,7 +57,6 @@ if (!database) {
     await setup.query(`update public.special_event_settings set publication_enabled = true`);
     // Conteúdo editorial é exigência só do painel; aqui basta o status.
     await setup.query(`update public.experiences set status = 'PUBLISHED' where id = $1::uuid`, [created.experienceId]);
-    await setup.query(`update public.special_event_settings set publication_enabled = false`);
     await setup.query(`update public.sessions set status = 'OPEN' where id = $1::uuid`, [created.sessionId]);
     return created.sessionId as string;
   }
