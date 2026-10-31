@@ -2,7 +2,29 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md) · [Lista de espera](waitlist.md)
 
-**Estado (30/10/2026): fases 2, 3 e 4, 5A, 5B, 5C-1, 5C-2 e a correção do interruptor na `main` e em produção, com tudo desligado.** PRs #42–#51. Migrations aplicadas em produção, todas com preflight e postcheck sem falhas nem pontos de atenção: `202610280001_special_events_foundation.sql` (28/10), `202610310001_special_events_publication_switch.sql` (29/10: leituras públicas com o interruptor — 3 de 3, assinatura das outras 177 funções e contagens idênticas antes e depois) e `202610300001_waitlist_event_scope.sql` (30/10: duas funções novas só para a service role — 2 de 2, assinatura das outras 179 funções e contagens idênticas, nenhum agendamento novo). `special_event_settings.publication_enabled` **desligado**; **nenhum evento cadastrado**; `EVENTS_PUBLIC_ENABLED`, `EVENT_BOOKING_OPEN` e `EVENTS_WAITLIST_ENABLED` ausentes (as rotas de evento respondem 404); **nenhum agendamento da lista de espera ativo** (detecção desligada). Próximas etapas, cada uma com autorização: cadastro do ESSÊNCIA em estado fechado, abertura e a 5C-3.
+**Estado (31/10/2026): fases 2, 3 e 4, 5A, 5B, 5C-1, 5C-2 e a correção do interruptor na `main` e em produção, com tudo desligado. ESSÊNCIA cadastrado em produção: `EVENT/DRAFT`, `active = false`, sessão `CLOSED`, 24 vagas, sem reservas nem inscrições.** Migrations aplicadas em produção, todas com preflight e postcheck sem falhas: `202610280001_special_events_foundation.sql` (28/10), `202610310001_special_events_publication_switch.sql` (29/10), `202610300001_waitlist_event_scope.sql` (30/10), `202610310002_experiences_legacy_columns_on_insert.sql` e `202610310003_experiences_active_on_insert.sql` (31/10). **Não aplicada: `202610310004_event_publication_security.sql`, obrigatória antes de publicar** ([abaixo](#segurança-antes-da-abertura-migration-202610310004)). `special_event_settings.publication_enabled` **desligado**; `EVENTS_PUBLIC_ENABLED`, `EVENT_BOOKING_OPEN` e `EVENTS_WAITLIST_ENABLED` ausentes (as rotas de evento respondem 404); **nenhum agendamento da lista de espera ativo**. Próximas etapas, cada uma com autorização: migration de segurança, rotação do `CRON_SECRET`, abertura ([roteiro](essencia-abertura.md)) e a 5C-3.
+
+## Segurança antes da abertura (migration 202610310004)
+
+Auditoria de 31/10/2026, com os privilégios e as políticas reais de produção. Com o interruptor desligado, a página nova de eventos some, mas a chave pública (que está no navegador) ainda alcançava o evento por outros caminhos:
+
+| Risco | Caminho | Quando expõe |
+| --- | --- | --- |
+| Leitura | `list_public_experiences`, `list_public_catalog`, `get_public_experience`, `list_open_sessions`, `list_public_sessions`, `public_session_context` e, por herança, `get_booking_session` (definer, ignoram RLS) | Evento publicado com o interruptor desligado, inclusive por id de sessão |
+| Leitura | Tabela `experiences`: políticas `published experiences are readable` e `active = true` | Evento publicado, ou `active` ligado em rascunho (`active` não acompanha o status) |
+| Leitura | Tabela `sessions`: políticas de sessão aberta e futura | Sessão aberta, mesmo de rascunho |
+| Escrita | `create_reservation` legada, executável por `anon` e `authenticated`, definer, sem conferir nada do evento | Hoje falha no rótulo `scheduled`, que não existe no enum (22P02), antes de escrever. Proteção acidental: um ajuste no enum a reativaria |
+| Escrita | `create_pre_reservation` e `waitlist_join` | Só a service role executa; a trava estava só no código da aplicação |
+
+**Correção, mínima e só de eventos:** as seis leituras ganham `event_publication_allows(e.kind)`; duas políticas **restritivas** de SELECT para `anon` e `authenticated` escondem da tabela o evento fora de "publicado e interruptor ligado" (administrador ativo continua vendo; `kind` regular passa direto); `create_reservation` perde a execução de todos os papéis da API (nenhum código a chama); gatilhos `BEFORE INSERT` em `reservations` e `waitlist_entries` recusam evento oculto com `EVENT_NOT_PUBLIC`.
+
+**Regulares:** as condições são verdadeiras para `kind` regular. O teste compara, por papel, tabelas e todas as leituras antes e depois: resultado idêntico. Quem depende do quê: o site lê por RPC com a chave pública e pelas tabelas com a service role (que ignora RLS); nenhuma rota chama `create_reservation`.
+
+**Efeito a conhecer:** com o evento oculto, inserir reserva em sessão dele falha também para o painel. Pós-venda de quem já comprou não insere e segue funcionando (confirmação, cancelamento, troca). Por isso a ordem de abertura liga o interruptor antes de publicar. Fica de fora, aceito: `available_spots(uuid)` continua pública; exige o id e devolve só um número.
+
+**Aplicação (SQL Editor, somente por Rudah):** `supabase/diagnostics/event_publication_security_preflight.sql` → `BEGIN; SET LOCAL lock_timeout = '5s';` + migration + `COMMIT;` → `event_publication_security_postcheck.sql`. `ASSINATURA_DAS_OUTRAS_FUNCOES`, `LISTAGENS_REGULARES`, `RESERVAS_POR_STATUS` e `INSCRICOES_DA_LISTA_POR_STATUS` precisam ser iguais nos dois. Depois, conferir experiências regulares e uma tela de reserva no site.
+
+**Rollback:** `supabase/rollback/202610310004_event_publication_security.rollback.sql` tira gatilhos, políticas e auxiliares e devolve os seis corpos. **Não** devolve a execução de `create_reservation`, de propósito. Reabre os caminhos da tabela acima: só com o evento em rascunho e o interruptor desligado. Rollback de migration mais antiga que dependa de `kind` ou `waitlist_entries` exige rodar este antes.
 
 ## O que é
 
@@ -20,7 +42,7 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 | 5. Reserva, e-mail, cancelamento e crédito | 5A reservas e pagamentos; 5B e-mail de evento; 5C lista de espera; 5D reembolso pelo WhatsApp; 5E crédito | 5A (#46), 5B (#47), 24 vagas (#48), 5C-1 (#49), 5C-2 (#50) e interruptor (#51) na `main`, desligados; migrations da 5C aplicadas; 5C-3, 5D e 5E aguardam autorização |
 | 6. Painel | `/admin/eventos` com formulário estruturado | — |
 | 7. Relatórios | Painéis separados por tipo | — |
-| 8. Lançamento do ESSÊNCIA | Cadastro, publicação e interruptor ligado | — |
+| 8. Lançamento do ESSÊNCIA | Cadastro, publicação e interruptor ligado | Cadastro fechado feito (31/10); migration de segurança `202610310004` antes de publicar |
 
 ## Fase 2 — banco e segurança
 

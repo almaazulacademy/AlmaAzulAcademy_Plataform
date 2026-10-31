@@ -2,7 +2,7 @@
 
 [Eventos especiais](special-events.md) · [Lista de espera](waitlist.md)
 
-Roteiro para levar o ESSÊNCIA — Corpo, Mente e Natureza (07/11/2026) do repositório à venda, **um passo por vez e cada um com autorização**. Nada aqui foi executado: em 30/10/2026 o interruptor de publicação está desligado, nenhum evento está cadastrado, as variáveis dos eventos estão ausentes e nenhum agendamento da lista de espera está ativo.
+Roteiro para levar o ESSÊNCIA — Corpo, Mente e Natureza (07/11/2026) do repositório à venda, **um passo por vez e cada um com autorização**. **Estado em 31/10/2026: ESSÊNCIA cadastrado em produção, `EVENT/DRAFT`, `active = false`, sessão `CLOSED`, 24 vagas, sem reservas nem inscrições (postcheck do cadastro OK).** Vendas e publicação desligadas: interruptor desligado, variáveis dos eventos ausentes, nenhum agendamento da lista de espera ativo. Migrations `202610310002` e `202610310003` aplicadas em 31/10. A `202610310004` (segurança) **ainda não foi aplicada**: é o próximo passo e bloqueia a publicação.
 
 ## 1. Cadastro em estado fechado
 
@@ -14,7 +14,7 @@ A `202610310002` foi aplicada em produção em 31/10/2026, com postcheck OK.
 
 **Ordem:** preflight da `202610310003` → migration → postcheck; só então o preflight do cadastro → cadastro → postcheck do cadastro.
 
-**Obrigatório antes de publicar: auditoria de RLS e do campo `active`.** O interruptor desligado esconde o evento do site, mas não fecha toda leitura direta. Pelo repositório, a chave pública pode executar `list_public_experiences`, `list_public_catalog`, `list_open_sessions`, `list_public_sessions`, `get_booking_session` e `public_session_context`, que não conferem o interruptor, e as políticas de `experiences` e `sessions` não olham para ele. `create_pre_reservation` só é executável pelo servidor. A auditoria confere os privilégios e as políticas reais de produção, decide como essas leituras tratam eventos, confirma quem usa `active` (que não acompanha mudanças de status depois da inserção) e testa com a chave pública.
+**Auditoria de RLS e do campo `active` (feita em 31/10/2026).** Resultado e correção em [special-events.md](special-events.md#segurança-antes-da-abertura-migration-202610310004): sem a `202610310004`, ligar o interruptor e voltar a desligá-lo deixaria o evento legível pela chave pública. **Aplicar antes do passo de publicação.**
 
 Não há tela de cadastro de evento no painel: o caminho é a RPC do painel, `admin_create_event`, com as mesmas validações e a mesma auditoria (`EVENT_CREATED`), rodada no SQL Editor. Os quatro scripts são **gerados da fixture aprovada** (`lib/events/fixtures/essencia.ts`) por `pnpm events:essencia-sql` — nada é digitado à mão — e o teste `tests/special-events-essencia-cadastro.test.ts` falha se algum divergir dela.
 
@@ -33,8 +33,9 @@ Depois do cadastro o site não muda: o evento está em rascunho, o interruptor d
 
 ## 2. Ordem recomendada até a venda
 
-1. **Rotação do `CRON_SECRET`** (seção 3) — obrigatória antes da 5C-3; recomendável antes de abrir a venda, porque a conciliação de pagamentos é uma das rotinas que ele protege.
-2. **Cadastro fechado**: preflight → `essencia_cadastro.sql` → postcheck.
+1. **Segurança**: preflight → `202610310004_event_publication_security.sql` → postcheck. Conferir regulares no site. Obrigatório antes do passo 4.
+2. **Rotação do `CRON_SECRET`** (seção 3) — obrigatória antes da 5C-3; recomendável antes de abrir a venda, porque a conciliação de pagamentos é uma das rotinas que ele protege.
+   ~~Cadastro fechado~~ — feito em 31/10/2026.
 3. **Revisão do conteúdo**: a prévia `/eventos/demonstracao/essencia` no Preview mostra exatamente o mesmo conteúdo (é a mesma fixture); a página real só aparece depois do passo 5.
 4. **Publicação no banco**: ligar o interruptor (`update public.special_event_settings set publication_enabled = true, updated_at = now();`) e publicar pela RPC do painel (`admin_update_event(..., 'PUBLISHED', ...)`). Com `EVENTS_PUBLIC_ENABLED` ausente o site continua igual.
 5. **Página no ar, sem venda**: `EVENTS_PUBLIC_ENABLED=true` só em Production + redeploy. `/eventos/essencia` aparece com "As reservas pelo site abrem em breve"; conferir no celular e no computador.
