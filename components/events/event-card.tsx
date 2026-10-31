@@ -8,7 +8,7 @@ import type { PublicEvent } from "@/lib/events/public";
 import { cn } from "@/lib/utils";
 
 /** Card de um evento: foto, nome, data, local, preço e situação das vagas. */
-export function EventCard({ event, href, featured = false }: { event: PublicEvent; href: string; featured?: boolean }) {
+export function EventCard({ event, href, bookingOpen, featured = false }: { event: PublicEvent; href: string; bookingOpen: boolean; featured?: boolean }) {
   const extra = event.editorial.event;
   const image = extra.cardImage ?? event.editorial.hero.image;
   const { session } = event;
@@ -24,7 +24,7 @@ export function EventCard({ event, href, featured = false }: { event: PublicEven
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,21,20,0.15)_0%,rgba(13,21,20,0.35)_40%,rgba(13,21,20,0.94)_100%)]" />
       <div className="relative mt-auto w-full p-7 sm:p-10">
         <div className="flex flex-wrap items-center gap-3">
-          <AvailabilityBadge availability={session.availability} remainingSpots={session.remainingSpots} />
+          <AvailabilityBadge availability={session.availability} remainingSpots={session.remainingSpots} bookingOpen={bookingOpen} />
           <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{extra.badge}</span>
         </div>
         <h3 className={cn("mt-5 font-event font-extrabold uppercase leading-[0.9]", featured ? "text-5xl sm:text-7xl" : "text-4xl sm:text-5xl")}>

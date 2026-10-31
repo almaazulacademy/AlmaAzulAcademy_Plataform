@@ -16,7 +16,7 @@ import { listCatalogExperiences, listPublicBases } from "@/lib/bases/data";
 import { WHATSAPP_UPCOMING_ACTIVITIES_LINK } from "@/lib/contact";
 import { listPublishedExperiences } from "@/lib/editorial/data";
 import { listPublicEvents } from "@/lib/events/data";
-import { isEventsPublicEnabled } from "@/lib/events/flags";
+import { isEventBookingOpen, isEventsPublicEnabled } from "@/lib/events/flags";
 import { splitEvents } from "@/lib/events/public";
 import { resolveExperienceCardLocation, resolveExperienceCardMedia } from "@/lib/editorial/image";
 
@@ -100,7 +100,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {nextEvent ? <EventHighlight event={nextEvent} /> : null}
+      {nextEvent ? <EventHighlight event={nextEvent} bookingOpen={isEventBookingOpen()} /> : null}
 
       <Section
         id="bases"

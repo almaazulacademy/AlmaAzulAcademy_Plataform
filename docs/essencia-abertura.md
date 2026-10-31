@@ -38,7 +38,7 @@ Depois do cadastro o site não muda: o evento está em rascunho, o interruptor d
    ~~Cadastro fechado~~ — feito em 31/10/2026.
 3. **Revisão do conteúdo**: a prévia `/eventos/demonstracao/essencia` no Preview mostra exatamente o mesmo conteúdo (é a mesma fixture); a página real só aparece depois do passo 5.
 4. **Publicação no banco**: ligar o interruptor (`update public.special_event_settings set publication_enabled = true, updated_at = now();`) e publicar pela RPC do painel (`admin_update_event(..., 'PUBLISHED', ...)`). Com `EVENTS_PUBLIC_ENABLED` ausente o site continua igual.
-5. **Página no ar, sem venda**: `EVENTS_PUBLIC_ENABLED=true` só em Production + redeploy. `/eventos/essencia` aparece com "As reservas pelo site abrem em breve"; conferir no celular e no computador.
+5. **Página no ar, sem venda**: `EVENTS_PUBLIC_ENABLED=true` só em Production + redeploy. `/eventos/essencia` aparece com "Reservas abrem em breve" e botão desativado (regra abaixo); conferir no celular e no computador.
 6. **Venda aberta**: abrir a sessão pelo painel de sessões (ou `admin_update_session`) e `EVENT_BOOKING_OPEN=true` só em Production + redeploy.
 7. **Reserva controlada da equipe**, com autorização própria: um ingresso pago de verdade, conferindo e-mail do evento, QR, planilha e painel; depois cancelar pelo painel conforme a política.
 8. **Lista de espera** (perto de esgotar): `EVENTS_WAITLIST_ENABLED=true`. Inscrição e confirmação funcionam sem a 5C-3; os avisos automáticos de vaga dependem dela.
@@ -59,6 +59,18 @@ Scripts gerados por `pnpm events:essencia-publicacao-sql` e testados em `tests/s
 **Barreiras contra reserva:** sessão `CLOSED` no banco; `POST /api/reservations` recusa evento com `EVENT_BOOKING_OPEN` ausente; a chave pública não executa `create_pre_reservation`.
 
 **Desfazer:** remover `EVENTS_PUBLIC_ENABLED` + redeploy, se estiver ligada; depois `supabase/rollback/essencia_publicacao.rollback.sql`, que volta a rascunho e desliga o interruptor. Recusa se houver sessão aberta, reserva ou inscrição.
+
+**O que a página mostra.** O site distingue "ainda não abriu" de "encerrou" pela variável `EVENT_BOOKING_OPEN`, porque `sessions.status` não guarda o motivo do fechamento:
+
+| `EVENT_BOOKING_OPEN` | Sessão | Selo e botão | Pode reservar? |
+| --- | --- | --- | --- |
+| Ausente | Fechada ou aberta com vagas | **Reservas abrem em breve** + "Estamos preparando os últimos detalhes desta experiência. Em breve, você poderá garantir sua vaga!" | Não |
+| Ausente | Aberta sem vagas | Esgotado | Não |
+| Ligada | Aberta com vagas | Vagas abertas, botão de reserva | Sim |
+| Ligada | Fechada | **Reservas encerradas** | Não |
+| Qualquer | Evento passado ou cancelado | Evento realizado ou Evento cancelado | Não |
+
+**Para encerrar as vendas de verdade: fechar a sessão com a variável ligada.** Remover `EVENT_BOOKING_OPEN` depois que a venda já começou faz a página voltar a "Reservas abrem em breve". Se precisar parar a venda sem esse texto, feche a sessão e mantenha a variável; para tirar a página do ar, desligue o interruptor.
 
 ## 3. Rotação do `CRON_SECRET`
 

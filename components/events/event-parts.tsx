@@ -11,9 +11,9 @@ const badgeTones = {
   past: "border-white/15 bg-white/5 text-white/60",
 } as const;
 
-/** "Vagas abertas", "Últimas 3 vagas", "Esgotado", "Reservas encerradas", "Evento realizado". */
-export function AvailabilityBadge({ availability, remainingSpots, className }: { availability: EventAvailability; remainingSpots: number | null; className?: string }) {
-  const badge = availabilityBadge(availability, remainingSpots);
+/** "Reservas abrem em breve", "Vagas abertas", "Últimas 3 vagas", "Esgotado", "Reservas encerradas", "Evento realizado". */
+export function AvailabilityBadge({ availability, remainingSpots, bookingOpen, className }: { availability: EventAvailability; remainingSpots: number | null; bookingOpen: boolean; className?: string }) {
+  const badge = availabilityBadge(availability, remainingSpots, bookingOpen);
   return (
     <span className={cn("inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]", badgeTones[badge.tone], className)}>
       {badge.label}
@@ -22,10 +22,9 @@ export function AvailabilityBadge({ availability, remainingSpots, className }: {
 }
 
 /**
- * Botão de reserva do evento. Na fase 4 o fluxo de reserva ainda não está
- * integrado: com vagas, o botão aparece desativado e diz que as reservas abrem
- * em breve; sem vagas ou depois do evento, diz o porquê. Só com `kind: "BOOK"`
- * (fase 5) ele vira link para `/reservar/[sessionId]`.
+ * Botão de reserva do evento. Com a venda desligada, aparece desativado e diz
+ * que as reservas abrem em breve; sem vagas ou depois do evento, diz o porquê.
+ * Só com `kind: "BOOK"` ele vira link para `/reservar/[sessionId]`.
  */
 export function EventCtaButton({ cta, className, compact = false }: { cta: EventCta; className?: string; compact?: boolean }) {
   const base = cn(

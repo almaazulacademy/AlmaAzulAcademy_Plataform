@@ -28,7 +28,21 @@ export function isUpcoming(availability: EventAvailability) {
 
 export type AvailabilityBadge = { label: string; tone: "open" | "last" | "closed" | "past" };
 
-export function availabilityBadge(availability: EventAvailability, remainingSpots: number | null): AvailabilityBadge {
+/** Texto de evento aguardando a abertura comercial (`EVENT_BOOKING_OPEN` desligada). */
+export const EVENT_BOOKING_SOON_TITLE = "Reservas abrem em breve";
+export const EVENT_BOOKING_SOON_NOTE = "Estamos preparando os últimos detalhes desta experiência. Em breve, você poderá garantir sua vaga!";
+
+/**
+ * Com a venda desligada, sessão aberta ou fechada significa "ainda não abriu":
+ * `sessions.status` não guarda o motivo do fechamento, e é a variável que separa
+ * os casos. "Reservas encerradas" só com a venda ligada e a sessão fechada.
+ */
+function awaitingBookingOpen(availability: EventAvailability, bookingOpen: boolean) {
+  return !bookingOpen && (availability === "AVAILABLE" || availability === "CLOSED");
+}
+
+export function availabilityBadge(availability: EventAvailability, remainingSpots: number | null, bookingOpen: boolean): AvailabilityBadge {
+  if (awaitingBookingOpen(availability, bookingOpen)) return { label: EVENT_BOOKING_SOON_TITLE, tone: "open" };
   switch (availability) {
     case "AVAILABLE":
       return remainingSpots !== null && remainingSpots <= LAST_SPOTS_THRESHOLD
@@ -55,8 +69,8 @@ export type EventCta =
   | { kind: "WAITLIST"; label: string; href: string; title: string; note: string };
 
 /**
- * O botão de reserva. Com `bookingOpen` desligado — fase 4, antes do fluxo de
- * reserva do evento — o botão aparece, mas não leva a lugar nenhum.
+ * O botão de reserva. Com `bookingOpen` desligado, antes da abertura comercial,
+ * o botão aparece desativado e diz que as reservas abrem em breve.
  */
 export function eventCta(options: {
   availability: EventAvailability;
@@ -67,9 +81,10 @@ export function eventCta(options: {
   waitlistHref?: string | null;
 }): EventCta {
   const { availability, sessionId, ctaLabel, bookingOpen, waitlistHref } = options;
+  if (awaitingBookingOpen(availability, bookingOpen)) return { kind: "SOON", label: EVENT_BOOKING_SOON_TITLE, note: EVENT_BOOKING_SOON_NOTE };
   if (availability === "AVAILABLE") {
-    if (bookingOpen && sessionId) return { kind: "BOOK", label: ctaLabel, href: `/reservar/${sessionId}` };
-    return { kind: "SOON", label: ctaLabel, note: "As reservas pelo site abrem em breve." };
+    if (sessionId) return { kind: "BOOK", label: ctaLabel, href: `/reservar/${sessionId}` };
+    return { kind: "SOON", label: EVENT_BOOKING_SOON_TITLE, note: EVENT_BOOKING_SOON_NOTE };
   }
   if (availability === "SOLD_OUT" && waitlistHref) {
     return { kind: "WAITLIST", label: "Entrar na lista de espera", href: waitlistHref, title: "Evento esgotado", note: "Todas as vagas desta edição foram preenchidas. Entre para a lista de espera e seja avisado caso surja uma oportunidade." };

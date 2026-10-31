@@ -26,11 +26,13 @@ const SECTION_IMAGE = {
 export function EventsIndex({
   upcoming,
   past,
+  bookingOpen = false,
   preview = false,
   hrefFor = (event) => `/eventos/${event.slug}`,
 }: {
   upcoming: PublicEvent[];
   past: PublicEvent[];
+  bookingOpen?: boolean;
   preview?: boolean;
   hrefFor?: (event: PublicEvent) => string;
 }) {
@@ -60,10 +62,10 @@ export function EventsIndex({
           <h2 id="proximos-eventos" className="sr-only">Próximos eventos</h2>
           {featured ? (
             <div className="mt-10 space-y-6">
-              <EventCard event={featured} href={hrefFor(featured)} featured />
+              <EventCard event={featured} href={hrefFor(featured)} bookingOpen={bookingOpen} featured />
               {others.length ? (
                 <div className="grid gap-6 lg:grid-cols-2">
-                  {others.map((event) => <EventCard key={event.id} event={event} href={hrefFor(event)} />)}
+                  {others.map((event) => <EventCard key={event.id} event={event} href={hrefFor(event)} bookingOpen={bookingOpen} />)}
                 </div>
               ) : null}
             </div>
@@ -86,7 +88,7 @@ export function EventsIndex({
             <EventEyebrow>Edições anteriores</EventEyebrow>
             <h2 id="edicoes-anteriores" className="mt-6 font-event text-3xl font-extrabold uppercase sm:text-5xl">Já aconteceu por aqui</h2>
             <div className="mt-10 grid gap-6 lg:grid-cols-2">
-              {past.map((event) => <EventCard key={event.id} event={event} href={hrefFor(event)} />)}
+              {past.map((event) => <EventCard key={event.id} event={event} href={hrefFor(event)} bookingOpen={bookingOpen} />)}
             </div>
           </div>
         </section>

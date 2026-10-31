@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
  * Destaque do próximo evento especial na home, logo depois do Hero. Só é
  * renderizado com a seção de eventos ligada e um evento futuro publicado.
  */
-export function EventHighlight({ event }: { event: PublicEvent }) {
+export function EventHighlight({ event, bookingOpen }: { event: PublicEvent; bookingOpen: boolean }) {
   const extra = event.editorial.event;
   const image = extra.cardImage ?? event.editorial.hero.image;
   const { session } = event;
@@ -29,7 +29,7 @@ export function EventHighlight({ event }: { event: PublicEvent }) {
           <div className="flex flex-col justify-center bg-white/5 p-8 sm:p-12">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-xs font-semibold uppercase tracking-[0.22em] text-ember">Evento especial</span>
-              <AvailabilityBadge availability={session.availability} remainingSpots={session.remainingSpots} />
+              <AvailabilityBadge availability={session.availability} remainingSpots={session.remainingSpots} bookingOpen={bookingOpen} />
             </div>
             <h2 id="destaque-evento" className="mt-5 font-event text-5xl font-extrabold uppercase leading-[0.9] sm:text-6xl">{event.editorial.hero.title}</h2>
             <p className="mt-3 font-event text-sm font-bold uppercase tracking-[0.18em] text-ember">{extra.subtitle}</p>
