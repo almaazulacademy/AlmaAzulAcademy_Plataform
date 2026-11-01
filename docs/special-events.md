@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md) · [Lista de espera](waitlist.md)
 
-**Estado (31/10/2026): lançamento técnico do ESSÊNCIA concluído; página publicada e inscrições abertas em Production.** Sessão `OPEN`, 24 vagas, R$ 150. Compra real validada pela InfinitePay com confirmação automática por webhook; teste administrativo aprovado à parte, sem receita. `EVENTS_PUBLIC_ENABLED` e `EVENT_BOOKING_OPEN` ligadas só em Production; `EVENTS_WAITLIST_ENABLED` ausente; nenhum agendamento da lista de espera. Migrations aplicadas em produção, todas com postcheck sem falhas: `202610280001`, `202610310001`, `202610300001`, `202610310002`, `202610310003` e `202610310004` ([segurança](#segurança-antes-da-abertura-migration-202610310004)). Evidências, limites e operação em [essencia-abertura.md](essencia-abertura.md). Fases não ativadas: 5C-3, 5D e 5E.
+**Estado (31/10/2026): lançamento técnico do ESSÊNCIA concluído; página publicada e inscrições abertas em Production.** Sessão `OPEN`, 24 vagas (23 disponíveis na última conferência), R$ 150, conteúdo editorial na versão 3. Compra real validada pela InfinitePay com confirmação automática por webhook; teste administrativo aprovado à parte, sem receita. `EVENTS_PUBLIC_ENABLED` e `EVENT_BOOKING_OPEN` ligadas só em Production; `EVENTS_WAITLIST_ENABLED` ausente; nenhum agendamento da lista de espera. Migrations aplicadas em produção, todas com postcheck sem falhas: `202610280001`, `202610310001`, `202610300001`, `202610310002`, `202610310003` e `202610310004` ([segurança](#segurança-antes-da-abertura-migration-202610310004)). Evidências, limites e operação em [essencia-abertura.md](essencia-abertura.md). Fases não ativadas: 5C-3, 5D e 5E.
 
 ## Segurança antes da abertura (migration 202610310004)
 
@@ -246,13 +246,14 @@ Evento publicado sem o bloco completo não aparece no site. O conteúdo do ESSÊ
 | `bases/concha-acustica/capsula-lago-por-do-sol-desktop.webp` | Repositório | Apresentação e Hero de `/eventos` |
 | `experiences/remada-nascer-do-sol/remada-nascer-do-sol-galeria-02.webp` | Repositório | 05h30 — canoa havaiana |
 | `eventos/essencia/capsula-deck-lago.jpg` | Pasta do Cápsula Bar (`DSC00153`, fundo do slide 3) | Meditação e aromaterapia |
-| `eventos/essencia/capsula-mesas-encontro.jpg` | Pasta do Cápsula Bar (`DSC07470`, fundo do slide 4) | Happy Hour de Conexões |
+| `eventos/essencia/capsula-mesas-encontro.jpg` | Pasta do Cápsula Bar (`DSC07470`, fundo do slide 4) | Encerramento com lanche saudável |
 | `eventos/essencia/capsula-pier-amanhecer.jpg` | Pasta do Cápsula Bar (`DSC00386`, fundo do slide 5) | Reserva |
-| `eventos/essencia/logo-cure-se-bem.png` | `CURE-SE LOGO VETOR.pdf` | Parceiros |
+| `eventos/essencia/logo-cure-se-bem.png` | `CURE-SE LOGO VETOR.pdf` | Parceiros (Cure-se Bem e Fernanda Garcia) |
+| `eventos/essencia/logo-superioga-rapha-dantas.jpg` | Logo oficial da Superioga enviado pela organização; arquivo original, sem recompressão | Parceiros (Rapha Dantas) |
 | `eventos/essencia/logo-nutre.png` | Logo enviado pela organização | Parceiros |
 | `branding/alma-azul-logo-dark.png`, `bases/concha-acustica/capsula-bar-logo.webp` | Repositório | Parceiros |
 
-Rapha Dantas não tem logo fornecido: aparece pelo nome. Os slides não foram usados como imagem (têm texto embutido).
+Os slides não foram usados como imagem (têm texto embutido).
 
 ### Regras operacionais do ESSÊNCIA
 
@@ -281,7 +282,9 @@ Stand-by, reservas, cancelamento pelo painel e reembolsos **não mudam** nesta f
 
 ### Pendente antes de publicar
 
-- Confirmação dos parceiros quanto ao uso dos logos; logo do Rapha Dantas, se houver.
+Lista anterior à abertura, mantida como histórico; o estado atual está no início deste documento.
+
+- Confirmação dos parceiros quanto ao uso dos logos.
 - Fase 5: botão de reserva (`EVENT_BOOKING_OPEN`), política na página de reserva, e-mail de evento e o **crédito para outras experiências** (regras de uso, saldo e registro) — com o reembolso seguindo manual pelo WhatsApp.
 - **Fase 5, obrigatório antes de vender**: o e-mail de confirmação atual (`lib/reservations/confirmation-email.ts`) vale para qualquer base e traria a uma reserva do ESSÊNCIA textos de remada que contradizem o evento — "cancelamento até 1 dia antes" (`CANCELLATION_NOTE`) e "roupa de banho"/"chinelo" (`PREPARATION_ITEMS`). A tolerância de 20 minutos (`MEETING_TOLERANCE_NOTE`) coincide com 05h50. O e-mail de evento deve usar `event.cancellation`, `event.arrival` e os textos de `info.items`. Hoje nada disso chega a cliente: a reserva do evento não está aberta.
 - O slug `demonstracao` fica reservado para a prévia: um evento com esse slug não teria página.

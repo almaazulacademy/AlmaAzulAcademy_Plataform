@@ -34,6 +34,7 @@ const UPDATE = source("supabase/maintenance/essencia_editorial_update.sql");
 const POSTCHECK = source("supabase/diagnostics/essencia_editorial_postcheck.sql");
 const ROLLBACK = source("supabase/rollback/essencia_editorial_update.rollback.sql");
 const V1 = JSON.parse(source("scripts/events/essencia-editorial-v1.json"));
+const V2 = JSON.parse(source("scripts/events/essencia-editorial-v2.json"));
 const CONTENT = JSON.stringify(ESSENCIA_EDITORIAL);
 
 type Check = { check_name: string; result: string; status: string };
@@ -67,23 +68,24 @@ test("programação como decidida: início fixo só na canoa, referências flex�
     ["05h30", "Canoa havaiana ao nascer do sol"],
     ["Por volta das 07h30", "Meditação sensorial e aromaterapia"],
     ["Na sequência", "Superioga"],
-    ["Por volta das 09h", "Happy Hour de Conexões"],
+    ["Por volta das 09h", "Encerramento com lanche saudável"],
   ]);
-  assert.deepEqual(items.map((item) => item.hosts), [["Alma Azul Academy"], ["Rapha Dantas", "Fernanda Garcia"], ["Rapha Dantas"], []]);
-  assert.match(items[1].description, /aromaterapia com óleos essenciais, com a participação de Fernanda Garcia/);
+  assert.deepEqual(items.map((item) => item.hosts), [["Alma Azul Academy"], ["Fernanda Garcia"], ["Rapha Dantas"], []]);
+  assert.match(items[1].description, /experiência sensorial com óleos essenciais/);
+  assert.doesNotMatch(items[1].description, /Fernanda/, "o nome fica só em quem conduz");
   assert.equal(items[2].time, null);
 });
 
 test("nenhum texto anuncia fim às 09h nem usa os nomes antigos; lanche segue incluso", () => {
-  assert.doesNotMatch(CONTENT, /às 09h|até 09h|Congelados|Refeições|Encerramento/);
+  assert.doesNotMatch(CONTENT, /às 09h|até 09h|Congelados|Refeições|Happy Hour|Encerramento previsto/);
   assert.match(CONTENT, /aproximadamente entre 08h30 e 09h/);
   const included = validateEventEditorial(ESSENCIA_EDITORIAL);
   assert.ok(included.success);
   assert.ok(included.data.event.included.items.includes("Lanche saudável da Nutre"));
-  assert.ok(included.data.event.included.items.includes("Happy Hour de Conexões"));
+  assert.ok(included.data.event.included.items.includes("Momento de integração e troca de experiências"));
   const partners = included.data.event.partners.items.map((item) => [item.name, item.role]);
-  assert.ok(partners.some(([name, role]) => name === "Fernanda Garcia" && /aromaterapia com óleos essenciais · Cure-se Bem/.test(role ?? "")));
-  assert.ok(partners.some(([name, role]) => name === "Rapha Dantas" && role === "Superioga e meditação sensorial"));
+  assert.ok(partners.some(([name, role]) => name === "Fernanda Garcia" && role === "Meditação sensorial e aromaterapia com óleos essenciais"));
+  assert.ok(partners.some(([name, role]) => name === "Rapha Dantas" && role === "Superioga"));
   assert.ok(partners.some(([name]) => name === "Nutre"));
 });
 
@@ -138,20 +140,20 @@ test("preflight → atualização → postcheck: só o conteúdo muda; depois, a
   for (const key of ["ASSINATURA_DAS_FUNCOES", "LISTAGENS_REGULARES", "RESERVAS_POR_STATUS", "SESSAO_INALTERADA"]) assert.equal(post.get(key)?.result, pre.get(key)?.result, key);
   assert.deepEqual(await sessionOf(db), before.session);
   const after = await contentOf(db);
-  assert.deepEqual(after.editorial_content, ESSENCIA_EDITORIAL);
+  assert.deepEqual(after.editorial_content, V2);
   assert.deepEqual({ ...after, editorial_content: null }, { ...before.event, editorial_content: null });
   assert.equal(after.status, "DRAFT");
   assert.equal((await db.query(`select 1 from public.get_public_event('essencia')`)).rows.length, 0, "continua fora do ar");
-  assert.equal((await report(db, publicacaoPreflightSql())).get("ESSENCIA_PUBLICACAO_PREFLIGHT_OK")?.status, "OK");
-  await db.exec(publicacaoSql());
+  assert.equal((await report(db, publicacaoPreflightSql(V2))).get("ESSENCIA_PUBLICACAO_PREFLIGHT_OK")?.status, "OK");
+  await db.exec(publicacaoSql(V2));
   assert.equal((await contentOf(db)).status, "PUBLISHED");
   await db.close();
 });
 
 test("a publicação recusa o conteúdo anterior: não dá para pular a atualização", async () => {
   const db = await registeredWithV1();
-  assert.equal((await report(db, publicacaoPreflightSql())).get("ESSENCIA_PUBLICACAO_PREFLIGHT_OK")?.status, "FALHOU");
-  await assert.rejects(db.exec(publicacaoSql()), /ESSENCIA_CONTEUDO/);
+  assert.equal((await report(db, publicacaoPreflightSql(V2))).get("ESSENCIA_PUBLICACAO_PREFLIGHT_OK")?.status, "FALHOU");
+  await assert.rejects(db.exec(publicacaoSql(V2)), /ESSENCIA_CONTEUDO/);
   await db.exec("rollback");
   assert.equal((await contentOf(db)).status, "DRAFT");
   await db.close();
@@ -170,7 +172,7 @@ test("rollback devolve exatamente a versão anterior; recusa depois de publicado
   for (const [name, row] of await report(db, PREFLIGHT)) assert.equal(row.status, "OK", name);
 
   await db.exec(UPDATE);
-  await db.exec(publicacaoSql());
+  await db.exec(publicacaoSql(V2));
   await assert.rejects(db.exec(ROLLBACK), /ESSENCIA_EDITORIAL_DESFAZER_ESTADO/);
   await db.exec("rollback");
   assert.equal((await contentOf(db)).status, "PUBLISHED");

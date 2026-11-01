@@ -4,22 +4,24 @@
 
 Roteiro para levar o ESSÊNCIA — Corpo, Mente e Natureza (07/11/2026) do repositório à venda, **um passo por vez e cada um com autorização**.
 
-## Estado do lançamento (31/10/2026, 20:22 em Brasília)
+## Estado do lançamento (31/10/2026, depois dos ajustes editoriais)
 
-**Lançamento técnico concluído: página publicada e inscrições abertas em Production.** ESSÊNCIA `EVENT/PUBLISHED`; sessão `OPEN`, 24 vagas, 22 disponíveis na conferência, R$ 150, até 6 por pedido, 210 minutos técnicos. `EVENTS_PUBLIC_ENABLED=true` e `EVENT_BOOKING_OPEN=true` só em Production; `EVENTS_WAITLIST_ENABLED` ausente; sem agendamento da lista de espera.
+**Lançamento técnico concluído: página publicada e inscrições abertas em Production.** ESSÊNCIA `EVENT/PUBLISHED`; sessão `OPEN`, 24 vagas, 23 disponíveis na última conferência, R$ 150, até 6 por pedido, 210 minutos técnicos. `EVENTS_PUBLIC_ENABLED=true` e `EVENT_BOOKING_OPEN=true` só em Production; `EVENTS_WAITLIST_ENABLED` ausente; sem agendamento da lista de espera.
 
 | Verificação | Resultado | Evidência |
 | --- | --- | --- |
 | Segurança | Migrations `202610310002`, `202610310003` e `202610310004` aplicadas; conferência como `anon` aprovada | Postchecks e consulta no Supabase |
 | `CRON_SECRET` | Girado; `confirmation-emails` 200 às 12:12:39 UTC e `payment-reconciliation` 200 às 13:05:16 UTC, em 31/10 | Logs da Vercel |
-| Teste administrativo | Reserva `CONFIRMED` por `PAYMENT_CONFIRMED_MANUAL`, sem recebimento financeiro | Supabase |
+| Teste administrativo | Reserva `CONFIRMED` por `PAYMENT_CONFIRMED_MANUAL`, sem recebimento financeiro; cancelada depois pela administração | Supabase |
 | Compra real | Reserva `CONFIRMED`, `PAYMENT_WEBHOOK_RECEIVED` e `PAYMENT_CONFIRMED` por `INFINITEPAY`, 15000 centavos, sem confirmação manual | Supabase |
 | Webhook | `POST` com 200 às 23:19:23 UTC, depois da reserva criada às 23:15:02 UTC | Logs da Vercel; o log não identifica a reserva, a ligação vem do Supabase |
 | Integrações das duas reservas | `GOOGLE_SHEETS=SYNCED`, `RESERVATION_CONFIRMATION_EMAIL=SYNCED`, QR Code registrado | Supabase |
+| Conteúdo editorial | Versão 3 aplicada; `ESSENCIA_PUBLICADO_POSTCHECK_OK`, 0 falhas e 0 pontos de atenção; sessão, reservas e assinatura iguais às do preflight | Postcheck e conferência da página em 1280 e 375 px |
+| Reservas na última conferência | `CONFIRMED=1` (a compra real) e `CANCELLED=2`; 23 vagas disponíveis | Postcheck |
 
-**Receita confirmada pela InfinitePay nesta validação: R$ 150,00 (1 ingresso).** A reserva administrativa ocupa 1 vaga e tem valor nominal de R$ 150, mas não é receita recebida.
+**Receita confirmada pela InfinitePay nesta validação: R$ 150,00 (1 ingresso).** A reserva administrativa nunca foi receita recebida e, depois de cancelada, não ocupa vaga. Uma das 2 reservas canceladas não teve a origem identificada; não afeta vagas nem receita.
 
-**Limites:** `SYNCED` não prova que o e-mail chegou nem o conteúdo da linha da planilha. Ter QR Code registrado não prova que ele abre nem testa o check-in. O retorno do checkout (`/pagamento/retorno`) não apareceu nos logs depois da compra real. Conferência manual pendente: e-mail, QR Code sem check-in, painel administrativo, painel do instrutor e planilha.
+**Limites:** `SYNCED` não prova que o e-mail chegou nem o conteúdo da linha da planilha. Ter QR Code registrado não prova que ele abre nem testa o check-in. O retorno do checkout (`/pagamento/retorno`) não apareceu nos logs depois da compra real. E-mails enviados antes da versão 3 mantêm os textos daquele momento. Conferência manual pendente: e-mail, QR Code sem check-in, painel administrativo, painel do instrutor e planilha.
 
 ### Operação
 
@@ -111,7 +113,28 @@ Scripts gerados por `pnpm events:essencia-publicacao-sql` e testados em `tests/s
 
 **Scripts de cadastro:** regenerados da fixture para os testes continuarem coerentes. O cadastro já foi feito em 31/10; não rodar de novo.
 
+## Atualização do conteúdo com o evento publicado (31/10/2026)
+
+**Executada em 31/10/2026, com postcheck sem falhas.** A primeira execução do `update` não gravou nada, por causa não determinada, e o postcheck mostrou a versão anterior; repetir o script resolveu. Por isso, só considere aplicado depois do postcheck.
+
+**Para evento `PUBLISHED`, com sessão aberta e reservas, use só os scripts `essencia_editorial_publicado_*`.** Os de cadastro, publicação e `essencia_editorial_{preflight,update,postcheck}` são históricos, já aplicados: exigem rascunho ou ausência de reservas.
+
+**Ordem, cada passo com autorização:**
+
+1. Merge e deploy do código. Até aqui o site segue com o conteúdo anterior, e a logo nova já está disponível.
+2. `essencia_editorial_publicado_preflight.sql`.
+3. `essencia_editorial_publicado_update.sql`: o conteúdo vale na hora, sem novo deploy.
+4. `essencia_editorial_publicado_postcheck.sql` e conferência da página.
+
+**Não inverter 1 e 3:** com o conteúdo novo antes do deploy, o card de Rapha Dantas apontaria para uma logo que ainda não existe no site.
+
+**O que muda:** só `editorial_content`, pela função do painel, com auditoria. Sessão, preço, vagas, duração, reservas, pagamentos, QR Codes e variáveis não mudam. E-mails enviados depois da atualização usam os textos novos; os já enviados não mudam.
+
+**Rollback:** `essencia_editorial_publicado_update.rollback.sql` devolve o conteúdo anterior (`scripts/events/essencia-editorial-v2.json`), com o evento publicado e sem tocar em reservas.
+
 ## 3. Rotação do `CRON_SECRET`
+
+**Feita em 31/10/2026; execuções automáticas com HTTP 200.** O procedimento fica como referência para uma próxima rotação.
 
 **Por quê:** o valor atual pode ter sido exposto numa captura de tela (27/10/2026). Ninguém deve exibir, copiar para chat, colar em arquivo ou registrar o valor antigo ou o novo.
 
