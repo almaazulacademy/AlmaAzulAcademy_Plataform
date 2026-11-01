@@ -1,9 +1,16 @@
 # Changelog
 
+## ESSÊNCIA — lançamento
+
+- **Em produção desde 31/10/2026**: evento publicado, página no ar e inscrições abertas, só em Production; lista de espera desligada.
+- **Validação**: compra real aprovada automaticamente pela InfinitePay (webhook, `PAYMENT_CONFIRMED`, 15000 centavos); teste administrativo aprovado à parte, sem receita; integrações `SYNCED`; `CRON_SECRET` validado por execuções automáticas com HTTP 200.
+- **Limites**: entrega de e-mail, QR Code, painéis e planilha dependem de conferência manual. Detalhes em [docs/essencia-abertura.md](docs/essencia-abertura.md).
+- **Estado na última conferência**: conteúdo v3 aplicado, reserva administrativa de teste cancelada, 1 reserva confirmada e 23 vagas disponíveis.
+
 ## ESSÊNCIA — ajustes editoriais com o evento publicado
 
 - **Conteúdo**: Fernanda Garcia na meditação e aromaterapia, Rapha Dantas só na Superioga, "Encerramento com lanche saudável" no lugar de "Happy Hour de Conexões" e logos nos cards dos dois.
-- **Atualização em produção**: scripts `essencia_editorial_publicado_*`, **não executados**, para evento publicado com reservas. Sessão, preço, vagas, reservas e pagamentos não mudam.
+- **Atualização em produção**: scripts `essencia_editorial_publicado_*`, executados em 31/10/2026 com postcheck sem falhas, para evento publicado com reservas. Sessão, preço, vagas, reservas e pagamentos não mudaram.
 
 ## ESSÊNCIA — programação fluida
 

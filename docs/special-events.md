@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Banco de dados](database.md) · [Stand-by](reservation-standby.md) · [Lista de espera](waitlist.md)
 
-**Estado (31/10/2026): fases 2, 3 e 4, 5A, 5B, 5C-1, 5C-2 e a correção do interruptor na `main` e em produção, com tudo desligado. ESSÊNCIA cadastrado em produção: `EVENT/DRAFT`, `active = false`, sessão `CLOSED`, 24 vagas, sem reservas nem inscrições.** Migrations aplicadas em produção, todas com preflight e postcheck sem falhas: `202610280001_special_events_foundation.sql` (28/10), `202610310001_special_events_publication_switch.sql` (29/10), `202610300001_waitlist_event_scope.sql` (30/10), `202610310002_experiences_legacy_columns_on_insert.sql`, `202610310003_experiences_active_on_insert.sql` e `202610310004_event_publication_security.sql` (31/10; [segurança](#segurança-antes-da-abertura-migration-202610310004)). `special_event_settings.publication_enabled` **desligado**; `EVENTS_PUBLIC_ENABLED`, `EVENT_BOOKING_OPEN` e `EVENTS_WAITLIST_ENABLED` ausentes (as rotas de evento respondem 404); **nenhum agendamento da lista de espera ativo**. Próximas etapas, cada uma com autorização: rotação do `CRON_SECRET`, abertura ([roteiro](essencia-abertura.md)) e a 5C-3.
+**Estado (31/10/2026): lançamento técnico do ESSÊNCIA concluído; página publicada e inscrições abertas em Production.** Sessão `OPEN`, 24 vagas (23 disponíveis na última conferência), R$ 150, conteúdo editorial na versão 3. Compra real validada pela InfinitePay com confirmação automática por webhook; teste administrativo aprovado à parte, sem receita. `EVENTS_PUBLIC_ENABLED` e `EVENT_BOOKING_OPEN` ligadas só em Production; `EVENTS_WAITLIST_ENABLED` ausente; nenhum agendamento da lista de espera. Migrations aplicadas em produção, todas com postcheck sem falhas: `202610280001`, `202610310001`, `202610300001`, `202610310002`, `202610310003` e `202610310004` ([segurança](#segurança-antes-da-abertura-migration-202610310004)). Evidências, limites e operação em [essencia-abertura.md](essencia-abertura.md). Fases não ativadas: 5C-3, 5D e 5E.
 
 ## Segurança antes da abertura (migration 202610310004)
 
@@ -281,6 +281,8 @@ O validador recusa prazo sem deslocamento, fuso diferente de `America/Sao_Paulo`
 Stand-by, reservas, cancelamento pelo painel e reembolsos **não mudam** nesta fase. O texto deixou de falar em "vaga na próxima edição"; o Stand-by continua existindo para a equipe, sem ser parte da política comunicada.
 
 ### Pendente antes de publicar
+
+Lista anterior à abertura, mantida como histórico; o estado atual está no início deste documento.
 
 - Confirmação dos parceiros quanto ao uso dos logos.
 - Fase 5: botão de reserva (`EVENT_BOOKING_OPEN`), política na página de reserva, e-mail de evento e o **crédito para outras experiências** (regras de uso, saldo e registro) — com o reembolso seguindo manual pelo WhatsApp.
