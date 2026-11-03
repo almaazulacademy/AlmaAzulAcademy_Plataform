@@ -28,6 +28,10 @@ import { applyMigration, fullDatabase } from "./support/full-database.ts";
 
 const ENUM_MIGRATION = "202610130001_reservation_status_awaiting_reschedule.sql";
 const STANDBY_MIGRATION = "202610130002_reservation_standby.sql";
+// As verificações das etapas do Stand-by conferem `reservation_standby_target_rejection`
+// como ela era. A 202611020001 (cupons) reescreve a régua de preço de propósito,
+// então os bancos dessas verificações param antes dela.
+const BEFORE_COUPONS = "202610310004_event_publication_security.sql";
 
 const db = await fullDatabase();
 
@@ -1607,14 +1611,16 @@ test("preflight: aceita os quatro status em qualquer ordem, como no enum legado 
 });
 
 test("postcheck: aprovado logo após as migrations e sensível a Stand-by em uso e a definição alterada", async () => {
-  const fresh = await fullDatabase();
+  const fresh = await fullDatabase({ until: BEFORE_COUPONS });
   const clean = await diagnostic(fresh, "diagnostics/reservation_standby_postcheck.sql");
   assert.deepEqual(clean.filter((row) => row.status !== "OK"), [], JSON.stringify(clean, null, 2));
   assert.equal(clean.at(-1)?.check_name, "STANDBY_POSTCHECK_OK");
 
   // No banco dos testes o Stand-by já foi usado: só as linhas de "ainda sem uso" acusam.
+  // Com todas as migrations, a régua reescrita pelos cupons também aparece — e só ela.
   const used = await diagnostic(db, "diagnostics/reservation_standby_postcheck.sql");
-  assert.deepEqual(used.filter((row) => row.status !== "OK").map((row) => row.check_name), AFTER_USE);
+  assert.deepEqual(used.filter((row) => row.status !== "OK").map((row) => row.check_name).sort(), [...AFTER_USE, "FUNCOES_COM_A_DEFINICAO_DO_REPOSITORIO"].sort());
+  assert.equal(used.find((row) => row.check_name === "FUNCOES_COM_A_DEFINICAO_DO_REPOSITORIO")?.result, "reservation_standby_target_rejection=DIFERENTE");
 
   // Definição mexida à mão e função exposta: os dois precisam aparecer.
   await fresh.exec(`

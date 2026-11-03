@@ -40,6 +40,10 @@ import {
 
 const MIGRATION = "202610160001_reservation_standby_self_service.sql";
 const PREVIOUS = "202610150001_reservation_reschedule_email.sql";
+// As verificações das etapas do Stand-by conferem `reservation_standby_target_rejection`
+// como ela era. A 202611020001 (cupons) reescreve a régua de preço de propósito,
+// então os bancos dessas verificações param antes dela.
+const BEFORE_COUPONS = "202610310004_event_publication_security.sql";
 
 const db = await fullDatabase();
 const admin = createPgliteAdmin(db);
@@ -378,7 +382,7 @@ test("preflight: reprova sem a etapa 4 ou com função da etapa 2 diferente do r
 });
 
 test("rollback: remove só o que a migration criou; reaplicar devolve tudo", async () => {
-  const database = await fullDatabase();
+  const database = await fullDatabase({ until: BEFORE_COUPONS });
   const local = await rescheduleFixtures(async (sql, params = []) => (await database.query(sql, params)).rows as Row[]);
   const session = await local.makeSession(local.IMERSAO.id, { price: local.uniquePrice(), capacity: 10 });
   const parked = await local.reserve(session, 1);
