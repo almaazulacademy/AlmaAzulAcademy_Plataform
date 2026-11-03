@@ -13,12 +13,46 @@
 -- valor mínimo), e devolve `reservation_standby_target_rejection` ao corpo de
 -- 202610130002_reservation_standby.sql, byte a byte.
 --
--- Recusa (e não muda nada) se existir qualquer uso de cupom registrado. Uma
--- reserva com cupom guarda em `unit_price_cents` o valor com desconto, e o
--- preço de lista, o percentual e o desconto só existem em `coupon_redemptions`:
--- apagar essa tabela apagaria o histórico financeiro, e o Stand-by passaria a
--- recusar a turma de mesmo preço de lista dessas reservas. Cupons cadastrados e
--- nunca usados são removidos junto — a configuração do painel se perde.
+-- Recusa (e não muda nada) se existir qualquer uso de cupom registrado — de
+-- compra confirmada ou não. Uma reserva com cupom guarda em `unit_price_cents`
+-- o valor com desconto, e o preço de lista, o percentual e o desconto só
+-- existem em `coupon_redemptions`: apagar essa tabela apagaria o histórico
+-- financeiro, e o Stand-by passaria a recusar a turma de mesmo preço de lista
+-- dessas reservas. Cupons cadastrados e nunca usados são removidos junto — a
+-- configuração do painel se perde.
+--
+-- ## Concorrência
+--
+-- Uma compra com cupom pode estar em curso em outra conexão. Contar os usos sem
+-- trava não basta: o uso gravado por uma transação ainda aberta é invisível, e
+-- os DROP apagariam esse histórico assim que ela confirmasse. Por isso a
+-- verificação e a remoção acontecem na mesma transação, depois de travar em
+-- ACCESS EXCLUSIVE, de uma vez só, todas as tabelas que a remoção precisa:
+--
+--   reservations → experiences → coupon_settings → coupons
+--   → coupon_experiences → coupon_redemptions
+--
+-- `reservations` e `experiences` entram porque apagar uma tabela com chave
+-- estrangeira para elas trava a tabela referenciada em ACCESS EXCLUSIVE (medido
+-- no Postgres 17). Travá-las depois, já segurando as de cupom, criaria ciclo
+-- com uma compra, que pega `reservations` primeiro e os cupons depois — a mesma
+-- ordem da lista acima.
+--
+-- A trava é tudo ou nada: `LOCK … NOWAIT` numa subtransação, repetido a cada
+-- 50 ms por até 10 s. Uma tentativa que falha devolve o que tinha pegado, então
+-- o rollback nunca espera segurando trava — não entra em ciclo de deadlock com
+-- ninguém. Esgotado o prazo, aborta com ROLLBACK_SEM_TRAVA, sem mudar nada:
+-- é só rodar de novo num momento mais calmo.
+--
+-- Com as travas:
+--   * toda transação que já tocou essas tabelas terminou (ACCESS EXCLUSIVE
+--     espera por todas), e a contagem — feita depois, com leitura nova — vê o
+--     uso que ela confirmou, ou não vê o que ela desfez;
+--   * uma compra que chegar agora espera; quando o rollback confirma, as tabelas
+--     e as funções já não existem e ela falha inteira, sem pré-reserva.
+--
+-- Efeito no site: enquanto o rollback roda (milissegundos), leituras e escritas
+-- em `reservations` e `experiences` esperam. Rodar fora do horário de vendas.
 --
 -- O que NÃO faz: não toca reserva, sessão, pagamento, Stand-by, lista de
 -- espera, auditoria (os registros COUPON_* ficam em admin_audit_log) nem
@@ -30,11 +64,29 @@ set local lock_timeout = '5s';
 
 do $$
 declare
+  attempts integer := 0;
   used integer := 0;
 begin
-  if to_regclass('public.coupon_redemptions') is not null then
-    execute 'select count(*) from public.coupon_redemptions' into used;
-  end if;
+  -- Rollback já feito: nada a travar; o resto do script é idempotente.
+  if to_regclass('public.coupon_redemptions') is null then return; end if;
+
+  loop
+    begin
+      lock table public.reservations, public.experiences, public.coupon_settings,
+                 public.coupons, public.coupon_experiences, public.coupon_redemptions
+        in access exclusive mode nowait;
+      exit;
+    exception when lock_not_available then
+      attempts := attempts + 1;
+      if attempts >= 200 then
+        raise exception 'ROLLBACK_SEM_TRAVA: há transações usando reservas ou cupons há mais de 10 s. Nada foi alterado; tente de novo.';
+      end if;
+      perform pg_sleep(0.05);
+    end;
+  end loop;
+
+  -- Leitura nova, depois das travas: nenhuma transação com uso pendente existe mais.
+  select count(*) into used from public.coupon_redemptions;
   if used > 0 then
     raise exception 'ROLLBACK_RECUSADO: existem % uso(s) de cupom registrados. Nada foi alterado.', used;
   end if;

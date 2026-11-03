@@ -53,9 +53,11 @@
 -- Uma pré-reserva que expira (e esgota a janela de segurança) libera o uso; se
 -- outro cliente o ocupar e o primeiro pagamento for reconciliado depois, os
 -- usos pagos passam do limite. O pagamento **não** é recusado — o dinheiro já
--- entrou pelo valor com desconto. O caso nunca é silencioso: o cupom aparece
--- como OVER_LIMIT, cada uso pago além do limite sai com `overLimit = true` no
--- painel, e `supabase/diagnostics/discount_coupons_report.sql` lista todos.
+-- entrou pelo valor com desconto. O caso nunca é silencioso: o cupom traz
+-- `overLimit = true` e `excessCount` (usos pagos além do limite) em qualquer
+-- situação — ativo, inativo, expirado ou agendado —, cada uso pago além do
+-- limite sai com `overLimit = true` no detalhe, e
+-- `supabase/diagnostics/discount_coupons_report.sql` mostra os excedentes.
 --
 -- ## O que não muda
 --
@@ -85,8 +87,11 @@ create table if not exists public.coupons (
   scope text not null default 'ALL_REGULAR',
   status text not null default 'INACTIVE',
   description text,
-  created_by uuid references auth.users(id) on delete set null,
-  updated_by uuid references auth.users(id) on delete set null,
+  -- Autoria sem chave estrangeira para auth.users, de propósito: a chave faria a
+  -- migration e o rollback travarem a tabela de login. O ator já é conferido
+  -- (`is_active_owner_admin`) e fica também em admin_audit_log.
+  created_by uuid,
+  updated_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   -- Só maiúsculas: a unicidade do código já é sem diferença de caixa.
@@ -128,7 +133,7 @@ create table if not exists public.coupon_redemptions (
   total_cents integer not null,
   created_at timestamptz not null default now(),
   released_at timestamptz,
-  released_by uuid references auth.users(id) on delete set null,
+  released_by uuid,
   released_reason text,
   constraint coupon_redemptions_reservation_key unique (reservation_id),
   constraint coupon_redemptions_percent_range check (percent_off between 1 and 99),
@@ -583,6 +588,13 @@ end;
 $$;
 
 -- Um cupom como o painel o vê: dados, experiências, usos e situação.
+--
+-- `state` é só a situação operacional: INACTIVE, EXPIRED, SCHEDULED, EXHAUSTED
+-- (sem uso livre) ou ACTIVE. O excesso de limite é um alerta à parte, que não
+-- depende dela: `excessCount` = usos pagos (confirmados ou pagos e depois
+-- cancelados) além de `maxUses`, e `overLimit` = `excessCount > 0`. É o mesmo
+-- número de usos com `overLimit` no detalhe e a coluna `excedentes` do
+-- relatório. Nada disso muda quem pode usar o cupom: isso é `coupon_rejection`.
 create or replace function public.admin_coupon_json(p_coupon_id uuid)
 returns jsonb
 language sql
@@ -634,10 +646,11 @@ as $$
       when t.status = 'INACTIVE' then 'INACTIVE'
       when t.valid_until is not null and public.coupon_today() > t.valid_until then 'EXPIRED'
       when t.valid_from is not null and public.coupon_today() < t.valid_from then 'SCHEDULED'
-      when t.max_uses is not null and u.reserved + u.confirmed + u.cancelled_after_payment > t.max_uses then 'OVER_LIMIT'
       when t.max_uses is not null and u.reserved + u.confirmed + u.cancelled_after_payment >= t.max_uses then 'EXHAUSTED'
       else 'ACTIVE'
     end,
+    'overLimit', t.max_uses is not null and u.confirmed + u.cancelled_after_payment > t.max_uses,
+    'excessCount', case when t.max_uses is null then 0 else greatest(u.confirmed + u.cancelled_after_payment - t.max_uses, 0) end,
     'createdAt', t.created_at,
     'updatedAt', t.updated_at
   )
@@ -770,14 +783,14 @@ begin
   end if;
 
   insert into public.admin_audit_log (actor_user_id, action, entity_type, entity_id, metadata)
-  values (p_actor_id, 'COUPON_CREATED', 'COUPON', created_id, jsonb_build_object('coupon', public.admin_coupon_json(created_id) - 'uses' - 'state' - 'locked'));
+  values (p_actor_id, 'COUPON_CREATED', 'COUPON', created_id, jsonb_build_object('coupon', public.admin_coupon_json(created_id) - 'uses' - 'state' - 'locked' - 'overLimit' - 'excessCount'));
 
   return public.admin_coupon_json(created_id);
 end;
 $$;
 
 -- Edição. Depois do primeiro uso, código, percentual e aplicabilidade ficam
--- como estão; o limite nunca desce abaixo dos usos que já contam.
+-- como estão; o limite nunca é reduzido abaixo dos usos que já contam.
 create or replace function public.admin_update_coupon(
   p_actor_id uuid,
   p_coupon_id uuid,
@@ -825,11 +838,16 @@ begin
   if normalized <> target.code and exists (select 1 from public.coupons where code = normalized and id <> target.id) then
     raise exception 'COUPON_CODE_TAKEN' using errcode = '23505';
   end if;
-  if p_max_uses is not null and p_max_uses < public.coupon_uses(target.id) then
+  -- Reduzir o limite abaixo dos usos que já contam é recusado. Manter (ou subir)
+  -- um limite que um pagamento tardio já ultrapassou não é: senão um cupom em
+  -- excesso nunca mais poderia ter data ou descrição editadas.
+  if p_max_uses is not null
+     and p_max_uses < public.coupon_uses(target.id)
+     and (target.max_uses is null or p_max_uses < target.max_uses) then
     raise exception 'COUPON_LIMIT_BELOW_USAGE' using errcode = '22023';
   end if;
 
-  before_json := public.admin_coupon_json(target.id) - 'uses' - 'state' - 'locked';
+  before_json := public.admin_coupon_json(target.id) - 'uses' - 'state' - 'locked' - 'overLimit' - 'excessCount';
 
   update public.coupons
   set code = normalized,
@@ -852,7 +870,7 @@ begin
   insert into public.admin_audit_log (actor_user_id, action, entity_type, entity_id, metadata)
   values (p_actor_id, 'COUPON_UPDATED', 'COUPON', target.id, jsonb_build_object(
     'before', before_json,
-    'after', public.admin_coupon_json(target.id) - 'uses' - 'state' - 'locked'
+    'after', public.admin_coupon_json(target.id) - 'uses' - 'state' - 'locked' - 'overLimit' - 'excessCount'
   ));
 
   return public.admin_coupon_json(target.id);

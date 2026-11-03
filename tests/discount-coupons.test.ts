@@ -21,6 +21,7 @@ import test from "node:test";
 import {
   couponAdminError,
   couponBreakdown,
+  couponOverLimitLabel,
   couponRejection,
   couponRejectionMessage,
   discountedUnitPriceCents,
@@ -39,6 +40,8 @@ const OPERATOR = "c0000000-0000-4000-8000-000000000004";
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 }
+
+const REPORT = source("supabase/diagnostics/discount_coupons_report.sql");
 
 const db = await fullDatabase();
 const fx = await rescheduleFixtures(async (sql, params = []) => (await db.query(sql, params)).rows as Row[]);
@@ -461,13 +464,129 @@ test("pagamento tardio acima do limite: confirma, mas o cupom e o uso aparecem c
   assert.equal((await reservation(late.reservationId)).status, "CONFIRMED");
 
   const shown = await detail(coupon.id);
-  assert.equal(shown.state, "OVER_LIMIT");
+  assert.equal(shown.state, "EXHAUSTED", "a situação operacional: sem uso livre");
+  assert.equal(shown.overLimit, true);
+  assert.equal(shown.excessCount, 1);
   assert.equal(shown.uses.counted, 2);
   const flagged = shown.redemptions.filter((item: Row) => item.overLimit).map((item: Row) => item.reservationId);
   assert.deepEqual(flagged, [late.reservationId], "o uso confirmado por último é o que passou do limite");
   const listed = (await call(`public.admin_list_coupons($1::uuid)`, [OPERATOR])).find((item: Row) => item.id === coupon.id);
-  assert.equal(listed.state, "OVER_LIMIT");
+  assert.deepEqual([listed.state, listed.overLimit, listed.excessCount], ["EXHAUSTED", true, 1]);
   await rejects(bookWithCoupon(session, coupon.code, 1), /COUPON_EXHAUSTED/);
+});
+
+/**
+ * Cupom de `maxUses` usos com `excess` pagamentos tardios além do limite: cada
+ * pré-reserva tardia expira, outra pessoa ocupa o uso e paga, e depois a
+ * reconciliação confirma o pagamento tardio.
+ */
+async function overLimitCoupon(maxUses: number, excess: number) {
+  const session = await regularSession(7_000, 40);
+  const coupon = await createCoupon({ maxUses });
+  const late: string[] = [];
+  for (let index = 0; index < excess; index += 1) {
+    const booking = await bookWithCoupon(session, coupon.code, 1);
+    await expire(booking.reservationId);
+    late.push(booking.reservationId);
+  }
+  for (let index = 0; index < maxUses; index += 1) {
+    const booking = await bookWithCoupon(session, coupon.code, 1);
+    assert.equal(await pay(booking.reservationId, 6_300), true);
+    await rows(`update public.reservations set confirmed_at = confirmed_at - interval '1 hour' where id = $1::uuid`, [booking.reservationId]);
+  }
+  for (const id of late) {
+    assert.equal(await call(`public.reconcile_reservation_payment($1::uuid, 'INFINITEPAY', $2, 6300, '', '{}'::jsonb)`, [id, `tx-tardio-${id}`]), "RECONCILED");
+  }
+  return { coupon, session, late };
+}
+
+async function reportRow(code: string) {
+  return (await db.query<Row>(REPORT)).rows.find((row) => row.codigo === code)!;
+}
+
+/** O alerta do cupom, os usos marcados no detalhe e o relatório dizem a mesma coisa. */
+async function assertAlertConsistent(couponId: string, code: string, excess: number) {
+  const shown = await detail(couponId);
+  assert.equal(shown.overLimit, excess > 0);
+  assert.equal(shown.excessCount, excess);
+  assert.equal(shown.redemptions.filter((item: Row) => item.overLimit).length, excess);
+  const line = await reportRow(code);
+  assert.equal(Number(line.excedentes), excess);
+  assert.equal(line.limite_excedido, excess > 0);
+  assert.equal(line.situacao, shown.state, "a situação do relatório é a do painel");
+  return shown;
+}
+
+test("excesso independente da situação: ativo, inativo, expirado e agendado continuam mostrando o excesso", async () => {
+  // Ativo (sem uso livre): EXHAUSTED + 2 excedentes.
+  const active = await overLimitCoupon(1, 2);
+  const shownActive = await assertAlertConsistent(active.coupon.id, active.coupon.code, 2);
+  assert.equal(shownActive.state, "EXHAUSTED");
+  assert.equal(couponOverLimitLabel(shownActive), "Limite excedido: 2 utilizações");
+
+  const inactive = await overLimitCoupon(1, 1);
+  await call(`public.admin_set_coupon_status($1::uuid, $2::uuid, 'INACTIVE', 'fim')`, [ADMIN, inactive.coupon.id]);
+  const shownInactive = await assertAlertConsistent(inactive.coupon.id, inactive.coupon.code, 1);
+  assert.equal(shownInactive.state, "INACTIVE");
+  assert.equal(couponOverLimitLabel(shownInactive), "Limite excedido: 1 utilização");
+
+  const expired = await overLimitCoupon(2, 1);
+  await updateCoupon(expired.coupon.id, await detail(expired.coupon.id), { validUntil: await shiftDays(-1) });
+  assert.equal((await assertAlertConsistent(expired.coupon.id, expired.coupon.code, 1)).state, "EXPIRED");
+
+  const scheduled = await overLimitCoupon(1, 1);
+  await updateCoupon(scheduled.coupon.id, await detail(scheduled.coupon.id), { validFrom: await shiftDays(5) });
+  assert.equal((await assertAlertConsistent(scheduled.coupon.id, scheduled.coupon.code, 1)).state, "SCHEDULED");
+
+  // Em excesso, o cupom continua editável; só não dá para baixar o limite.
+  await rejects(updateCoupon(expired.coupon.id, await detail(expired.coupon.id), { maxUses: 1 }), /COUPON_LIMIT_BELOW_USAGE/);
+  assert.equal((await updateCoupon(expired.coupon.id, await detail(expired.coupon.id), { description: "Campanha encerrada" })).maxUses, 2);
+  assert.equal((await updateCoupon(expired.coupon.id, await detail(expired.coupon.id), { maxUses: 3 })).overLimit, false, "subir o limite até os usos pagos encerra o excesso");
+
+  // O alerta não muda quem pode usar: continua tudo recusado pelo motivo de sempre.
+  await rejects(bookWithCoupon(active.session, active.coupon.code, 1), /COUPON_EXHAUSTED/);
+  await rejects(bookWithCoupon(active.session, inactive.coupon.code, 1), /COUPON_INACTIVE/);
+  await rejects(bookWithCoupon(active.session, expired.coupon.code, 1), /COUPON_EXPIRED/);
+  await rejects(bookWithCoupon(active.session, scheduled.coupon.code, 1), /COUPON_NOT_STARTED/);
+});
+
+test("excesso: sem falso alerta no limite exato, com uso reservado, sem limite, liberado ou expirado", async () => {
+  const session = await regularSession(7_000, 40);
+
+  // Exatamente no limite, pago.
+  const exact = await createCoupon({ maxUses: 2 });
+  for (let index = 0; index < 2; index += 1) {
+    const booking = await bookWithCoupon(session, exact.code, 1);
+    await pay(booking.reservationId, booking.totalCents);
+  }
+  assert.equal((await assertAlertConsistent(exact.id, exact.code, 0)).state, "EXHAUSTED");
+  assert.equal(couponOverLimitLabel(await detail(exact.id)), null);
+
+  // Usos reservados (ainda não pagos) ocupam o limite, mas não são excesso.
+  const pending = await createCoupon({ maxUses: 1 });
+  await bookWithCoupon(session, pending.code, 1);
+  assert.equal((await assertAlertConsistent(pending.id, pending.code, 0)).state, "EXHAUSTED");
+
+  // Sem limite, nunca há excesso.
+  const unlimited = await createCoupon();
+  for (let index = 0; index < 3; index += 1) {
+    const booking = await bookWithCoupon(session, unlimited.code, 1);
+    await pay(booking.reservationId, booking.totalCents);
+  }
+  assert.equal((await assertAlertConsistent(unlimited.id, unlimited.code, 0)).state, "ACTIVE");
+
+  // Pré-reserva expirada sem pagamento e uso liberado não contam.
+  const freed = await createCoupon({ maxUses: 1 });
+  const lapsed = await bookWithCoupon(session, freed.code, 1);
+  await expire(lapsed.reservationId);
+  const refunded = await bookWithCoupon(session, freed.code, 1);
+  await pay(refunded.reservationId, refunded.totalCents);
+  await call(`public.admin_cancel_reservation($1::uuid, $2::uuid, 'Reembolso')`, [ADMIN, refunded.reservationId]);
+  const [redemption] = (await detail(freed.id)).redemptions.filter((item: Row) => item.reservationId === refunded.reservationId);
+  await call(`public.admin_release_coupon_redemption($1::uuid, $2::uuid, 'Reembolso integral')`, [ADMIN, redemption.id]);
+  const paidAgain = await bookWithCoupon(session, freed.code, 1);
+  await pay(paidAgain.reservationId, paidAgain.totalCents);
+  assert.equal((await assertAlertConsistent(freed.id, freed.code, 0)).state, "EXHAUSTED");
 });
 
 // ===========================================================================
@@ -778,7 +897,6 @@ test("migration: aditiva e idempotente; só a régua de preço do Stand-by muda 
 
 const PREFLIGHT = source("supabase/diagnostics/discount_coupons_preflight.sql");
 const POSTCHECK = source("supabase/diagnostics/discount_coupons_postcheck.sql");
-const REPORT = source("supabase/diagnostics/discount_coupons_report.sql");
 const ROLLBACK = source("supabase/rollback/202611020001_discount_coupons.rollback.sql");
 
 type Check = { check_name: string; result: string; status: string };
@@ -796,6 +914,7 @@ test("preflight e postcheck: aprovam o banco do repositório, nas duas pontas", 
   for (const [name, row] of post) assert.equal(row.status, "OK", `${name}: ${row.result}`);
   assert.equal(post.get("FUNCOES_NOVAS_COM_A_DEFINICAO_DO_REPOSITORIO")?.result, `${NEW_FUNCTIONS.length} de ${NEW_FUNCTIONS.length}`);
   assert.match(post.get("VALOR_MINIMO")!.result, /^não definido/);
+  assert.equal(post.get("CHAVES_ESTRANGEIRAS_DOS_CUPONS")?.result, "experiences, reservations");
   for (const count of ["ASSINATURA_DAS_OUTRAS_FUNCOES", "RESERVAS_POR_STATUS"]) {
     assert.equal(post.get(count)?.result, pre.get(count)?.result, count);
   }
@@ -817,7 +936,9 @@ test("relatório: mostra usos e excedentes sem dado pessoal", async () => {
   assert.ok(shown.length >= 1);
   const keys = Object.keys(shown[0]).join(",");
   assert.doesNotMatch(keys, /name|email|cpf|phone/i);
-  assert.ok(shown.some((row) => row.situacao === "OVER_LIMIT"), "o pagamento tardio acima do limite aparece");
+  assert.ok(shown.some((row) => row.limite_excedido === true && Number(row.excedentes) > 0), "o pagamento tardio acima do limite aparece");
+  assert.ok(!shown.some((row) => row.situacao === "OVER_LIMIT"), "excesso não é situação operacional");
+  for (const row of shown) assert.equal(row.limite_excedido, Number(row.excedentes) > 0, row.codigo);
 });
 
 test("rollback: recusa com uso registrado; sem uso, remove tudo e devolve a régua do Stand-by", async () => {

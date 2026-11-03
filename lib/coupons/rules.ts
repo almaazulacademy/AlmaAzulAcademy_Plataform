@@ -70,6 +70,22 @@ export function couponBreakdown(unitPriceCents: number, percentOff: number, quan
   };
 }
 
+/**
+ * Situação operacional de um cupom no painel (`state` de `admin_coupon_json`).
+ * O excesso de limite não é uma situação: vem à parte, em `overLimit` e
+ * `excessCount`, e vale com qualquer uma delas.
+ */
+export const COUPON_STATES = ["ACTIVE", "INACTIVE", "EXPIRED", "SCHEDULED", "EXHAUSTED"] as const;
+export type CouponState = (typeof COUPON_STATES)[number];
+
+export type CouponLimitAlert = { overLimit: boolean; excessCount: number };
+
+/** "Limite excedido: 2 utilizações", ou null quando não há excesso. */
+export function couponOverLimitLabel(alert: CouponLimitAlert) {
+  if (!alert.overLimit || alert.excessCount < 1) return null;
+  return `Limite excedido: ${alert.excessCount} ${alert.excessCount === 1 ? "utilização" : "utilizações"}`;
+}
+
 /** Recusas do checkout (prévia e pré-reserva), na forma em que o banco as devolve. */
 export const COUPON_REJECTIONS = [
   "COUPON_NOT_FOUND",
@@ -119,7 +135,7 @@ const ADMIN_ERROR_MESSAGES: Record<string, { status: number; message: string; fi
   COUPON_INVALID_STATUS: { status: 400, message: "Status inválido.", field: "status" },
   COUPON_INVALID_DESCRIPTION: { status: 400, message: "A descrição aceita até 500 caracteres.", field: "description" },
   COUPON_LOCKED_FIELDS: { status: 409, message: "Este cupom já foi utilizado: código, percentual e aplicabilidade não podem mais mudar." },
-  COUPON_LIMIT_BELOW_USAGE: { status: 409, message: "O limite não pode ficar abaixo das utilizações já reservadas ou confirmadas.", field: "maxUses" },
+  COUPON_LIMIT_BELOW_USAGE: { status: 409, message: "O limite não pode ser reduzido abaixo das utilizações já reservadas ou confirmadas.", field: "maxUses" },
   COUPON_NOT_FOUND: { status: 404, message: "Cupom não encontrado." },
   COUPON_REDEMPTION_NOT_FOUND: { status: 404, message: "Utilização não encontrada." },
   COUPON_RELEASE_NOT_ALLOWED: { status: 409, message: "Só é possível liberar a utilização de uma reserva paga e depois cancelada." },

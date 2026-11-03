@@ -4,10 +4,13 @@
 -- Sem nome, CPF, e-mail ou telefone. Rodar no SQL Editor a qualquer momento
 -- depois da migration `202611020001_discount_coupons.sql`.
 --
--- `excedentes` > 0 é o pagamento tardio acima do limite: uma pré-reserva
--- expirou (e liberou o uso), outra pessoa ocupou o uso, e o primeiro pagamento
--- foi confirmado depois pela reconciliação. O pagamento vale — o dinheiro já
--- entrou pelo valor com desconto —, mas o caso precisa ser lido pela operação.
+-- `situacao` é a situação operacional (a mesma `state` do painel). O excesso de
+-- limite é independente dela: `limite_excedido` e `excedentes` (usos pagos além
+-- do limite) aparecem com o cupom ativo, inativo, expirado ou agendado. É o
+-- pagamento tardio acima do limite: uma pré-reserva expirou (e liberou o uso),
+-- outra pessoa ocupou o uso, e o primeiro pagamento foi confirmado depois pela
+-- reconciliação. O pagamento vale — o dinheiro já entrou pelo valor com
+-- desconto —, mas o caso precisa ser lido pela operação.
 --
 -- Valores em centavos. `receita_confirmada` soma o que foi efetivamente cobrado
 -- (reservas confirmadas ou em Stand-by); `desconto_confirmado` é o que deixou
@@ -39,10 +42,10 @@ select c.code as codigo,
          when c.status = 'INACTIVE' then 'INACTIVE'
          when c.valid_until is not null and public.coupon_today() > c.valid_until then 'EXPIRED'
          when c.valid_from is not null and public.coupon_today() < c.valid_from then 'SCHEDULED'
-         when c.max_uses is not null and p.reservados + p.confirmados + p.cancelados_apos_pagamento > c.max_uses then 'OVER_LIMIT'
          when c.max_uses is not null and p.reservados + p.confirmados + p.cancelados_apos_pagamento >= c.max_uses then 'EXHAUSTED'
          else 'ACTIVE'
        end as situacao,
+       coalesce(c.max_uses is not null and p.confirmados + p.cancelados_apos_pagamento > c.max_uses, false) as limite_excedido,
        c.valid_from as valido_de,
        c.valid_until as valido_ate,
        c.max_uses as limite,

@@ -24,7 +24,7 @@
 - Aplicabilidade: todas as experiências regulares, ou experiências selecionadas. **Evento especial só aceita cupom quando é selecionado.**
 - O uso fica **reservado** enquanto a pré-reserva vale (inclusive na janela de segurança do pagamento) e **contado para sempre** depois de pago, mesmo se a reserva for cancelada. Só o ADMIN libera, com justificativa, o uso de uma reserva paga e depois cancelada.
 - **ADMIN** cria, edita, ativa, desativa e libera; **OPERATOR** só consulta.
-- Depois do primeiro uso (qualquer um, mesmo expirado), código, percentual e aplicabilidade ficam travados. O limite nunca desce abaixo dos usos que já contam.
+- Depois do primeiro uso (qualquer um, mesmo expirado), código, percentual e aplicabilidade ficam travados. O limite nunca é reduzido abaixo dos usos que já contam; manter ou subir um limite que um pagamento tardio já ultrapassou é permitido, para o cupom continuar editável.
 - Campo no checkout: sempre nas experiências regulares; em evento especial, só quando algum cupom ativo e não vencido o seleciona.
 
 ## Onde o desconto mora
@@ -93,10 +93,22 @@ Webhook repetido não muda nada. Pagamento tardio reconciliado volta a contar po
 
 Uma pré-reserva que expira (e esgota a janela de segurança) libera o uso; se outro cliente o ocupar e o primeiro pagamento for reconciliado depois, os usos pagos passam do limite. **O pagamento não é recusado** — o dinheiro já entrou pelo valor com desconto, e recusar significaria estorno ou vaga sem dono. O caso nunca é silencioso:
 
-- o cupom aparece como `OVER_LIMIT` em `admin_list_coupons` / `admin_get_coupon` (e no painel da fase 3);
-- cada uso pago além do limite, na ordem de confirmação, sai com `overLimit = true`;
-- novos usos continuam recusados (`COUPON_EXHAUSTED`);
-- `supabase/diagnostics/discount_coupons_report.sql` mostra a coluna `excedentes`.
+- o cupom traz `overLimit = true` e `excessCount` (usos pagos além do limite) em `admin_list_coupons` / `admin_get_coupon`;
+- cada uso pago além do limite, na ordem de confirmação, sai com `overLimit = true` no detalhe;
+- novos usos continuam recusados pelo motivo de sempre (`COUPON_EXHAUSTED`, ou inativo, expirado, ainda não válido);
+- `supabase/diagnostics/discount_coupons_report.sql` mostra `limite_excedido` e `excedentes`.
+
+### Situação operacional e alerta de excesso
+
+São dois dados separados, para nenhum excesso ficar escondido atrás da situação do cupom (correção da revisão de 02/11/2026):
+
+| Campo | O que diz | Valores |
+| --- | --- | --- |
+| `state` | Situação operacional | `INACTIVE`, `EXPIRED`, `SCHEDULED`, `EXHAUSTED` (sem uso livre), `ACTIVE` — nessa precedência |
+| `overLimit` | Há uso pago além do limite? | `true` / `false`, com qualquer `state` |
+| `excessCount` | Quantos | Usos confirmados ou pagos e depois cancelados, menos `maxUses`; 0 sem limite |
+
+`excessCount` é sempre o número de usos com `overLimit` no detalhe e a coluna `excedentes` do relatório. Uso só reservado (não pago) ocupa o limite mas não é excesso; uso liberado ou expirado sem pagamento não conta. O painel pode mostrar "EXPIRED — Limite excedido: 2 utilizações" com `couponOverLimitLabel` (`lib/coupons/rules.ts`), sem interpretar `state`. O alerta não muda a elegibilidade: quem decide novos usos continua sendo `coupon_rejection`.
 
 ### Stand-by
 
@@ -121,11 +133,25 @@ O mínimo aceito pela InfinitePay **não está confirmado** e o código não pre
 3. `supabase/diagnostics/discount_coupons_postcheck.sql` → `CUPONS_POSTCHECK_OK` OK, mesma assinatura do preflight.
 4. Nada muda no site: as variáveis continuam desligadas e o mínimo continua nulo.
 
-**Rollback.** O operacional é desligar as variáveis ou desativar o cupom. O do banco é `supabase/rollback/202611020001_discount_coupons.rollback.sql`: remove tudo o que a migration criou e devolve a régua do Stand-by byte a byte. **Recusa, sem alterar nada, se existir qualquer uso registrado** — apagar `coupon_redemptions` apagaria o preço de lista e o desconto dessas reservas. Cupons nunca usados são removidos junto.
+**Rollback.** O operacional é desligar as variáveis ou desativar o cupom. O do banco é `supabase/rollback/202611020001_discount_coupons.rollback.sql`: remove tudo o que a migration criou e devolve a régua do Stand-by byte a byte. **Recusa, sem alterar nada, se existir qualquer uso registrado, confirmado ou não** — apagar `coupon_redemptions` apagaria o preço de lista e o desconto dessas reservas. Cupons nunca usados são removidos junto.
+
+### Rollback seguro com compras em curso
+
+Correção da revisão de 02/11/2026. Contar os usos sem trava não bastava: o uso gravado por uma compra ainda aberta é invisível, e os `DROP` apagariam esse histórico assim que ela confirmasse. Agora a verificação e a remoção acontecem na mesma transação, depois de travar em `ACCESS EXCLUSIVE`, numa única instrução:
+
+`reservations → experiences → coupon_settings → coupons → coupon_experiences → coupon_redemptions`
+
+- **Por que `reservations` e `experiences`.** Apagar uma tabela com chave estrangeira trava a tabela referenciada em `ACCESS EXCLUSIVE` (medido no Postgres 17). Se o rollback as travasse só na hora do `DROP`, já segurando as de cupom, fecharia ciclo com uma compra, que lê `reservations` primeiro e os cupons depois — a ordem da lista. Por isso as chaves de autoria para `auth.users` foram retiradas das tabelas de cupom (o ator já é conferido e fica em `admin_audit_log`): o rollback não precisa travar a tabela de login.
+- **Tudo ou nada, sem esperar segurando trava.** `LOCK … NOWAIT` numa subtransação, repetido a cada 50 ms por até 10 s. Uma tentativa que falha devolve o que tinha pegado; o rollback nunca espera segurando trava e não entra em ciclo de deadlock com ninguém. Esgotado o prazo: `ROLLBACK_SEM_TRAVA`, nada alterado — rodar de novo.
+- **Transações já iniciadas.** `ACCESS EXCLUSIVE` só é concedido quando todas as transações que tocaram essas tabelas terminaram. A contagem vem depois, com leitura nova: vê o uso que uma compra confirmou, ou não vê o que ela desfez.
+- **Compra que chega depois.** Espera as travas; quando o rollback confirma, tabelas e funções já não existem e ela falha inteira, sem pré-reserva nem uso. Reserva sem cupom segue normalmente.
+- **Efeito no site.** Durante o rollback (milissegundos), leituras e escritas em `reservations` e `experiences` esperam. Rodar fora do horário de vendas.
 
 `supabase/diagnostics/discount_coupons_report.sql` (somente leitura, sem dado pessoal) mostra, por cupom, situação, usos por estado, excedentes, receita e desconto confirmados.
 
 ## Testes
 
 - `tests/discount-coupons.test.ts` (PGlite, todas as migrations): cálculo e arredondamento (banco e TypeScript iguais), cupom válido, vários participantes, cada recusa sem deixar reserva, validade em Brasília, reserva sem cupom, 100% recusado, mínimo nulo e abaixo do mínimo, código sem diferença de caixa, evento não elegível e selecionado, confirmação e webhook repetido, manipulação de valor, expiração e cancelamento sem pagamento, janela de segurança, pagamento tardio acima do limite, idempotência, troca de turma, Stand-by com e sem cupom, cancelamento depois do pagamento e liberação, permissões, travas de edição, limite abaixo do uso, valores preservados depois de alterar ou desativar, auditoria, migration aditiva e idempotente, preflight, postcheck, relatório e rollback.
+- `tests/discount-coupons.test.ts` também cobre o alerta de excesso: ativo (`EXHAUSTED`), inativo, expirado e agendado acima do limite; ausência de falso alerta no limite exato, com uso reservado, sem limite, com uso liberado e com pré-reserva expirada; e a mesma contagem no cupom, nos usos marcados e no relatório.
 - `tests/discount-coupons-concurrency.test.ts` (Postgres real, obrigatório no CI): 16 compras para 5 usos, último uso disputado (com confirmação e com desistência), a mesma tentativa em paralelo, cupom e vagas disputados juntos sem deadlock, e edição do limite durante uma compra.
+- `tests/discount-coupons-rollback-concurrency.test.ts` (Postgres real, obrigatório no CI, um banco por cenário): A) compra aberta com uso gravado → o rollback espera e recusa depois do commit; B) compra que desiste → o rollback segue; C) rollback com as travas → a compra espera e falha sem pré-reserva; D) uso confirmado → recusa com tudo preservado; E) transação que leu reservas e depois compra com cupom → sem deadlock.
