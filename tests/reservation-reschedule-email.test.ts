@@ -78,6 +78,10 @@ const INTERNAL_FUNCTIONS = [
   "reservation_reschedule_email_take",
 ];
 
+// As verificações das etapas do Stand-by conferem `reservation_standby_target_rejection`
+// como ela era. A 202611020001 (cupons) reescreve a régua de preço de propósito,
+// então os bancos dessas verificações param antes dela.
+const BEFORE_COUPONS = "202610310004_event_publication_security.sql";
 const db = await fullDatabase();
 const query: Query = async (sql, params = []) => (await db.query(sql, params)).rows as Row[];
 
@@ -1680,8 +1684,9 @@ test("postcheck: aprovado depois da migration, com a fila em uso; antes dela, ne
 
   // Os postchecks das etapas anteriores continuam valendo com esta migration
   // aplicada. O da etapa 2 exige banco sem Stand-by em uso; o do painel, não.
-  assert.deepEqual(failing(await diagnostic(await fullDatabase(), "diagnostics/reservation_standby_postcheck.sql")), []);
-  assert.deepEqual(failing(await diagnostic(db, "diagnostics/reservation_standby_admin_panel_postcheck.sql")), []);
+  const beforeCoupons = await fullDatabase({ until: BEFORE_COUPONS });
+  assert.deepEqual(failing(await diagnostic(beforeCoupons, "diagnostics/reservation_standby_postcheck.sql")), []);
+  assert.deepEqual(failing(await diagnostic(beforeCoupons, "diagnostics/reservation_standby_admin_panel_postcheck.sql")), []);
 
   // Sem a migration, as tabelas não existem: o postcheck falha em vez de aprovar.
   await rejects(diagnostic(await fullDatabase({ until: PANEL_MIGRATION }), POSTCHECK), /reservation_reschedule_email/);
@@ -1833,7 +1838,7 @@ test("estado do Stand-by: só leitura, sem dados do cliente, e o Lago Norte sem 
 });
 
 test("rollback: remove a trigger e as funções, mantém o registro, e o reagendamento volta a ser o da etapa 3", async () => {
-  const database = await fullDatabase();
+  const database = await fullDatabase({ until: BEFORE_COUPONS });
   const fx = await fixturesOf(database);
   const first = await fx.rescheduled();
   // Dois envios a meio caminho quando o rollback acontece: um com resultado
