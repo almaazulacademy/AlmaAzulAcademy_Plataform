@@ -236,12 +236,15 @@ test("toda rota /api/admin exige papel administrativo; só o check-in aceita ins
       // As rotas de Stand-by e da lista de espera passam por `authorizeStandbyApi`
       // e `authorizeWaitlistAdminApi`, que só acrescentam a checagem de ativação
       // e delegam a `authorizeAdminApi` — conferido abaixo.
-      assert.ok(/authorize(Admin|Standby|WaitlistAdmin)Api\(\)/.test(text), route);
+      assert.ok(/authorize(Admin|Standby|WaitlistAdmin)Api\(\)|authorizeCouponsApi\(\{ manage: (true|false) \}\)/.test(text), route);
       if (/authorizeStandbyApi\(\)/.test(text)) {
         assert.equal([...text.matchAll(/await authorizeStandbyApi\(\)/g)].length, exported, route);
       }
       if (/authorizeWaitlistAdminApi\(\)/.test(text)) {
         assert.equal([...text.matchAll(/await authorizeWaitlistAdminApi\(\)/g)].length, exported, route);
+      }
+      if (/authorizeCouponsApi\(/.test(text)) {
+        assert.equal([...text.matchAll(/await authorizeCouponsApi\(\{ manage: (true|false) \}\)/g)].length, exported, route);
       }
     }
   }
@@ -250,6 +253,9 @@ test("toda rota /api/admin exige papel administrativo; só o check-in aceita ins
   assert.match(standby, /^export async function authorizeStandbyApi\(\) \{[\s\S]*?return authorizeAdminApi\(\);\n\}/);
   const waitlist = http.slice(http.indexOf("export async function authorizeWaitlistAdminApi"));
   assert.match(waitlist, /^export async function authorizeWaitlistAdminApi\(\) \{[\s\S]*?return authorizeAdminApi\(\);\n\}/);
+  // Cupons: ativação, depois `authorizeAdminApi`, e só então a regra de gestão (só ADMIN).
+  const coupons = http.slice(http.indexOf("export async function authorizeCouponsApi"));
+  assert.match(coupons, /^export async function authorizeCouponsApi\(options: \{ manage: boolean \}\) \{[\s\S]*?const authorization = await authorizeAdminApi\(\);\n\s*if \(!authorization\.context\) return authorization;[\s\S]*?return authorization;\n\}/);
 });
 
 test("área do instrutor exige sessão da equipe e não usa nada do painel restrito", () => {
