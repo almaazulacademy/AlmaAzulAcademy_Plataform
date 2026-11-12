@@ -1,5 +1,11 @@
 # Changelog
 
+## Cupons de desconto — fase 2 (banco e regras)
+
+- **Migration `202611020001_discount_coupons.sql`, não aplicada** (não antes de 08/11/2026): cupons percentuais de 1% a 99%, usos com valores congelados, prévia, pré-reserva com cupom envolvendo `create_pre_reservation` (que não muda), painel por RPC com auditoria, e régua de preço do Stand-by comparando o preço de lista.
+- **Nada ligado**: `COUPONS_ADMIN_ENABLED` e `COUPONS_CHECKOUT_ENABLED` ausentes; `coupon_settings.min_charge_cents` nulo até o mínimo da InfinitePay ser confirmado. Reserva sem cupom segue o caminho de sempre.
+- Preflight, postcheck, relatório de usos e rollback em `supabase/`. Detalhes em [docs/discount-coupons.md](docs/discount-coupons.md).
+
 ## ESSÊNCIA — lançamento
 
 - **Em produção desde 31/10/2026**: evento publicado, página no ar e inscrições abertas, só em Production; lista de espera desligada.

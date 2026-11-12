@@ -20,9 +20,14 @@ import { isStandbyOriginUpdateOnly, parseStandbyOriginRows } from "../lib/integr
 import { syncSnapshot } from "../lib/integrations/google-sheets/sync.ts";
 import { createFakeSheets, type FakeSheets } from "./support/fake-sheets.ts";
 import { applyMigration, fullDatabase } from "./support/full-database.ts";
+import { rescheduleFixtures } from "./support/reschedule-email-fixtures.ts";
 
 const STANDBY_MIGRATION = "202610130002_reservation_standby.sql";
 const PANEL_MIGRATION = "202610140001_reservation_standby_admin_panel.sql";
+// As verificações das etapas do Stand-by conferem `reservation_standby_target_rejection`
+// como ela era. A 202611020001 (cupons) reescreve a régua de preço de propósito,
+// então os bancos dessas verificações param antes dela.
+const BEFORE_COUPONS = "202610310004_event_publication_security.sql";
 const PANEL_FUNCTIONS = [
   "admin_list_standby_reservations_page",
   "admin_reschedule_standby_same_price",
@@ -1235,7 +1240,7 @@ test("preflight do painel: aprovado antes da migration e reprovado depois dela",
   assert.match(resultOf(approved, "REAGENDAMENTO_SEM_REGUA_COM_A_ASSINATURA_ESPERADA"), /ainda executável pela service_role/);
   for (const row of approved) assert.ok(["OK", "ATENCAO", "FALHOU"].includes(row.status), `${row.check_name}: ${row.status}`);
 
-  assert.deepEqual(failing(await diagnostic(db, PREFLIGHT)), ["FUNCOES_DO_PAINEL_AINDA_NAO_EXISTEM=FALHOU", "STANDBY_PAINEL_PREFLIGHT_OK=FALHOU"]);
+  assert.deepEqual(failing(await diagnostic(await fullDatabase({ until: BEFORE_COUPONS }), PREFLIGHT)), ["FUNCOES_DO_PAINEL_AINDA_NAO_EXISTEM=FALHOU", "STANDBY_PAINEL_PREFLIGHT_OK=FALHOU"]);
 });
 
 test("preflight do painel: diferença só de formatação não bloqueia; diferença de conteúdo é identificada", async () => {
@@ -1284,9 +1289,11 @@ test("preflight do painel: diferença só de formatação não bloqueia; diferen
 });
 
 test("postcheck do painel: aprovado depois da migration, com Stand-by em uso", async () => {
-  // `db` já tem centenas de reservas em Stand-by dos testes acima: o postcheck
-  // do painel não depende de a tabela estar vazia.
-  const approved = await diagnostic(db, POSTCHECK);
+  // Uma reserva em Stand-by: o postcheck do painel não depende de a tabela estar vazia.
+  const inUse = await fullDatabase({ until: BEFORE_COUPONS });
+  const local = await rescheduleFixtures(async (sql, params = []) => (await inUse.query(sql, params)).rows as Row[]);
+  await local.setStandby((await local.reserve(await local.makeSession(local.IMERSAO.id, { price: local.uniquePrice() }), 1)).id);
+  const approved = await diagnostic(inUse, POSTCHECK);
   assert.deepEqual(failing(approved), [], JSON.stringify(approved, null, 2));
   assert.equal(approved.at(-1)?.check_name, "STANDBY_PAINEL_POSTCHECK_OK");
   assert.equal(approved.at(-1)?.result, "0 falha(s), 0 ponto(s) de atenção");
@@ -1302,18 +1309,18 @@ test("postcheck do painel: aprovado depois da migration, com Stand-by em uso", a
   // O postcheck da etapa anterior vale nos dois estados: logo depois dela, com a
   // função sem régua ainda executável, e depois desta, com o privilégio retirado.
   assert.deepEqual(failing(await diagnostic(before, "diagnostics/reservation_standby_postcheck.sql")), []);
-  assert.deepEqual(failing(await diagnostic(await fullDatabase(), "diagnostics/reservation_standby_postcheck.sql")), []);
+  assert.deepEqual(failing(await diagnostic(await fullDatabase({ until: BEFORE_COUPONS }), "diagnostics/reservation_standby_postcheck.sql")), []);
 });
 
 test("postcheck do painel: sensível a privilégio, a conteúdo alterado e a privilégio devolvido — e tolerante a formatação", async () => {
   // Função do painel exposta à API pública.
-  const exposed = await fullDatabase();
+  const exposed = await fullDatabase({ until: BEFORE_COUPONS });
   await exposed.exec(`grant execute on function public.admin_standby_reschedule_options(uuid, uuid) to authenticated;`);
   assert.deepEqual(failing(await diagnostic(exposed, POSTCHECK)), ["NENHUMA_FUNCAO_EXECUTAVEL_PELA_API_PUBLICA=FALHOU", "STANDBY_PAINEL_POSTCHECK_OK=FALHOU"]);
 
   // O reagendamento sem régua voltou ao alcance da service role (por exemplo,
   // reaplicando a migration da etapa anterior).
-  const regranted = await fullDatabase();
+  const regranted = await fullDatabase({ until: BEFORE_COUPONS });
   await applyMigration(regranted, STANDBY_MIGRATION);
   const reopened = await diagnostic(regranted, POSTCHECK);
   assert.deepEqual(failing(reopened), ["REAGENDAMENTO_SEM_REGUA_FORA_DO_ALCANCE=FALHOU", "STANDBY_PAINEL_POSTCHECK_OK=FALHOU"]);
@@ -1323,7 +1330,7 @@ test("postcheck do painel: sensível a privilégio, a conteúdo alterado e a pri
   assert.deepEqual(failing(await diagnostic(regranted, POSTCHECK)), []);
 
   // Só formatação, em função criada e em função não substituída: continua OK.
-  const formatted = await fullDatabase();
+  const formatted = await fullDatabase({ until: BEFORE_COUPONS });
   await redefine(formatted, "admin_reschedule_standby_same_price", reformat);
   await redefine(formatted, "admin_change_reservation_session", reformat);
   const formatOnly = await diagnostic(formatted, POSTCHECK);
@@ -1331,14 +1338,14 @@ test("postcheck do painel: sensível a privilégio, a conteúdo alterado e a pri
   assert.equal(resultOf(formatOnly, "FUNCOES_DO_PAINEL_COM_A_DEFINICAO_DO_REPOSITORIO"), "admin_reschedule_standby_same_price=IDENTICA_SO_FORMATACAO");
 
   // Conteúdo alterado na função criada: a régua de preço foi removida à mão.
-  const weakened = await fullDatabase();
+  const weakened = await fullDatabase({ until: BEFORE_COUPONS });
   await redefine(weakened, "admin_reschedule_standby_same_price", (definition) => definition.replace("'CUSTOMER'", "'ADMIN'"));
   const functional = await diagnostic(weakened, POSTCHECK);
   assert.deepEqual(failing(functional), ["FUNCOES_DO_PAINEL_COM_A_DEFINICAO_DO_REPOSITORIO=FALHOU", "STANDBY_PAINEL_POSTCHECK_OK=FALHOU"]);
   assert.match(resultOf(functional, "FUNCOES_DO_PAINEL_COM_A_DEFINICAO_DO_REPOSITORIO"), /admin_reschedule_standby_same_price=DIFERENTE/);
 
   // Conteúdo alterado no reagendamento tradicional: atenção, sem reprovar.
-  const traditional = await fullDatabase();
+  const traditional = await fullDatabase({ until: BEFORE_COUPONS });
   await redefine(traditional, "admin_change_reservation_session", (definition) => definition.replace("'SESSION_MUST_BE_FUTURE'", "'SESSION_MUST_BE_FUTURE_X'"));
   const attention = await diagnostic(traditional, POSTCHECK);
   assert.deepEqual(failing(attention), ["FUNCOES_NAO_SUBSTITUIDAS=ATENCAO"]);
@@ -1346,7 +1353,7 @@ test("postcheck do painel: sensível a privilégio, a conteúdo alterado e a pri
 });
 
 test("rollback do painel: remove as quatro funções, devolve o privilégio e pode ser refeito", async () => {
-  const database = await fullDatabase();
+  const database = await fullDatabase({ until: BEFORE_COUPONS });
   const before = await functionHashes(database);
   const canExecute = () => database.query(
     `select has_function_privilege('service_role', 'public.admin_reschedule_reservation_from_standby(uuid,uuid,uuid,text)', 'EXECUTE') as allowed`,
