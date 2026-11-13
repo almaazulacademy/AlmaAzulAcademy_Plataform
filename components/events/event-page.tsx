@@ -3,10 +3,11 @@ import { CalendarDays, Check, Clock, DoorOpen, MapPin, Ticket, Users } from "luc
 
 import { BaseLocationCard } from "@/components/bases/base-location";
 import { EditorialImage } from "@/components/editorial-image";
-import { AvailabilityBadge, EventCtaButton, EventDemoBanner, EventEyebrow } from "@/components/events/event-parts";
+import { AvailabilityBadge, EventCtaButton, EventDemoBanner, EventEyebrow, EventImageCaption } from "@/components/events/event-parts";
 import { eventDisplayFont } from "@/components/events/fonts";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
+import { eventSalesOpen } from "@/lib/events/booking";
 import { infoParagraphs, visibleInfoItems } from "@/lib/events/editorial";
 import { clockText, deadlineShortText } from "@/lib/events/policy";
 import { eventCta, eventDayLabel, eventLongDate, eventPrice, eventScheduleLabel, programItemTime, spotsLabel } from "@/lib/events/presentation";
@@ -23,7 +24,10 @@ function joinHosts(hosts: string[]) {
  * editorial, sessão e base —; nada é específico de um evento. `preview` mostra
  * a faixa de demonstração e as informações ainda pendentes.
  */
-export function EventPage({ event, preview = false, bookingOpen = false, waitlistOpen = false }: { event: PublicEvent; preview?: boolean; bookingOpen?: boolean; waitlistOpen?: boolean }) {
+export function EventPage({ event, preview = false, bookingOpen: globalBookingOpen = false, waitlistOpen: globalWaitlistOpen = false }: { event: PublicEvent; preview?: boolean; bookingOpen?: boolean; waitlistOpen?: boolean }) {
+  // A variável global e o "em breve" desta edição: o mesmo que o servidor decide.
+  const bookingOpen = eventSalesOpen(event, globalBookingOpen);
+  const waitlistOpen = globalWaitlistOpen && !event.editorial.event.reservation.comingSoon;
   const content = event.editorial;
   const extra = content.event;
   const { session } = event;
@@ -44,10 +48,15 @@ export function EventPage({ event, preview = false, bookingOpen = false, waitlis
 
       {/* 1. Hero */}
       <section className="relative isolate flex min-h-[100svh] items-end overflow-hidden">
-        <Image src={content.hero.image.src} alt={content.hero.image.alt} fill priority sizes="100vw" className={cn("object-cover", extra.heroImageMobile && "hidden sm:block")} />
-        {extra.heroImageMobile ? (
-          <Image src={extra.heroImageMobile.src} alt={extra.heroImageMobile.alt} fill priority sizes="100vw" className="object-cover sm:hidden" />
-        ) : null}
+        <figure className="absolute inset-0 m-0">
+          <Image src={content.hero.image.src} alt={content.hero.image.alt} fill priority sizes="100vw" className={cn("object-cover", extra.heroImageMobile && "hidden sm:block")} />
+          {extra.heroImageMobile ? (
+            <Image src={extra.heroImageMobile.src} alt={extra.heroImageMobile.alt} fill priority sizes="100vw" className="object-cover sm:hidden" />
+          ) : null}
+          {/* A legenda acompanha a foto que está na tela: a do celular, quando existe, e a do Hero. */}
+          <EventImageCaption credit={content.hero.image.credit} className={cn("left-auto right-3 sm:right-6 sm:bottom-6", extra.heroImageMobile && "hidden sm:block")} />
+          {extra.heroImageMobile ? <EventImageCaption credit={extra.heroImageMobile.credit} className="left-auto right-3 sm:hidden" /> : null}
+        </figure>
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,21,20,0.6)_0%,rgba(13,21,20,0.45)_35%,rgba(13,21,20,0.94)_100%)] sm:bg-[linear-gradient(180deg,rgba(13,21,20,0.55)_0%,rgba(13,21,20,0.25)_35%,rgba(13,21,20,0.92)_100%)]" />
         <div className="container relative z-10 pb-16 pt-40 sm:pb-24">
           <div className="max-w-4xl animate-fade-up [text-shadow:0_2px_24px_rgba(0,0,0,0.35)]">
@@ -89,9 +98,10 @@ export function EventPage({ event, preview = false, bookingOpen = false, waitlis
             </div>
           </div>
           {extra.intro.image ? (
-            <div className="relative aspect-[4/5] overflow-hidden rounded-[2rem] sm:aspect-[5/4] lg:aspect-[4/5]">
+            <figure className="relative m-0 aspect-[4/5] overflow-hidden rounded-[2rem] sm:aspect-[5/4] lg:aspect-[4/5]">
               <EditorialImage src={extra.intro.image.src} alt={extra.intro.image.alt} sizes="(min-width: 1024px) 45vw, 100vw" className="object-cover" />
-            </div>
+              <EventImageCaption credit={extra.intro.image.credit} />
+            </figure>
           ) : null}
         </div>
       </section>
@@ -119,9 +129,10 @@ export function EventPage({ event, preview = false, bookingOpen = false, waitlis
                   ) : null}
                 </div>
                 {item.image ? (
-                  <div className="relative aspect-[4/3] overflow-hidden rounded-[2rem]">
+                  <figure className="relative m-0 aspect-[4/3] overflow-hidden rounded-[2rem]">
                     <EditorialImage src={item.image.src} alt={item.image.alt} sizes="(min-width: 1024px) 45vw, 100vw" className="object-cover" />
-                  </div>
+                    <EventImageCaption credit={item.image.credit} />
+                  </figure>
                 ) : null}
               </li>
             ))}

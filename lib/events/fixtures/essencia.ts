@@ -16,6 +16,7 @@
  */
 
 import type { BaseLocation } from "../../bases/location.ts";
+import type { EventEdition } from "../edition.ts";
 import type { EventAvailability } from "../presentation.ts";
 import type { PublicEvent } from "../public.ts";
 import { validateEventEditorial } from "../editorial.ts";
@@ -266,3 +267,23 @@ export function essenciaDemoEvent(availability: EventAvailability = "AVAILABLE",
     },
   };
 }
+
+/**
+ * A 1ª edição no registro de edições (`lib/events/editions.ts`). Já cadastrada
+ * em produção em 31/10/2026: os scripts dela são os históricos
+ * (`scripts/events/essencia-*.ts`) e o gerador genérico recusa um novo cadastro.
+ * Os valores são os mesmos de `essenciaDemoEvent()`.
+ */
+export const ESSENCIA_EDITION: EventEdition = {
+  slug: ESSENCIA_SLUG,
+  title: "ESSÊNCIA — Corpo, Mente e Natureza",
+  summary: "Canoa havaiana ao nascer do sol, meditação sensorial e Superioga no Cápsula Bar.",
+  baseSlug: "concha-acustica",
+  location: CONCHA_ACUSTICA_LOCATION,
+  startsAt: ESSENCIA_STARTS_AT,
+  durationMinutes: 210,
+  priceCents: 15_000,
+  capacity: ESSENCIA_CAPACITY,
+  editorial: ESSENCIA_EDITORIAL,
+  registered: true,
+};

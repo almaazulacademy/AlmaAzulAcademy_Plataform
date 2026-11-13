@@ -36,6 +36,44 @@ Eventos especiais são experiências realizadas em datas específicas, muitas ve
 
 **Não existe um segundo sistema de reservas.** Um evento é uma linha de `experiences` com `kind = 'EVENT'` e uma sessão por edição. Vagas, pré-reserva, pagamento pela InfinitePay, confirmação, e-mail, planilha, check-in, Stand-by e lista de espera são os de sempre.
 
+## Várias edições
+
+Infraestrutura preparada para a 2ª edição do ESSÊNCIA e as próximas (PR A, sem migration e sem dado gravado). Uma edição nova é um arquivo de conteúdo em `lib/events/fixtures/` (um `EventEdition`, `lib/events/edition.ts`) registrado em `lib/events/editions.ts`. Com isso, sem cadastrar nada:
+
+| Para | Como |
+| --- | --- |
+| Ver a página | `/eventos/demonstracao/<slug>` (só dev e Preview; sem banco, sem checkout). A listagem `/eventos/demonstracao` mostra todas as edições registradas |
+| Validar | `editionErrors`: slug (minúsculas e hífens, nunca `demonstracao`), título, resumo, base, início ISO com deslocamento, duração, preço, capacidade (1–500), máximo por pedido ≤ capacidade, chegada igual ao início, prazo de cancelamento antes do início, conteúdo válido. O registro recusa slug repetido |
+| Gerar o cadastro | `pnpm events:edition-sql <slug>` → `supabase/diagnostics/evento_<slug>_cadastro_{preflight,postcheck}.sql`, `supabase/maintenance/evento_<slug>_cadastro.sql`, `supabase/rollback/evento_<slug>_cadastro.rollback.sql`. Nada é executado: o SQL é rodado à mão, com autorização |
+
+A 1ª edição está no registro com `registered: true` (cadastrada em 31/10/2026): a prévia funciona e o gerador recusa um novo cadastro dela. Os scripts `essencia_*` ficam como estão, como histórico.
+
+**Por que o gerador aceita o interruptor ligado.** O roteiro da 1ª edição exigia o interruptor desligado porque, antes da `202610310004`, era a única garantia de que nada do evento ficaria público durante o cadastro. Com a 1ª edição no ar o interruptor fica ligado, e a garantia vem do que o cadastro confere — na transação, desfazendo tudo se algo falhar: a `202610310004` aplicada (políticas restritivas, leituras e gatilhos de reserva e lista); edição em `DRAFT`, sessão `CLOSED`, `active = false`; conteúdo com `event.reservation.comingSoon = true`; e, depois de criar, nenhuma leitura pública (`list_public_events`, `get_public_event`, `list_public_event_sessions`) devolvendo a edição. Contra duplicidade: slug livre e nenhuma sessão de evento na mesma base com o mesmo início. O preflight e o postcheck guardam a impressão das outras edições (`OUTROS_EVENTOS`), que precisa sair igual.
+
+### "Reservas abrem em breve" por edição
+
+`EVENT_BOOKING_OPEN` vale para todos os eventos e está ligada em Production. Sem outra regra, uma edição nova publicada com a sessão fechada mostraria "Reservas encerradas". `event.reservation.comingSoon: true` no conteúdo deixa **só aquela edição** em "Reservas abrem em breve", e a regra é a mesma no servidor:
+
+| Caminho | Com a edição em breve |
+| --- | --- |
+| Página, card de `/eventos`, destaque da home | Selo e botão "Reservas abrem em breve" (`eventSalesOpen`), com a sessão aberta ou fechada |
+| `/reservar/[sessionId]` | "Reservas ainda não abertas", sem formulário |
+| `POST /api/reservations` | `409 EVENT_BOOKING_CLOSED` antes da pré-reserva — o conteúdo é lido do banco (`loadSessionBookingRules`), nunca do navegador; conteúdo inválido com o campo também fica fechado |
+| Lista de espera | Inscrição recusada (`SESSION_UNAVAILABLE`), página da lista "indisponível" |
+| Aviso de vaga | Não sai (`EVENT_SALES_CLOSED`) |
+
+Esgotado continua "Esgotado"; realizado continua "Evento realizado" (nunca "em breve"). Sem o campo, tudo como antes — inclusive "Reservas encerradas" para sessão fechada com a venda ligada. Abrir a venda da edição é um passo explícito: `comingSoon` passa a `false` no conteúdo (atualização editorial) e a sessão é aberta no painel.
+
+### E-mail do ingresso
+
+As seções vêm do conteúdo (`emailInfoItems`, `lib/events/email-readiness.ts`), na ordem dele e com os títulos dele: entram `o-que-levar`, `seguranca`, `alimentacao` e `clima` quando existem, e qualquer outro item com `email: true` (um brinde, por exemplo); `email: false` tira um item. A chegada fica nas linhas do resumo e a política no fim. Exigidos para vender: programação, `arrival`, `cancellation`, `o-que-levar`, `seguranca` e `cancelamento`. **Alimentação deixou de ser exigida.** Para a 1ª edição as seções e os textos são os mesmos; só o título da seção do lanche passou de "Lanche incluso" (fixo no código) para "Alimentação inclusa" (o do conteúdo, o mesmo da página).
+
+### Legendas das fotos
+
+O `credit` das imagens do Hero (celular e computador), da apresentação e da programação aparece por cima da foto, no canto, dentro de um `<figure>`/`<figcaption>`: sem crédito, nada é desenhado e o layout não muda. A foto de fundo da reserva é decorativa e não leva legenda. Uso previsto: "Registro da 1ª edição do ESSÊNCIA · 07/11/2026".
+
+Testes: `tests/special-events-editions.test.ts`.
+
 ## Fases
 
 | Fase | O que entrega | Estado |
@@ -231,10 +269,10 @@ O documento é o mesmo das experiências (versão 1, que o banco exige para publ
 | `program.items[]` | `time` (HH:MM, em ordem), `title`, `description`, `hosts[]`, `note`, `image` |
 | `included.items[]` | O que o ingresso inclui |
 | `partners.items[]` | `name`, `role` (nas palavras da organização), `logo` opcional |
-| `info.items[]` | `id` (âncora `#info-<id>`), `title`, `body` (parágrafos separados por linha em branco); sem texto confirmado ficam `pending` e **só aparecem na prévia** |
+| `info.items[]` | `id` (âncora `#info-<id>`), `title`, `body` (parágrafos separados por linha em branco); sem texto confirmado ficam `pending` e **só aparecem na prévia**; `email` opcional ([e-mail do ingresso](#e-mail-do-ingresso)) |
 | `arrival` | `startTime` e `toleranceUntil` (HH:MM, Brasília). O texto `chegada` precisa citar os dois horários |
 | `cancellation` | `deadline` (ISO 8601 **com deslocamento**), `timeZone` (`America/Sao_Paulo`) e `summary`. O texto `cancelamento` precisa citar o mesmo dia e hora |
-| `reservation` | Título, texto do botão e foto de fundo |
+| `reservation` | Título, texto do botão e foto de fundo; `maxPerOrder`, `notice` e `comingSoon` ("Reservas abrem em breve" desta edição, [ver acima](#reservas-abrem-em-breve-por-edição)) |
 
 Evento publicado sem o bloco completo não aparece no site. O conteúdo do ESSÊNCIA está em `lib/events/fixtures/essencia.ts`, no formato exato do banco, para ser cadastrado na fase de lançamento.
 

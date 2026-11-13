@@ -8,6 +8,9 @@
  *
  *   - sessão de evento com a venda fechada (`isEventBookingOpen`) é recusada
  *     no servidor, mesmo com o id da sessão em mãos;
+ *   - edição marcada "em breve" (`event.reservation.comingSoon`) também é
+ *     recusada, mesmo com a variável ligada e a sessão aberta — o conteúdo é
+ *     lido do banco, nunca do navegador;
  *   - sessão de evento que não está no site — evento despublicado, interruptor
  *     de publicação desligado, sessão arquivada — também é recusada, mesmo com
  *     a venda aberta (`visible`, pela mesma leitura pública da página);
@@ -27,7 +30,8 @@ import type { PublicEvent } from "./public.ts";
 
 export type SessionBookingRules =
   | { kind: "REGULAR" }
-  | { kind: "EVENT"; maxPerOrder: number; emailReady: boolean; visible: boolean };
+  /** `comingSoon` só aparece quando a edição está "em breve": as regras das outras ficam como antes. */
+  | { kind: "EVENT"; maxPerOrder: number; emailReady: boolean; visible: boolean; comingSoon?: true };
 
 export type BookingRejection = { status: number; code: "EVENT_BOOKING_CLOSED" | "EVENT_NOT_PUBLIC" | "EVENT_EMAIL_NOT_READY" | "EVENT_ORDER_LIMIT"; message: string; field?: "quantity" };
 
@@ -41,6 +45,9 @@ export function eventOrderLimitMessage(max: number) {
 export function eventBookingRejection(rules: SessionBookingRules | null, quantity: number, bookingOpen: boolean): BookingRejection | null {
   if (!rules || rules.kind === "REGULAR") return null;
   if (!bookingOpen) return { status: 409, code: "EVENT_BOOKING_CLOSED", message: EVENT_BOOKING_CLOSED_MESSAGE };
+  // Edição "em breve": a venda desta edição ainda não abriu, mesmo com a
+  // variável global ligada e a sessão aberta no painel.
+  if (rules.comingSoon) return { status: 409, code: "EVENT_BOOKING_CLOSED", message: EVENT_BOOKING_CLOSED_MESSAGE };
   // Evento fora do site (despublicado ou com o interruptor de publicação
   // desligado): nada de venda, mesmo com a variável ligada e o id em mãos.
   if (!rules.visible) return { status: 409, code: "EVENT_NOT_PUBLIC", message: EVENT_BOOKING_CLOSED_MESSAGE };
@@ -102,11 +109,28 @@ export async function loadSessionBookingRules(client: RulesQueryClient, sessionI
   const row = firstRow(experience.data);
   if (row?.kind !== "EVENT") return { kind: "REGULAR" };
   // Evento sem conteúdo válido fica com o limite geral; de todo modo, ele não
-  // aparece no site e só vende publicado.
+  // aparece no site e só vende publicado. O "em breve" vem do conteúdo bruto
+  // também quando o resto não valida: nunca abre por um erro de conteúdo.
   const visible = await isEventSessionPublic(client, String(row.slug ?? ""), sessionId);
   const editorial = validateEventEditorial(row.editorial_content);
-  if (!editorial.success) return { kind: "EVENT", maxPerOrder: 20, emailReady: false, visible };
-  return { kind: "EVENT", maxPerOrder: editorial.data.event.reservation.maxPerOrder, emailReady: isEventEmailReady(editorial.data.event), visible };
+  const soon = (value: boolean) => (value ? { comingSoon: true as const } : {});
+  if (!editorial.success) return { kind: "EVENT", maxPerOrder: 20, emailReady: false, visible, ...soon(rawComingSoon(row.editorial_content)) };
+  return { kind: "EVENT", maxPerOrder: editorial.data.event.reservation.maxPerOrder, emailReady: isEventEmailReady(editorial.data.event), visible, ...soon(editorial.data.event.reservation.comingSoon) };
+}
+
+/** `event.reservation.comingSoon` sem validar o resto: qualquer valor que não seja `false` ou ausente conta como "em breve". */
+function rawComingSoon(value: unknown) {
+  const reservation = (value as { event?: { reservation?: { comingSoon?: unknown } } } | null)?.event?.reservation;
+  return reservation?.comingSoon !== undefined && reservation.comingSoon !== false;
+}
+
+/**
+ * A venda desta edição está aberta? A variável global (`EVENT_BOOKING_OPEN`)
+ * e o "em breve" da própria edição. Usada por todo lugar que mostra o botão ou
+ * o selo, para a página dizer o mesmo que o servidor decide.
+ */
+export function eventSalesOpen(event: Pick<PublicEvent, "editorial">, globalOpen: boolean) {
+  return globalOpen && !event.editorial.event.reservation.comingSoon;
 }
 
 /** O que a página de reserva mostra de um evento, já pronto para o cliente. */

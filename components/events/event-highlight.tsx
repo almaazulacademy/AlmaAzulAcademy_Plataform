@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 
 import { AvailabilityBadge } from "@/components/events/event-parts";
 import { eventDisplayFont } from "@/components/events/fonts";
+import { eventSalesOpen } from "@/lib/events/booking";
 import { eventDayLabel, eventPrice, eventScheduleLabel } from "@/lib/events/presentation";
 import type { PublicEvent } from "@/lib/events/public";
 import { cn } from "@/lib/utils";
@@ -12,7 +13,9 @@ import { cn } from "@/lib/utils";
  * Destaque do próximo evento especial na home, logo depois do Hero. Só é
  * renderizado com a seção de eventos ligada e um evento futuro publicado.
  */
-export function EventHighlight({ event, bookingOpen }: { event: PublicEvent; bookingOpen: boolean }) {
+export function EventHighlight({ event, bookingOpen: globalBookingOpen }: { event: PublicEvent; bookingOpen: boolean }) {
+  // A variável global e o "em breve" desta edição: o mesmo que o servidor decide.
+  const bookingOpen = eventSalesOpen(event, globalBookingOpen);
   const extra = event.editorial.event;
   const image = extra.cardImage ?? event.editorial.hero.image;
   const { session } = event;

@@ -192,6 +192,8 @@ async function deliverClaimed(runtime: WaitlistSpotRuntime, claim: WaitlistEmail
     // Só alcançado sem a migration 202610300001 (reivindicação por tipo): aviso
     // de evento com a venda fechada nunca sai.
     if (event && runtime.kinds && !runtime.kinds.includes("EVENT")) return failed("EVENT_SALES_CLOSED", "REJECTED", true);
+    // Edição "em breve": a venda dela ainda não abriu — o aviso fica para depois.
+    if (event && event.content.reservation.comingSoon) return failed("EVENT_SALES_CLOSED", "REJECTED", true);
     if (event && runtime.eventPublic) {
       const visible = await runtime.eventPublic(event.slug, data.sessionId).catch(() => null);
       if (visible === null) return failed(EVENT_CONTEXT_UNAVAILABLE, "REJECTED", true);

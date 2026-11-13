@@ -3,8 +3,9 @@
  * reagendamento.
  *
  * O conteúdo vem do `editorial_content` do evento (bloco `event`): programação,
- * chegada, o que levar, segurança, alimentação, clima e política de
- * cancelamento — nada do ESSÊNCIA fica fixo aqui. Data, horário, código,
+ * chegada, as orientações e os benefícios da edição (com os títulos do próprio
+ * conteúdo, `emailInfoItems`) e a política de cancelamento — nada de uma
+ * edição fica fixo aqui. Data, horário, código,
  * participantes, local e QR vêm da reserva, como nos e-mails das experiências.
  *
  * A moldura, os cartões e o envio (fila, idempotência, tentativas e
@@ -15,6 +16,7 @@
  */
 
 import { infoParagraphs, type EventContent } from "../events/editorial.ts";
+import { emailInfoItems } from "../events/email-readiness.ts";
 import { arrivalMatchesSession, clockText, deadlineShortText, sessionStartClock } from "../events/policy.ts";
 import { programItemTime } from "../events/presentation.ts";
 import { checkinQrImageUrl, checkinUrl } from "../checkin/token.ts";
@@ -159,10 +161,7 @@ function paragraphsHtml(lines: string[]) {
 function eventSections(content: EventContent, options: { cancellation: boolean }) {
   const sections: Array<{ title: string; lines: string[]; list?: boolean }> = [
     { title: "Programação", lines: programLines(content), list: true },
-    { title: "O que levar", lines: info(content, "o-que-levar") },
-    { title: "Segurança durante a remada", lines: info(content, "seguranca") },
-    { title: "Lanche incluso", lines: info(content, "alimentacao") },
-    { title: "Condições climáticas", lines: info(content, "clima") },
+    ...emailInfoItems(content).map((item) => ({ title: item.title, lines: infoParagraphs(item.body) })),
   ];
   if (options.cancellation) {
     const deadline = content.cancellation ? [`Prazo: ${deadlineShortText(content.cancellation.deadline)}.`] : [];

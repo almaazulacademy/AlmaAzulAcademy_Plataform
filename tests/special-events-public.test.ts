@@ -395,12 +395,16 @@ test("rotas: 404 com a seção desligada, metadados de SEO e prévia sem indexa�
 });
 
 test("fixture: a demonstração só é importada pela prévia e pelos testes", () => {
+  // Desde o registro de edições (PR A da 2ª edição), as fixtures chegam à prévia
+  // por `lib/events/editions.ts`: nem as fixtures nem o registro podem ser
+  // importados pelo site real.
   const offenders: string[] = [];
+  const allowed = (path: string) => path.startsWith("app/eventos/demonstracao/") || path.startsWith("lib/events/fixtures/") || path === "lib/events/editions.ts";
   const walk = (dir: string) => {
     for (const name of readdirSync(new URL(`../${dir}`, import.meta.url))) {
       const path = `${dir}/${name}`;
       if (statSync(new URL(`../${path}`, import.meta.url)).isDirectory()) walk(path);
-      else if (/\.(ts|tsx)$/.test(name) && source(path).includes("fixtures/essencia") && !path.startsWith("app/eventos/demonstracao/") && path !== "lib/events/fixtures/essencia.ts") offenders.push(path);
+      else if (/\.(ts|tsx)$/.test(name) && /fixtures\/|events\/editions/.test(source(path)) && !allowed(path)) offenders.push(path);
     }
   };
   for (const dir of ["app", "components", "lib"]) walk(dir);

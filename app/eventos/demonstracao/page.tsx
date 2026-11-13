@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { EventsIndex } from "@/components/events/events-index";
+import { editionDemoEvent } from "@/lib/events/edition";
+import { EVENT_EDITIONS } from "@/lib/events/editions";
 import { isEventsDemoEnabled } from "@/lib/events/flags";
-import { essenciaDemoEvent } from "@/lib/events/fixtures/essencia";
 import { parseAvailability } from "@/lib/events/presentation";
 import { splitEvents } from "@/lib/events/public";
 
@@ -13,15 +14,19 @@ export const metadata: Metadata = { title: "Prévia · Eventos Especiais", robot
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 /**
- * Prévia da listagem com o ESSÊNCIA de demonstração (`lib/events/fixtures`).
+ * Prévia da listagem com as edições registradas em `lib/events/editions.ts`.
  * Só no desenvolvimento local e no Preview da Vercel; em Production, 404.
- * Não lê nem grava nada no banco. `?estado=SOLD_OUT|CLOSED|ENDED` muda a
- * situação; `?vazio=1` mostra a seção sem eventos.
+ * Não lê nem grava nada no banco. Sem `?estado=`, cada edição aparece pela
+ * data (já passou: realizada; senão, vagas abertas); `?estado=SOLD_OUT|CLOSED|ENDED`
+ * muda a situação de todas; `?vazio=1` mostra a seção sem eventos.
  */
 export default async function EventsDemoPage({ searchParams }: Props) {
   if (!isEventsDemoEnabled()) notFound();
   const query = await searchParams;
-  const events = query.vazio === "1" ? [] : [essenciaDemoEvent(parseAvailability(query.estado ?? "AVAILABLE"))];
+  const now = Date.now();
+  const events = query.vazio === "1"
+    ? []
+    : EVENT_EDITIONS.map((edition) => editionDemoEvent(edition, query.estado ? parseAvailability(query.estado) : Date.parse(edition.startsAt) < now ? "ENDED" : "AVAILABLE"));
   const { upcoming, past } = splitEvents(events);
   return <EventsIndex upcoming={upcoming} past={past} preview hrefFor={(event) => `/eventos/demonstracao/${event.slug}${query.estado ? `?estado=${String(query.estado)}` : ""}`} />;
 }
