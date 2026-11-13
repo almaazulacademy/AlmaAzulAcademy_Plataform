@@ -67,16 +67,18 @@ export async function loadWaitlistTarget(client: RulesQueryClient, sessionId: st
 type Rpc = (name: string, args: Record<string, unknown>) => PromiseLike<QueryResult>;
 
 /**
- * O evento está no site com esta sessão como a edição em destaque? É a mesma
- * leitura da página (`get_public_event`): evento publicado, interruptor de
- * publicação ligado e conteúdo válido. Falha de leitura lança.
+ * O evento está no site com esta sessão como a edição em destaque, com a venda
+ * desta edição aberta? É a mesma leitura da página (`get_public_event`):
+ * evento publicado, interruptor de publicação ligado, conteúdo válido e sem o
+ * "em breve" (`event.reservation.comingSoon`). Falha de leitura lança.
  */
 export async function isEventWaitlistVisible(rpc: Rpc, slug: string, sessionId: string) {
   if (!slug) return false;
   const result = await rpc("get_public_event", { p_slug: slug });
   if (result.error) throw new Error(`WAITLIST_EVENT_FAILED: ${result.error.message}`);
   const event = mapPublicEvent(Array.isArray(result.data) ? result.data[0] : result.data);
-  return Boolean(event && event.session.id === sessionId);
+  // Edição "em breve": a venda não abriu, então a lista de espera também não.
+  return Boolean(event && event.session.id === sessionId && !event.editorial.event.reservation.comingSoon);
 }
 
 export type WaitlistScopeDeps = {

@@ -3,12 +3,15 @@ import { ArrowUpRight, CalendarDays, MapPin } from "lucide-react";
 
 import { EditorialImage } from "@/components/editorial-image";
 import { AvailabilityBadge } from "@/components/events/event-parts";
+import { eventSalesOpen } from "@/lib/events/booking";
 import { eventDayLabel, eventPrice, eventScheduleLabel } from "@/lib/events/presentation";
 import type { PublicEvent } from "@/lib/events/public";
 import { cn } from "@/lib/utils";
 
 /** Card de um evento: foto, nome, data, local, preço e situação das vagas. */
-export function EventCard({ event, href, bookingOpen, featured = false }: { event: PublicEvent; href: string; bookingOpen: boolean; featured?: boolean }) {
+export function EventCard({ event, href, bookingOpen: globalBookingOpen, featured = false }: { event: PublicEvent; href: string; bookingOpen: boolean; featured?: boolean }) {
+  // A variável global e o "em breve" desta edição: o mesmo que o servidor decide.
+  const bookingOpen = eventSalesOpen(event, globalBookingOpen);
   const extra = event.editorial.event;
   const image = extra.cardImage ?? event.editorial.hero.image;
   const { session } = event;

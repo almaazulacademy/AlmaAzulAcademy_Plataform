@@ -56,6 +56,21 @@ export function EventDemoBanner() {
   );
 }
 
+/**
+ * Legenda ou crédito de uma foto do evento (`image.credit` do conteúdo), por
+ * cima da própria foto, no canto: não ocupa espaço nenhum e some quando a foto
+ * não tem legenda. Ex.: "Registro da 1ª edição do ESSÊNCIA · 07/11/2026".
+ * Fica dentro de um `<figure>`, que a associa à imagem.
+ */
+export function EventImageCaption({ credit, className }: { credit?: string | null; className?: string }) {
+  if (!credit) return null;
+  return (
+    <figcaption className={cn("pointer-events-none absolute bottom-3 left-3 z-10 max-w-[calc(100%-1.5rem)] rounded-lg bg-night/70 px-3 py-1.5 text-[11px] font-medium leading-4 text-white/90 backdrop-blur-sm sm:bottom-4 sm:left-4 sm:max-w-[calc(100%-2rem)] sm:text-xs", className)}>
+      {credit}
+    </figcaption>
+  );
+}
+
 /** Rótulo pequeno em caixa alta com o traço âmbar, como nos slides. */
 export function EventEyebrow({ children, className, tone = "light" }: { children: React.ReactNode; className?: string; tone?: "light" | "dark" }) {
   return (

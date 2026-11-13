@@ -55,6 +55,13 @@ export type EventInfoItem = {
   body: string | null;
   /** Texto ainda não confirmado pela equipe: nunca aparece num evento publicado. */
   pending: boolean;
+  /**
+   * Entra no e-mail do ingresso? `null` (o padrão) segue o `id`: as
+   * orientações de `EVENT_EMAIL_DEFAULT_INFO_IDS` entram, as outras não.
+   * `true`/`false` decidem por item — um benefício próprio da edição (ex.:
+   * um brinde) entra com `email: true`.
+   */
+  email: boolean | null;
 };
 
 export type EventContent = {
@@ -89,6 +96,14 @@ export type EventContent = {
      * Opcional: sem ela, o resumo não mostra aviso nenhum.
      */
     notice: string | null;
+    /**
+     * Edição publicada com as reservas ainda não abertas ("Reservas abrem em
+     * breve"), independentemente de `EVENT_BOOKING_OPEN`, que vale para todos
+     * os eventos. Fecha a venda desta edição em todos os caminhos — página,
+     * `/reservar`, `POST /api/reservations`, lista de espera e aviso de vaga.
+     * Ausente: `false`, o comportamento anterior.
+     */
+    comingSoon: boolean;
   };
 };
 
@@ -174,7 +189,8 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
     const pending = item.pending === true || !body;
     const id = text(item.id);
     if (id && !/^[a-z0-9-]+$/.test(id)) errors.push(`Identificador da informação ${index + 1} deve usar letras minúsculas, números e hífen.`);
-    return { id: id || null, title: need(text(item.title), `Título da informação ${index + 1}`), body, pending };
+    if (item.email !== undefined && typeof item.email !== "boolean") errors.push(`O campo email da informação ${index + 1} deve ser verdadeiro ou falso.`);
+    return { id: id || null, title: need(text(item.title), `Título da informação ${index + 1}`), body, pending, email: typeof item.email === "boolean" ? item.email : null };
   });
   const infoById = (id: string) => infoItems.find((item) => item.id === id && !item.pending) ?? null;
 
@@ -249,8 +265,10 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
       image: image(reservation?.image),
       maxPerOrder: RESERVATION_MAX_QUANTITY,
       notice: text(reservation?.notice) || null,
+      comingSoon: reservation?.comingSoon === true,
     },
   };
+  if (reservation?.comingSoon !== undefined && typeof reservation.comingSoon !== "boolean") errors.push("O campo comingSoon da reserva deve ser verdadeiro ou falso.");
   if (content.reservation.notice && content.reservation.notice.length > 200) errors.push("A orientação do resumo da reserva deve ter até 200 caracteres.");
   if (reservation?.maxPerOrder !== undefined) {
     const max = Number(reservation.maxPerOrder);

@@ -1,5 +1,13 @@
 # Changelog
 
+## Eventos especiais — infraestrutura para várias edições
+
+- **E-mail do ingresso genérico**: as orientações e os benefícios entram com o título do próprio conteúdo (`emailInfoItems`); alimentação deixou de ser obrigatória. Seguem exigidos: programação, chegada, prazo de cancelamento, "o que levar", segurança e a política. Campo opcional `info.items[].email` para incluir (ou tirar) um item do e-mail. Na 1ª edição, só o título da seção do lanche muda ("Alimentação inclusa", o mesmo da página).
+- **"Reservas abrem em breve" por edição**: `event.reservation.comingSoon` (ausente = como antes). Fecha a venda daquela edição em todos os caminhos — página, card, destaque da home, `/reservar`, `POST /api/reservations`, lista de espera e aviso de vaga —, mesmo com `EVENT_BOOKING_OPEN` ligada e a sessão aberta. As variáveis globais não mudaram.
+- **Registro de edições** (`lib/events/editions.ts`): prévia por slug em `/eventos/demonstracao/<slug>` e scripts de cadastro gerados por `pnpm events:edition-sql <slug>`, com o interruptor ligado (exigem a migration `202610310004`, conteúdo "em breve", slug livre e nenhuma sessão de evento duplicada; a edição nasce em rascunho, fechada e fora das leituras públicas). Os scripts históricos da 1ª edição não mudam.
+- **Legendas das fotos**: o `credit` das imagens do Hero, da apresentação e da programação aparece por cima da foto, só quando existe.
+- Sem migration, sem dado gravado, nenhum arquivo de cupons. Detalhes em [docs/special-events.md](docs/special-events.md#várias-edições).
+
 ## Testes — roteiros do ESSÊNCIA independentes da data
 
 - Os testes dos roteiros do ESSÊNCIA (cadastro, atualização editorial, publicação, ajuste com o evento publicado e colunas legadas) rodam com um relógio controlado que começa em 31/10/2026, 12h em Brasília, e anda normalmente. Desde 07/11 eles falhavam porque o banco recusa sessão no passado (`SESSION_MUST_BE_FUTURE`).

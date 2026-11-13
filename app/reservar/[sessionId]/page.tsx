@@ -61,9 +61,14 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
   const hiddenEvent = !event && kind?.kind === "EVENT";
   if (hiddenEvent) session = null;
   const bookingOpen = isEventBookingOpen();
+  // Edição "em breve" (`event.reservation.comingSoon`): a venda dela ainda não
+  // abriu, mesmo com a variável ligada e a sessão aberta — nada de formulário,
+  // como `POST /api/reservations` (`eventBookingRejection`) decide.
+  const editionSoon = Boolean(event?.editorial.event.reservation.comingSoon);
+  if (editionSoon) session = null;
   // Evento esgotado, venda aberta e lista de espera dos eventos ligada: o botão
   // leva à lista desta edição. Nunca abre o formulário de reserva.
-  const eventWaitlist = Boolean(event && bookingOpen && isEventsWaitlistEnabled() && event.session.availability === "SOLD_OUT" && event.session.id === sessionId);
+  const eventWaitlist = Boolean(event && bookingOpen && !editionSoon && isEventsWaitlistEnabled() && event.session.availability === "SOLD_OUT" && event.session.id === sessionId);
   // Turma publicada, aberta e futura, mas sem vaga: com a lista de espera
   // pública ligada, a página diz "Esgotado" em vez de "Sessão indisponível".
   // Só leitura, pela mesma função da agenda; nunca abre o formulário.
@@ -103,10 +108,10 @@ export default async function ReservePage({ params }: { params: Promise<{ sessio
             <div className="rounded-4xl bg-white p-10 text-center sm:p-16" role="status">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-lake">Evento especial · {event.editorial.hero.title}</p>
               <h1 className="mt-4 text-4xl font-medium tracking-[-0.05em]">
-                {!bookingOpen ? "Reservas ainda não abertas" : event.session.availability === "SOLD_OUT" ? "Evento esgotado" : "Reservas indisponíveis"}
+                {!bookingOpen || (editionSoon && event.session.availability !== "SOLD_OUT") ? "Reservas ainda não abertas" : event.session.availability === "SOLD_OUT" ? "Evento esgotado" : "Reservas indisponíveis"}
               </h1>
               <p className="mx-auto mt-4 max-w-lg leading-7 text-ink/55">
-                {!bookingOpen
+                {!bookingOpen || (editionSoon && event.session.availability !== "SOLD_OUT")
                   ? "As reservas deste evento ainda não estão abertas. Nenhuma reserva pode ser feita por enquanto."
                   : event.session.availability === "SOLD_OUT"
                     ? eventWaitlist ? EVENT_WAITLIST_INVITE : "Todas as vagas desta edição foram preenchidas."

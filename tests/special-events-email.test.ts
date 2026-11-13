@@ -285,8 +285,10 @@ test("banco: reserva paga do evento → payload da RPC → contexto do evento �
   assert.ok(buildReservationConfirmationEmail(regularData!).text.includes(CANCELLATION_NOTE));
 
   // Sem o conteúdo do e-mail completo, a venda do evento não abre — mesmo com a variável ligada.
+  // (Até o PR A da 2ª edição, o texto retirado aqui era "alimentacao", que deixou de ser
+  // exigido; "o-que-levar" continua obrigatório e prova a mesma regra.)
   const incomplete = clone(ESSENCIA_EDITORIAL) as unknown as { event: { info: { items: Array<{ id?: string }> } } };
-  incomplete.event.info.items = incomplete.event.info.items.filter((item) => item.id !== "alimentacao");
+  incomplete.event.info.items = incomplete.event.info.items.filter((item) => item.id !== "o-que-levar");
   await db.query(`update public.experiences set editorial_content = $1::jsonb where id = $2::uuid`, [JSON.stringify(incomplete), created.experienceId]);
   const rules = await loadSessionBookingRules(admin.client as unknown as RulesQueryClient, created.sessionId);
   assert.deepEqual(rules, { kind: "EVENT", maxPerOrder: 6, emailReady: false, visible: true });

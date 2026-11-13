@@ -56,7 +56,8 @@ export default async function WaitlistSignupPage({ params }: { params: Promise<{
   }
   if (target !== "ERROR" && target?.kind === "EVENT") {
     if (!eventsEnabled) notFound();
-    const event = await getPublicEvent(target.slug).catch(() => null);
+    // Edição "em breve" não recebe inscrição: a venda dela ainda não abriu.
+    const event = await getPublicEvent(target.slug).then((found) => (found && !found.editorial.event.reservation.comingSoon ? found : null)).catch(() => null);
     return <EventWaitlistPage event={event && event.session.id === sessionId ? event : null} slug={target.slug} maxPerOrder={target.maxPerOrder} />;
   }
   if (!regularEnabled) notFound();
