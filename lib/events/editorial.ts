@@ -64,7 +64,23 @@ export type EventInfoItem = {
   email: boolean | null;
 };
 
+/** Atmosferas visuais da página do evento. Sem tema, a de sempre (noite). */
+export const EVENT_THEMES = ["dusk"] as const;
+export type EventTheme = (typeof EVENT_THEMES)[number];
+
+/** Formato das fotos da programação: sem ele, horizontal (4:3). */
+export const PROGRAM_IMAGE_SHAPES = ["portrait"] as const;
+export type ProgramImageShape = (typeof PROGRAM_IMAGE_SHAPES)[number];
+
+/** Bloco de destaque opcional, entre a programação e o que está incluso (ex.: um brinde da edição). */
+export type EventSpotlight = { eyebrow: string; title: string; paragraphs: string[]; note: string | null; image: EditorialImage | null };
+
 export type EventContent = {
+  /**
+   * Atmosfera da página. `dusk`: da luz quente da tarde ao azul profundo da
+   * noite, ao longo das seções. Ausente: o visual de sempre.
+   */
+  theme: EventTheme | null;
   badge: string;
   subtitle: string;
   tagline: string;
@@ -76,7 +92,9 @@ export type EventContent = {
   /** Foto do card na listagem; sem ela, usa a do Hero. */
   cardImage: EditorialImage | null;
   intro: { eyebrow: string; title: string; paragraphs: string[]; image: EditorialImage | null };
-  program: { eyebrow: string; title: string; items: EventProgramItem[] };
+  program: { eyebrow: string; title: string; items: EventProgramItem[]; imageShape: ProgramImageShape | null };
+  /** Destaque opcional (título, parágrafos, observação e foto). */
+  spotlight: EventSpotlight | null;
   included: { eyebrow: string; title: string; description: string | null; items: string[] };
   partners: { eyebrow: string; title: string; items: EventPartner[] };
   info: { eyebrow: string; title: string; items: EventInfoItem[] };
@@ -230,10 +248,32 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
     }
   }
 
+  const theme = text(root.theme);
+  if (theme && !(EVENT_THEMES as readonly string[]).includes(theme)) errors.push(`Tema "${theme}" desconhecido. Use: ${EVENT_THEMES.join(", ")}.`);
+  const imageShape = text(program?.imageShape);
+  if (imageShape && !(PROGRAM_IMAGE_SHAPES as readonly string[]).includes(imageShape)) errors.push(`Formato de foto da programação "${imageShape}" desconhecido. Use: ${PROGRAM_IMAGE_SHAPES.join(", ")}.`);
+
+  const spotlightRecord = record(root.spotlight);
+  let spotlight: EventSpotlight | null = null;
+  if (root.spotlight !== undefined && root.spotlight !== null) {
+    if (!spotlightRecord) errors.push("O destaque (spotlight) deve ser um objeto.");
+    else {
+      spotlight = {
+        eyebrow: text(spotlightRecord.eyebrow),
+        title: need(text(spotlightRecord.title), "Título do destaque"),
+        paragraphs: texts(spotlightRecord.paragraphs),
+        note: text(spotlightRecord.note) || null,
+        image: image(spotlightRecord.image),
+      };
+      if (!spotlight.paragraphs.length) errors.push("O destaque precisa de pelo menos um parágrafo.");
+    }
+  }
+
   const includedItems = texts(included?.items);
   if (!includedItems.length) errors.push("O que está incluso precisa de pelo menos um item.");
 
   const content: EventContent = {
+    theme: (theme || null) as EventTheme | null,
     badge: need(text(root.badge), "Selo do evento"),
     subtitle: need(text(root.subtitle), "Subtítulo do evento"),
     tagline: need(text(root.tagline), "Descrição do Hero do evento"),
@@ -247,7 +287,8 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
       paragraphs: texts(intro?.paragraphs),
       image: image(intro?.image),
     },
-    program: { eyebrow: text(program?.eyebrow), title: need(text(program?.title), "Título da programação"), items: programItems },
+    program: { eyebrow: text(program?.eyebrow), title: need(text(program?.title), "Título da programação"), items: programItems, imageShape: (imageShape || null) as ProgramImageShape | null },
+    spotlight,
     included: {
       eyebrow: text(included?.eyebrow),
       title: need(text(included?.title), "Título do que está incluso"),
