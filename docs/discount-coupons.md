@@ -144,6 +144,8 @@ As leituras (lista, detalhe, experiências) são feitas pelas páginas, no servi
 
 **Edição concorrente.** O formulário envia a versão que abriu (`expectedUpdatedAt`). Se o cupom mudou nesse meio-tempo (edição ou ativação por outra pessoa), a rota responde 409 e nada é sobrescrito. Resta uma janela de milissegundos entre a conferência e a gravação (a RPC da fase 2 não recebe a versão); nela vale a última gravação, e as duas ficam na auditoria com antes e depois. Limite, campos bloqueados e código duplicado são decididos pelo banco com o cupom travado, então nenhuma corrida fura essas regras.
 
+**Homologação.** Roteiro passo a passo em [discount-coupons-homologacao.md](discount-coupons-homologacao.md).
+
 **Valores do detalhe.** Mesma definição de `discount_coupons_report.sql`: receita e desconto só de usos `CONFIRMED`. Pré-reserva aguardando pagamento aparece em "Aguardando pagamento", fora da receita; uso pago e cancelado, liberado ou expirado não soma.
 
 ## Valor mínimo da InfinitePay
