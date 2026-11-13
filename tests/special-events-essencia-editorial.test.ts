@@ -4,6 +4,9 @@
  * técnica continua com 210 minutos, preço, vagas e status de antes.
  */
 
+// Primeiro import: o relógio precisa estar no lugar antes de qualquer banco.
+import "./support/essencia-clock.ts";
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
