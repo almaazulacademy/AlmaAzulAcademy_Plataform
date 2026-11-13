@@ -10,6 +10,10 @@
  * migration e o cadastro completo passa com ela.
  */
 
+// Primeiro import: três testes rodam o roteiro de cadastro do ESSÊNCIA, que
+// precisa do relógio anterior ao evento antes de qualquer banco ser criado.
+import "./support/essencia-clock.ts";
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

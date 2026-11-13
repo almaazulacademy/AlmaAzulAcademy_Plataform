@@ -6,6 +6,11 @@
 - **ADMIN altera, OPERATOR consulta**, conferido na tela, nas rotas e no banco. Edição sobre versão velha é recusada (409).
 - **Nada ligado**: `COUPONS_ADMIN_ENABLED` desligada esconde o menu e responde 404 nas páginas e rotas. Sem migration nova; checkout público sem mudança. Detalhes em [docs/discount-coupons.md](docs/discount-coupons.md).
 
+## Testes — roteiros do ESSÊNCIA independentes da data
+
+- Os testes dos roteiros do ESSÊNCIA (cadastro, atualização editorial, publicação, ajuste com o evento publicado e colunas legadas) rodam com um relógio controlado que começa em 31/10/2026, 12h em Brasília, e anda normalmente. Desde 07/11 eles falhavam porque o banco recusa sessão no passado (`SESSION_MUST_BE_FUTURE`).
+- A data histórica do evento (`ESSENCIA_STARTS_AT`, 07/11/2026), os scripts e as regras do banco não mudam. Relógio em `tests/support/controlled-clock.ts`, com teste próprio.
+
 ## Cupons de desconto — fase 2 (banco e regras)
 
 - **Migration `202611020001_discount_coupons.sql`, não aplicada** (não antes de 08/11/2026): cupons percentuais de 1% a 99%, usos com valores congelados, prévia, pré-reserva com cupom envolvendo `create_pre_reservation` (que não muda), painel por RPC com auditoria, e régua de preço do Stand-by comparando o preço de lista.

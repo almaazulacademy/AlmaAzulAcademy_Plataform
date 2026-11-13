@@ -4,6 +4,9 @@
  * conteúdo muda; sessão, reservas, pagamentos e regulares ficam iguais, e a compra continua.
  */
 
+// Primeiro import: o relógio precisa estar no lugar antes de qualquer banco.
+import "./support/essencia-clock.ts";
+
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
