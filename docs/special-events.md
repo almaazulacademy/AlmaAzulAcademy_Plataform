@@ -125,6 +125,8 @@ Logos: os oficiais já usados na 1ª edição (Alma Azul, Cure-se Bem, Cápsula 
 
 Testes: `tests/special-events-essencia-lua-cheia.test.ts`.
 
+Estado, ocultação, ajustes e checklist do lançamento: [essencia-lua-cheia-lancamento.md](essencia-lua-cheia-lancamento.md).
+
 ## Fases
 
 | Fase | O que entrega | Estado |
