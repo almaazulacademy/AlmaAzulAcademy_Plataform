@@ -74,6 +74,59 @@ O `credit` das imagens do Hero (celular e computador), da apresentação e da pr
 
 Testes: `tests/special-events-editions.test.ts`.
 
+### Atmosfera, destaque e fotos verticais (opcionais)
+
+Três campos opcionais do bloco `event`, para uma edição ter identidade própria sem código novo. Sem eles, a página é a de sempre (a da 1ª edição):
+
+| Campo | Efeito |
+| --- | --- |
+| `theme: "dusk"` | Da luz quente da tarde ao azul profundo da noite: apresentação e programação em degradê (tons de `night`, `ember` e `lake`, sem cor nova), informações e reserva em azul-noite. Na linha do tempo, o marcador vai do âmbar do sol ao branco da Lua cheia, crescendo a cada atividade |
+| `spotlight` | Bloco de destaque entre a programação e o que está incluso: `eyebrow`, `title`, `paragraphs[]`, `note` e `image` (com legenda). Ex.: o drink de cortesia |
+| `program.imageShape: "portrait"` | Fotos da programação em 4:5, com largura máxima de 28 rem — para fotos verticais ou pequenas (nunca ampliadas a tela cheia) |
+
+Tema ou formato desconhecido é recusado pelo validador. Com quatro parceiros ou menos, a grade fica com quatro colunas.
+
+## ESSÊNCIA — 2ª edição · Celebração da Lua Cheia (PR B)
+
+Edição `essencia-lua-cheia`, em `lib/events/fixtures/essencia-lua-cheia.ts`, registrada em `lib/events/editions.ts`. **Ainda não cadastrada**: prévia em `/eventos/demonstracao/essencia-lua-cheia` (dev e Preview).
+
+| Item | Valor |
+| --- | --- |
+| Data e início | 24/11/2026 (terça), 15h em Brasília — `2026-11-24T18:00:00.000Z` |
+| Duração técnica | 240 min (até o início da confraternização, às 19h). Página e e-mail dizem "A partir das 15h", sem fim anunciado |
+| Ingresso, vagas, pedido | R$ 150 (15000 centavos), 24 vagas, até 6 por pedido |
+| Chegada | Recomendada às 14h50; recepção às 15h00; tolerância até 15h15 (`arrival`) |
+| Cancelamento | Até 22/11/2026 às 12h00 de Brasília (`2026-11-22T12:00:00-03:00`), crédito ou reembolso pelo atendimento da equipe (manual) |
+| Reservas | `comingSoon: true` — "Reservas abrem em breve" até a abertura explícita. Lista de espera desligada |
+| Alimentação | Nenhuma: não há texto `alimentacao`. O drink de cortesia (com ou sem álcool) é o item `drink`, com `email: true`, e o destaque `spotlight` |
+| Visual | `theme: "dusk"`, `program.imageShape: "portrait"` |
+
+Programação: 15h Recepção e boas-vindas · 15h15 Superioga (Rapha Dantas) · 16h30 Momento de Bem-Estar (Cure-se Bem) · 17h30 Remada Alma Azul · O Despertar da Lua Cheia · 19h Música no Cápsula Bar. Sem horário do nascimento da Lua, sem show.
+
+**Fotos** (`public/images/eventos/essencia-lua-cheia/`, WebP sem metadados; as da 1ª edição no tamanho original, sem ampliação):
+
+| Arquivo | Origem (pasta `Capsula + Alma Azul`) | Uso | Legenda |
+| --- | --- | --- | --- |
+| `hero-lua-desktop.webp` (2400×1350), `hero-lua-mobile.webp` (1080×1920) | `LUA CHEIA/IMG_3420.jpg` | Hero e card | Remada da Lua Cheia · Alma Azul Academy |
+| `apresentacao-capsula-entardecer.webp` | `CAPSULA BAR 2/DSC00390.jpg` | Apresentação | — |
+| `recepcao-deck-lago.webp` | `CAPSULA BAR 2/DSC00153.jpg` | 15h | — |
+| `superioga-1a-edicao.webp` (720×900) | `EVENTOS/ESSENCIA/ESSENCIA 07:11/WhatsApp Image 2026-11-07 at 09.40.21.jpeg` | 15h15 | Registro da 1ª edição do ESSÊNCIA · 07/11/2026 |
+| `bem-estar-1a-edicao.webp` (720×900) | `…/WhatsApp Image 2026-11-07 at 09.40.21 (2).jpeg` | 16h30 | Registro da 1ª edição do ESSÊNCIA · 07/11/2026 |
+| `remada-entardecer.webp` | `SUNSET/IMG_8245.heic` | 17h30 | Remada Sunset · Alma Azul Academy |
+| `musica-capsula-noite.webp` | `CAPSULA BAR/HOO00630.jpg` | 19h | — |
+| `drink-capsula-neon.webp` | `CAPSULA BAR 2/DSC00504.jpg` | Destaque do drink | — |
+| `experiences/remada-lua-cheia/remada-lua-cheia-hero.webp` | Repositório (`LUA CHEIA/IMG_3512.jpg`) | Fundo da reserva | — |
+
+Logos: os oficiais já usados na 1ª edição (Alma Azul, Cure-se Bem, Cápsula Bar, Superioga/Rapha Dantas), sem alteração.
+
+**E-mail**: `pnpm email:preview:edicao essencia-lua-cheia` gera `.preview/evento-essencia-lua-cheia-*.{html,txt}` (só arquivos; o script não envia).
+
+**Cadastro (não executado)**: `pnpm events:edition-sql essencia-lua-cheia` gerou `supabase/diagnostics/evento_essencia_lua_cheia_cadastro_{preflight,postcheck}.sql`, `supabase/maintenance/evento_essencia_lua_cheia_cadastro.sql` e `supabase/rollback/evento_essencia_lua_cheia_cadastro.rollback.sql`; o teste confere que são os gerados e os roda num banco montado como produção. Ordem, cada passo com autorização: merge dos PRs A e B (deploy) → preflight → cadastro → postcheck → publicação em "em breve" → abertura (`comingSoon: false` por atualização editorial + sessão aberta no painel) → compra controlada.
+
+Testes: `tests/special-events-essencia-lua-cheia.test.ts`.
+
+Estado, ocultação, ajustes e checklist do lançamento: [essencia-lua-cheia-lancamento.md](essencia-lua-cheia-lancamento.md).
+
 ## Fases
 
 | Fase | O que entrega | Estado |

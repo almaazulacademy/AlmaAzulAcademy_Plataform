@@ -16,8 +16,9 @@
 
 import { editionsErrors, type EventEdition } from "./edition.ts";
 import { ESSENCIA_EDITION } from "./fixtures/essencia.ts";
+import { ESSENCIA_LUA_CHEIA_EDITION } from "./fixtures/essencia-lua-cheia.ts";
 
-export const EVENT_EDITIONS: readonly EventEdition[] = [ESSENCIA_EDITION];
+export const EVENT_EDITIONS: readonly EventEdition[] = [ESSENCIA_EDITION, ESSENCIA_LUA_CHEIA_EDITION];
 
 {
   const errors = editionsErrors(EVENT_EDITIONS);

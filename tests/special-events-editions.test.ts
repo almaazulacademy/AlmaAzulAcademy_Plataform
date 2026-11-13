@@ -344,7 +344,8 @@ test("banco: aviso de vaga de uma edição em breve não sai — nem com a lista
 // ===========================================================================
 
 test("registro: carrega por slug, a 1ª edição é a de sempre e ninguém mais mexe nela", () => {
-  assert.deepEqual(EVENT_EDITIONS.map((edition) => edition.slug), ["essencia"]);
+  // A 2ª edição entrou no registro no PR B (tests/special-events-essencia-lua-cheia.test.ts).
+  assert.deepEqual(EVENT_EDITIONS.map((edition) => edition.slug), ["essencia", "essencia-lua-cheia"]);
   assert.equal(getEventEdition("essencia"), ESSENCIA_EDITION);
   assert.equal(getEventEdition("nao-existe"), null);
   assert.equal(getEventEdition(TEST_EDITION.slug, [ESSENCIA_EDITION, TEST_EDITION]), TEST_EDITION);

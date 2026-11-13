@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { CalendarDays, Check, Clock, DoorOpen, MapPin, Ticket, Users } from "lucide-react";
+import { CalendarDays, Check, Clock, DoorOpen, GlassWater, MapPin, Ticket, Users } from "lucide-react";
 
 import { BaseLocationCard } from "@/components/bases/base-location";
 import { EditorialImage } from "@/components/editorial-image";
@@ -13,6 +13,54 @@ import { clockText, deadlineShortText } from "@/lib/events/policy";
 import { eventCta, eventDayLabel, eventLongDate, eventPrice, eventScheduleLabel, programItemTime, spotsLabel } from "@/lib/events/presentation";
 import type { PublicEvent } from "@/lib/events/public";
 import { cn } from "@/lib/utils";
+
+/**
+ * Atmosferas da página (`event.theme`). Sem tema, o visual de sempre — o da 1ª
+ * edição. `dusk` conduz da luz quente da tarde ao azul profundo da noite: tons
+ * derivados de `night`, `ember` e `lake`, sem cor nova no design system.
+ * Classes escritas por inteiro para o Tailwind encontrá-las.
+ */
+const THEMES = {
+  default: {
+    heroShade: "bg-[linear-gradient(180deg,rgba(13,21,20,0.6)_0%,rgba(13,21,20,0.45)_35%,rgba(13,21,20,0.94)_100%)] sm:bg-[linear-gradient(180deg,rgba(13,21,20,0.55)_0%,rgba(13,21,20,0.25)_35%,rgba(13,21,20,0.92)_100%)]",
+    intro: "",
+    program: "border-t border-white/10",
+    spotlight: "border-t border-white/10",
+    info: "bg-night",
+    reserveShade: "bg-[linear-gradient(180deg,rgba(13,21,20,0.88)_0%,rgba(13,21,20,0.72)_45%,rgba(13,21,20,0.92)_100%)]",
+  },
+  dusk: {
+    heroShade: "bg-[linear-gradient(180deg,rgba(10,20,30,0.55)_0%,rgba(10,20,30,0.3)_38%,rgba(10,20,30,0.94)_100%)] sm:bg-[linear-gradient(180deg,rgba(10,20,30,0.5)_0%,rgba(10,20,30,0.18)_38%,rgba(10,20,30,0.92)_100%)]",
+    intro: "bg-[linear-gradient(180deg,rgb(10_20_30)_0%,rgb(30_24_19)_100%)]",
+    program: "bg-[linear-gradient(180deg,rgb(30_24_19)_0%,rgb(13_21_20)_48%,rgb(11_26_36)_100%)]",
+    spotlight: "bg-[rgb(11_26_36)]",
+    info: "bg-[rgb(10_20_30)]",
+    reserveShade: "bg-[linear-gradient(180deg,rgba(10,20,30,0.9)_0%,rgba(10,20,30,0.66)_45%,rgba(10,20,30,0.94)_100%)]",
+  },
+} as const;
+
+/**
+ * Marcador da linha do tempo. No tema `dusk`, ele vai do âmbar do sol ao
+ * branco da Lua cheia, crescendo a cada atividade; sem tema, o ponto âmbar.
+ */
+function ProgramMarker({ index, total, dusk }: { index: number; total: number; dusk: boolean }) {
+  if (!dusk) return <span aria-hidden="true" className="absolute -left-[5px] top-3 size-[9px] rounded-full bg-ember" />;
+  const t = total > 1 ? index / (total - 1) : 1;
+  const size = Math.round(9 + t * 7);
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute top-3 rounded-full"
+      style={{
+        width: size,
+        height: size,
+        left: -(size / 2) - 0.5,
+        background: `color-mix(in srgb, rgb(var(--ember)) ${Math.round((1 - t) * 100)}%, rgb(250 247 238))`,
+        boxShadow: t === 1 ? "0 0 18px 4px rgba(250,247,238,0.35)" : undefined,
+      }}
+    />
+  );
+}
 
 function joinHosts(hosts: string[]) {
   if (hosts.length <= 1) return hosts.join("");
@@ -41,6 +89,8 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
   const day = session.startsAt ? eventDayLabel(session.startsAt) : null;
   const time = session.startsAt ? eventScheduleLabel(extra.scheduleLabel, session.startsAt, session.durationMinutes) : null;
   const place = `${event.location.baseName} · Brasília`;
+  const theme = THEMES[extra.theme ?? "default"];
+  const portrait = extra.program.imageShape === "portrait";
 
   return (
     <main className={cn(eventDisplayFont.variable, "bg-night pb-28 text-white lg:pb-0")}>
@@ -54,10 +104,10 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
             <Image src={extra.heroImageMobile.src} alt={extra.heroImageMobile.alt} fill priority sizes="100vw" className="object-cover sm:hidden" />
           ) : null}
           {/* A legenda acompanha a foto que está na tela: a do celular, quando existe, e a do Hero. */}
-          <EventImageCaption credit={content.hero.image.credit} className={cn("left-auto right-3 sm:right-6 sm:bottom-6", extra.heroImageMobile && "hidden sm:block")} />
+          <EventImageCaption credit={content.hero.image.credit} className={cn("left-auto right-3 sm:left-auto sm:right-6 sm:bottom-6", extra.heroImageMobile && "hidden sm:block")} />
           {extra.heroImageMobile ? <EventImageCaption credit={extra.heroImageMobile.credit} className="left-auto right-3 sm:hidden" /> : null}
         </figure>
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,21,20,0.6)_0%,rgba(13,21,20,0.45)_35%,rgba(13,21,20,0.94)_100%)] sm:bg-[linear-gradient(180deg,rgba(13,21,20,0.55)_0%,rgba(13,21,20,0.25)_35%,rgba(13,21,20,0.92)_100%)]" />
+        <div className={cn("absolute inset-0", theme.heroShade)} />
         <div className="container relative z-10 pb-16 pt-40 sm:pb-24">
           <div className="max-w-4xl animate-fade-up [text-shadow:0_2px_24px_rgba(0,0,0,0.35)]">
             {preview ? <EventDemoBanner /> : null}
@@ -88,7 +138,7 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
       </section>
 
       {/* 2. Apresentação */}
-      <section className="relative py-24 sm:py-32" aria-labelledby="evento-intro">
+      <section className={cn("relative py-24 sm:py-32", theme.intro)} aria-labelledby="evento-intro">
         <div className="container grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20">
           <div className="reveal-on-scroll">
             {extra.intro.eyebrow ? <EventEyebrow>{extra.intro.eyebrow}</EventEyebrow> : null}
@@ -107,7 +157,7 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
       </section>
 
       {/* 3. Programação */}
-      <section id="programacao" className="scroll-mt-24 border-t border-white/10 py-24 sm:py-32" aria-labelledby="evento-programacao">
+      <section id="programacao" className={cn("scroll-mt-24 py-24 sm:py-32", theme.program)} aria-labelledby="evento-programacao">
         <div className="container">
           {extra.program.eyebrow ? <EventEyebrow>{extra.program.eyebrow}</EventEyebrow> : null}
           <h2 id="evento-programacao" className="mt-6 max-w-3xl font-event text-4xl font-extrabold uppercase leading-[0.95] sm:text-6xl">{extra.program.title}</h2>
@@ -115,7 +165,7 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
             {extra.program.items.map((item, index) => (
               <li key={`${item.time}-${item.title}`} className={cn("grid items-center gap-8 lg:gap-16", item.image && "lg:grid-cols-2")}>
                 <div className={cn("relative border-l border-ember/40 pl-6 sm:pl-10", item.image && index % 2 === 1 && "lg:order-2")}>
-                  <span aria-hidden="true" className="absolute -left-[5px] top-3 size-[9px] rounded-full bg-ember" />
+                  <ProgramMarker index={index} total={extra.program.items.length} dusk={extra.theme === "dusk"} />
                   <p className="inline-flex rounded-md bg-ember px-3 py-1.5 font-event text-lg font-extrabold uppercase text-night sm:text-xl">
                     {item.time && !item.timeLabel ? <time>{programItemTime(item).toUpperCase()}</time> : programItemTime(item).toUpperCase()}
                   </p>
@@ -129,8 +179,8 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
                   ) : null}
                 </div>
                 {item.image ? (
-                  <figure className="relative m-0 aspect-[4/3] overflow-hidden rounded-[2rem]">
-                    <EditorialImage src={item.image.src} alt={item.image.alt} sizes="(min-width: 1024px) 45vw, 100vw" className="object-cover" />
+                  <figure className={cn("relative m-0 overflow-hidden rounded-[2rem]", portrait ? "aspect-[4/5] w-full max-w-md justify-self-center" : "aspect-[4/3]")}>
+                    <EditorialImage src={item.image.src} alt={item.image.alt} sizes={portrait ? "(min-width: 1024px) 28rem, 100vw" : "(min-width: 1024px) 45vw, 100vw"} className="object-cover" />
                     <EventImageCaption credit={item.image.credit} />
                   </figure>
                 ) : null}
@@ -139,6 +189,32 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
           </ol>
         </div>
       </section>
+
+      {/* 3b. Destaque da edição (opcional) */}
+      {extra.spotlight ? (
+        <section className={cn("py-24 sm:py-32", theme.spotlight)} aria-labelledby="evento-destaque">
+          <div className={cn("container grid items-center gap-12 lg:gap-20", extra.spotlight.image && "lg:grid-cols-[1.1fr_0.9fr]")}>
+            {extra.spotlight.image ? (
+              <figure className="relative m-0 aspect-[3/2] overflow-hidden rounded-[2rem]">
+                <EditorialImage src={extra.spotlight.image.src} alt={extra.spotlight.image.alt} sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
+                <EventImageCaption credit={extra.spotlight.image.credit} />
+              </figure>
+            ) : null}
+            <div>
+              {extra.spotlight.eyebrow ? <EventEyebrow>{extra.spotlight.eyebrow}</EventEyebrow> : null}
+              <h2 id="evento-destaque" className="mt-6 font-event text-4xl font-extrabold uppercase leading-[0.95] sm:text-5xl">{extra.spotlight.title}</h2>
+              <div className="mt-8 space-y-5 text-lg leading-8 text-white/75">
+                {extra.spotlight.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+              </div>
+              {extra.spotlight.note ? (
+                <p className="mt-8 inline-flex items-center gap-3 rounded-full border border-ember/50 px-5 py-2.5 text-sm font-medium text-ember">
+                  <GlassWater aria-hidden="true" className="size-4 shrink-0" />{extra.spotlight.note}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {/* 4. O que está incluso */}
       <section className="bg-paper py-24 text-ink sm:py-32" aria-labelledby="evento-incluso">
@@ -171,7 +247,7 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
           <div className="container">
             {extra.partners.eyebrow ? <EventEyebrow tone="dark">{extra.partners.eyebrow}</EventEyebrow> : null}
             <h2 id="evento-parceiros" className="mt-6 max-w-3xl font-event text-4xl font-extrabold uppercase leading-[0.95] text-forest sm:text-5xl">{extra.partners.title}</h2>
-            <ul className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
+            <ul className={cn("mt-14 grid gap-5 sm:grid-cols-2", extra.partners.items.length <= 4 ? "lg:grid-cols-4" : "lg:grid-cols-5")}>
               {extra.partners.items.map((partner) => (
                 <li key={partner.name} className="flex flex-col rounded-3xl border border-ink/10 bg-white p-6 shadow-[0_10px_30px_rgba(20,49,44,0.05)]">
                   <div className="relative grid h-24 place-items-center">
@@ -204,7 +280,7 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
 
       {/* 7. Informações importantes */}
       {info.length ? (
-        <section id="informacoes" className="scroll-mt-24 bg-night py-24 sm:py-32" aria-labelledby="evento-info">
+        <section id="informacoes" className={cn("scroll-mt-24 py-24 sm:py-32", theme.info)} aria-labelledby="evento-info">
           <div className="container">
             {extra.info.eyebrow ? <EventEyebrow>{extra.info.eyebrow}</EventEyebrow> : null}
             <h2 id="evento-info" className="mt-6 font-event text-4xl font-extrabold uppercase leading-[0.95] sm:text-5xl">{extra.info.title}</h2>
@@ -237,7 +313,7 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
         {extra.reservation.image ? (
           <Image src={extra.reservation.image.src} alt="" fill sizes="100vw" className="-z-10 object-cover" />
         ) : null}
-        <div className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(13,21,20,0.88)_0%,rgba(13,21,20,0.72)_45%,rgba(13,21,20,0.92)_100%)]" />
+        <div className={cn("absolute inset-0 -z-10", theme.reserveShade)} />
         <div className="container">
           <div className="max-w-3xl">
             {extra.reservation.eyebrow ? <EventEyebrow>{extra.reservation.eyebrow}</EventEyebrow> : null}

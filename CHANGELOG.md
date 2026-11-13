@@ -1,5 +1,13 @@
 # Changelog
 
+## ESSÊNCIA — 2ª edição · Celebração da Lua Cheia (conteúdo, não cadastrado)
+
+- **Edição `essencia-lua-cheia`** no registro: 24/11/2026 às 15h, R$ 150, 24 vagas, até 6 por pedido, chegada com tolerância até 15h15, cancelamento até 22/11/2026 às 12h00, "Reservas abrem em breve". Sem alimentação; drink de cortesia (com ou sem álcool) no e-mail e em destaque.
+- **Visual**: campos opcionais `theme: "dusk"` (da tarde à noite, sem cor nova), `spotlight` (bloco de destaque) e `program.imageShape: "portrait"`. Sem eles, a página não muda — a 1ª edição segue igual.
+- **Fotos** otimizadas em WebP, sem metadados, as da 1ª edição legendadas e sem ampliação; logos oficiais da 1ª edição.
+- **Prévia** em `/eventos/demonstracao/essencia-lua-cheia`; e-mails com `pnpm email:preview:edicao essencia-lua-cheia`; scripts de cadastro gerados e **não executados**.
+- Sem migration, sem dado gravado, sem variável. Detalhes em [docs/special-events.md](docs/special-events.md#essência--2ª-edição--celebração-da-lua-cheia-pr-b).
+
 ## Eventos especiais — infraestrutura para várias edições
 
 - **E-mail do ingresso genérico**: as orientações e os benefícios entram com o título do próprio conteúdo (`emailInfoItems`); alimentação deixou de ser obrigatória. Seguem exigidos: programação, chegada, prazo de cancelamento, "o que levar", segurança e a política. Campo opcional `info.items[].email` para incluir (ou tirar) um item do e-mail. Na 1ª edição, só o título da seção do lanche muda ("Alimentação inclusa", o mesmo da página).
