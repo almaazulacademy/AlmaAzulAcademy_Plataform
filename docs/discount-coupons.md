@@ -2,13 +2,13 @@
 
 [README](../README.md) · [Pagamentos](payments.md) · [Banco](database.md) · [Stand-by](reservation-standby.md) · [Eventos especiais](special-events.md)
 
-**Estado (02/11/2026): fase 2 (banco e regras) em PR draft.** Migration `202611020001_discount_coupons.sql` **não aplicada** — e não deve ser aplicada antes de 08/11/2026, depois do ESSÊNCIA. `COUPONS_ADMIN_ENABLED` e `COUPONS_CHECKOUT_ENABLED` ausentes (desligadas). Nada no site chama as funções novas.
+**Estado (12/11/2026): fase 2 (banco e regras) na `main` (PR #63); fase 3 (painel) em PR draft.** Migration `202611020001_discount_coupons.sql` **não aplicada por este trabalho** — confirmar no Supabase antes de ligar o painel. `COUPONS_ADMIN_ENABLED` e `COUPONS_CHECKOUT_ENABLED` ausentes (desligadas). O checkout público não chama nenhuma função de cupom.
 
 | Fase | Conteúdo | Estado |
 | --- | --- | --- |
 | 1 | Diagnóstico e arquitetura | Aprovada em 02/11/2026 |
-| 2 | Banco, regras, concorrência, auditoria, diagnósticos e rollback | PR draft, migration não aplicada |
-| 3 | Painel: Marketing → Cupons de desconto | Pendente |
+| 2 | Banco, regras, concorrência, auditoria, diagnósticos e rollback | Na `main` desde 12/11/2026 (PR #63); migration não aplicada por este trabalho |
+| 3 | Painel: Marketing → Cupons de desconto | PR draft; `COUPONS_ADMIN_ENABLED` desligada |
 | 4 e 5 | Checkout (campo, prévia, aplicação, remoção) e `POST /api/reservations` com cupom → InfinitePay | Pendente |
 | 5b | Relatórios (detalhe da reserva, lista, métricas) | Pendente |
 | 6 | Homologação e ativação | Pendente |
@@ -118,6 +118,36 @@ Depois desta migration, os postchecks antigos do Stand-by (`reservation_standby_
 
 Pendência para a fase 5b: o diálogo de Stand-by do painel mostra `unitPriceCents` ("R$ X por participante"), que numa reserva com cupom é o valor com desconto.
 
+## Painel (fase 3): Marketing → Cupons de desconto
+
+Só existe com `COUPONS_ADMIN_ENABLED=true` (variável de servidor, valor exato `true`). Desligada: o grupo "Marketing" some do menu, as páginas respondem 404 e as rotas respondem 404 antes de olhar a sessão. A fase 3 **não traz migration**: usa só as RPCs da fase 2, que conferem o papel de novo em cada chamada.
+
+| Tela | O que faz |
+| --- | --- |
+| `/admin/marketing/cupons` | Tabela com código, desconto, utilizações, limite, validade, situação e o alerta "Limite excedido" (ao lado de qualquer situação). Filtro por situação — inclusive "Com limite excedido" — e busca por código |
+| `/admin/marketing/cupons/novo` | Código (maiúsculas automáticas), 1–99%, início e término opcionais, ilimitado ou quantidade máxima, todas as regulares ou experiências específicas (eventos especiais só quando marcados), status inicial e descrição interna. Só ADMIN |
+| `/admin/marketing/cupons/[id]` | Dados, utilizações por estado, receita confirmada, descontos concedidos, valor aguardando pagamento (à parte, nunca como receita), histórico de utilizações e liberação manual com justificativa |
+| `/admin/marketing/cupons/[id]/editar` | Edição. Depois do 1º uso, código, percentual e experiências aparecem bloqueados com a explicação; datas, limite e descrição seguem editáveis. Só ADMIN |
+
+**Rotas** (todas `no-store`; ordem: origem → variável → sessão → papel ADMIN → id → corpo; o ator vem sempre da sessão):
+
+| Rota | RPC |
+| --- | --- |
+| `POST /api/admin/coupons` | `admin_create_coupon` |
+| `PATCH /api/admin/coupons/[couponId]` | `admin_get_coupon` (versão) → `admin_update_coupon` |
+| `POST /api/admin/coupons/[couponId]/status` | `admin_set_coupon_status` (motivo opcional, vai para a auditoria) |
+| `POST /api/admin/coupons/redemptions/[redemptionId]/release` | `admin_release_coupon_redemption` (justificativa de 3 a 500 caracteres e `confirmed: true`) |
+
+As leituras (lista, detalhe, experiências) são feitas pelas páginas, no servidor, com `admin_list_coupons`, `admin_get_coupon` e `admin_list_experiences` (+ `experiences.kind`).
+
+**Permissões.** ADMIN cria, edita, ativa, desativa e libera; OPERATOR consulta lista, detalhe e utilizações. O OPERATOR não vê os botões, é mandado de volta pelas páginas de criação e edição, recebe 403 nas rotas antes de qualquer RPC e, se a rota fosse contornada, o banco recusa (`COUPON_ADMIN_FORBIDDEN`). Instrutor não entra no painel.
+
+**Edição concorrente.** O formulário envia a versão que abriu (`expectedUpdatedAt`). Se o cupom mudou nesse meio-tempo (edição ou ativação por outra pessoa), a rota responde 409 e nada é sobrescrito. Resta uma janela de milissegundos entre a conferência e a gravação (a RPC da fase 2 não recebe a versão); nela vale a última gravação, e as duas ficam na auditoria com antes e depois. Limite, campos bloqueados e código duplicado são decididos pelo banco com o cupom travado, então nenhuma corrida fura essas regras.
+
+**Homologação.** Roteiro passo a passo em [discount-coupons-homologacao.md](discount-coupons-homologacao.md).
+
+**Valores do detalhe.** Mesma definição de `discount_coupons_report.sql`: receita e desconto só de usos `CONFIRMED`. Pré-reserva aguardando pagamento aparece em "Aguardando pagamento", fora da receita; uso pago e cancelado, liberado ou expirado não soma.
+
 ## Valor mínimo da InfinitePay
 
 O mínimo aceito pela InfinitePay **não está confirmado** e o código não presume nenhum. Enquanto `coupon_settings.min_charge_cents` for nulo, nenhum cupom é aplicado. Antes da ativação pública:
@@ -150,6 +180,8 @@ Correção da revisão de 02/11/2026. Contar os usos sem trava não bastava: o u
 `supabase/diagnostics/discount_coupons_report.sql` (somente leitura, sem dado pessoal) mostra, por cupom, situação, usos por estado, excedentes, receita e desconto confirmados.
 
 ## Testes
+
+- `tests/discount-coupons-admin.test.ts` (fase 3, PGlite com todas as migrations): variável e acesso (404/401/403), OPERATOR consulta e é recusado na rota e no banco, criação, código duplicado, percentual fora de 1–99, datas inválidas, sem validade, ilimitado, aplicabilidade com evento especial, edição antes e depois do uso, edição concorrente, ativação e desativação preservando reservas e valores, histórico de utilizações, liberação manual, alerta de limite excedido em todas as situações, consistência com o relatório, rotas, páginas, menu e ausência de migration ou mudança no checkout.
 
 - `tests/discount-coupons.test.ts` (PGlite, todas as migrations): cálculo e arredondamento (banco e TypeScript iguais), cupom válido, vários participantes, cada recusa sem deixar reserva, validade em Brasília, reserva sem cupom, 100% recusado, mínimo nulo e abaixo do mínimo, código sem diferença de caixa, evento não elegível e selecionado, confirmação e webhook repetido, manipulação de valor, expiração e cancelamento sem pagamento, janela de segurança, pagamento tardio acima do limite, idempotência, troca de turma, Stand-by com e sem cupom, cancelamento depois do pagamento e liberação, permissões, travas de edição, limite abaixo do uso, valores preservados depois de alterar ou desativar, auditoria, migration aditiva e idempotente, preflight, postcheck, relatório e rollback.
 - `tests/discount-coupons.test.ts` também cobre o alerta de excesso: ativo (`EXHAUSTED`), inativo, expirado e agendado acima do limite; ausência de falso alerta no limite exato, com uso reservado, sem limite, com uso liberado e com pré-reserva expirada; e a mesma contagem no cupom, nos usos marcados e no relatório.

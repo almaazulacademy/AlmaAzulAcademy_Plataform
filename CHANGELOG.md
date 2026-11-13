@@ -1,5 +1,11 @@
 # Changelog
 
+## Cupons de desconto — fase 3 (painel)
+
+- **Marketing → Cupons de desconto** no painel: lista com filtros e alerta de limite excedido, criação, edição com campos bloqueados depois do 1º uso, ativação/desativação, detalhe com utilizações, receita confirmada e liberação manual com justificativa.
+- **ADMIN altera, OPERATOR consulta**, conferido na tela, nas rotas e no banco. Edição sobre versão velha é recusada (409).
+- **Nada ligado**: `COUPONS_ADMIN_ENABLED` desligada esconde o menu e responde 404 nas páginas e rotas. Sem migration nova; checkout público sem mudança. Detalhes em [docs/discount-coupons.md](docs/discount-coupons.md).
+
 ## Testes — roteiros do ESSÊNCIA independentes da data
 
 - Os testes dos roteiros do ESSÊNCIA (cadastro, atualização editorial, publicação, ajuste com o evento publicado e colunas legadas) rodam com um relógio controlado que começa em 31/10/2026, 12h em Brasília, e anda normalmente. Desde 07/11 eles falhavam porque o banco recusa sessão no passado (`SESSION_MUST_BE_FUTURE`).

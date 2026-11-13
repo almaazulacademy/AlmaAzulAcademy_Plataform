@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getAdminContext, getStaffContext } from "@/lib/admin/auth";
+import { canManageCoupons, isCouponsAdminEnabled } from "@/lib/admin/coupons";
 import { canManageTeam } from "@/lib/admin/roles";
 import { adminMutationError, standbyMutationError } from "@/lib/admin/mutation-errors";
 import { isStandbyAdminEnabled } from "@/lib/admin/standby";
@@ -102,4 +103,21 @@ export async function authorizeWaitlistAdminApi() {
     return { context: null, response: NextResponse.json({ message: "Recurso não disponível." }, { status: 404 }) };
   }
   return authorizeAdminApi();
+}
+
+/**
+ * Rotas do painel de cupons. Com `COUPONS_ADMIN_ENABLED` desligada, 404 antes
+ * de qualquer outra coisa. Ligada, as regras das demais rotas administrativas
+ * (só ADMIN e OPERATOR; instrutor recebe 403). `manage` (criar, editar,
+ * ativar, desativar, liberar uso) é só ADMIN: o OPERATOR recebe 403 aqui, e o
+ * banco recusa de novo em cada RPC de gestão.
+ */
+export async function authorizeCouponsApi(options: { manage: boolean }) {
+  if (!isCouponsAdminEnabled()) {
+    return { context: null, response: NextResponse.json({ message: "Recurso não disponível." }, { status: 404 }) };
+  }
+  const authorization = await authorizeAdminApi();
+  if (!authorization.context) return authorization;
+  if (options.manage && !canManageCoupons(authorization.context.profile.role)) return { context: null, response: denied(403) };
+  return authorization;
 }

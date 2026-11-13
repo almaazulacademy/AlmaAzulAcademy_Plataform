@@ -12,6 +12,8 @@ type ConfirmationDialogProps = {
   description: string;
   confirmLabel: string;
   requireReason?: boolean;
+  /** Mostra o campo de motivo sem exigir preenchimento (vai para a auditoria se informado). */
+  optionalReason?: boolean;
   /** "neutral" para ações comuns (ex.: reenviar e-mail); o padrão é destrutivo. */
   tone?: "danger" | "neutral";
   onClose: () => void;
@@ -24,6 +26,7 @@ export function ConfirmationDialog({
   description,
   confirmLabel,
   requireReason = false,
+  optionalReason = false,
   tone = "danger",
   onClose,
   onConfirm,
@@ -86,9 +89,9 @@ export function ConfirmationDialog({
         </div>
         <h2 id="confirmation-title" className="mt-6 text-2xl font-semibold tracking-[-0.03em] text-ink">{title}</h2>
         <p id="confirmation-description" className="mt-3 text-sm leading-6 text-ink/60">{description}</p>
-        {requireReason ? (
+        {requireReason || optionalReason ? (
           <label className="mt-6 block">
-            <span className={labelClass}>Motivo da ação</span>
+            <span className={labelClass}>{requireReason ? "Motivo da ação" : "Motivo (opcional)"}</span>
             <textarea value={reason} onChange={(event) => setReason(event.target.value)} className={textareaClass} maxLength={500} disabled={loading} autoFocus />
           </label>
         ) : null}

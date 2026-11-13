@@ -15,6 +15,7 @@ import {
   MapPin,
   Menu,
   Settings,
+  TicketPercent,
   UsersRound,
   Waves,
   X,
@@ -35,7 +36,7 @@ const operations = [
 
 type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; badge?: string };
 
-function AdminShellContent({ children, profile, bases, standbyEnabled, waitlistEnabled }: { children: ReactNode; profile: AdminProfile; bases: AdminBase[]; standbyEnabled: boolean; waitlistEnabled: boolean }) {
+function AdminShellContent({ children, profile, bases, standbyEnabled, waitlistEnabled, couponsEnabled }: { children: ReactNode; profile: AdminProfile; bases: AdminBase[]; standbyEnabled: boolean; waitlistEnabled: boolean; couponsEnabled: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const { notify } = useToast();
@@ -132,6 +133,13 @@ function AdminShellContent({ children, profile, bases, standbyEnabled, waitlistE
             ].map(renderItem)}
           </div>
         </div>
+        {/* Marketing só existe com o painel de cupons ligado. ADMIN e OPERATOR veem; só o ADMIN altera. */}
+        {couponsEnabled ? (
+          <div>
+            <p className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">Marketing</p>
+            <div className="space-y-1">{[{ href: "/admin/marketing/cupons", label: "Cupons de desconto", icon: TicketPercent }].map(renderItem)}</div>
+          </div>
+        ) : null}
       </nav>
 
       <div className="mt-auto border-t border-white/10 pt-5">
@@ -175,6 +183,6 @@ function AdminShellContent({ children, profile, bases, standbyEnabled, waitlistE
   );
 }
 
-export function AdminShell({ children, profile, bases = [], standbyEnabled = false, waitlistEnabled = false }: { children: ReactNode; profile: AdminProfile; bases?: AdminBase[]; standbyEnabled?: boolean; waitlistEnabled?: boolean }) {
-  return <ToastProvider><AdminShellContent profile={profile} bases={bases} standbyEnabled={standbyEnabled} waitlistEnabled={waitlistEnabled}>{children}</AdminShellContent></ToastProvider>;
+export function AdminShell({ children, profile, bases = [], standbyEnabled = false, waitlistEnabled = false, couponsEnabled = false }: { children: ReactNode; profile: AdminProfile; bases?: AdminBase[]; standbyEnabled?: boolean; waitlistEnabled?: boolean; couponsEnabled?: boolean }) {
+  return <ToastProvider><AdminShellContent profile={profile} bases={bases} standbyEnabled={standbyEnabled} waitlistEnabled={waitlistEnabled} couponsEnabled={couponsEnabled}>{children}</AdminShellContent></ToastProvider>;
 }
