@@ -26,6 +26,14 @@ import {
   type EventCancellation,
 } from "./policy.ts";
 
+/** Uma atividade que acontece ao mesmo tempo que outras, dentro de um momento da programação. */
+export type EventProgramActivity = {
+  title: string;
+  description: string;
+  hosts: string[];
+  image: EditorialImage | null;
+};
+
 export type EventProgramItem = {
   /** "05:30", no horário de Brasília. Opcional quando há `timeLabel`. */
   time: string | null;
@@ -38,6 +46,11 @@ export type EventProgramItem = {
   /** Observação curta em destaque, ex.: "Não é necessário ter experiência prévia." */
   note: string | null;
   image: EditorialImage | null;
+  /**
+   * Atividades simultâneas neste momento (duas ou mais), cada uma com título,
+   * descrição, responsáveis e foto. Vazio: um momento comum, como antes.
+   */
+  parallel: EventProgramActivity[];
 };
 
 export type EventPartner = {
@@ -180,6 +193,14 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
     const time = text(item.time) || null;
     const timeLabel = text(item.timeLabel) || null;
     if (time ? !TIME.test(time) : !timeLabel) errors.push(`Horário ${index + 1} da programação deve ser HH:MM.`);
+    if (item.parallel !== undefined && !Array.isArray(item.parallel)) errors.push(`As atividades simultâneas da atividade ${index + 1} devem ser uma lista.`);
+    const parallel = list(item.parallel).map((activity, position): EventProgramActivity => ({
+      title: need(text(activity.title), `Título da atividade simultânea ${position + 1} do momento ${index + 1}`),
+      description: need(text(activity.description), `Descrição da atividade simultânea ${position + 1} do momento ${index + 1}`),
+      hosts: texts(activity.hosts),
+      image: image(activity.image),
+    }));
+    if (parallel.length === 1) errors.push(`O momento ${index + 1} precisa de pelo menos duas atividades simultâneas (ou nenhuma).`);
     return {
       time,
       timeLabel,
@@ -188,6 +209,7 @@ export function parseEventContent(value: unknown): { content: EventContent | nul
       hosts: texts(item.hosts),
       note: text(item.note) || null,
       image: image(item.image),
+      parallel,
     };
   });
   if (!programItems.length) errors.push("A programação precisa de pelo menos uma atividade.");

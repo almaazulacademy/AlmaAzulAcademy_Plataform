@@ -34,7 +34,9 @@
  *     devolve a edição. Qualquer conferência que falhe desfaz tudo.
  *
  * Sem duplicidade: slug livre e nenhuma sessão de evento na mesma base com o
- * mesmo início. As outras edições não mudam: o preflight e o postcheck guardam
+ * mesmo início. Turmas regulares na mesma base com horário sobreposto ao do
+ * evento aparecem no preflight como ponto de ATENÇÃO (informativo): nada é
+ * fechado, cancelado ou alterado — a decisão é da equipe, pelo painel. As outras edições não mudam: o preflight e o postcheck guardam
  * uma impressão delas (`OUTROS_EVENTOS`), que precisa sair igual.
  */
 
@@ -112,6 +114,19 @@ function duplicateSessionCount(edition: EventEdition) {
   return `(select count(*) from public.sessions s join public.experiences e on e.id = s.experience_id join public.bases b on b.id = e.base_id
           where e.kind = 'EVENT' and e.slug <> ${literal(edition.slug)} and b.slug = ${literal(edition.baseSlug)}
             and s.starts_at = ${literal(edition.startsAt)}::timestamptz and s.status <> 'ARCHIVED')`;
+}
+
+/** Fim da sessão do evento: início + duração. */
+function editionEndsAt(edition: EventEdition) {
+  return new Date(Date.parse(edition.startsAt) + edition.durationMinutes * 60_000).toISOString();
+}
+
+/** Turmas regulares (não canceladas nem arquivadas) na mesma base, com horário sobreposto ao do evento. */
+function overlappingRegularSessions(edition: EventEdition) {
+  return `from public.sessions s join public.experiences e on e.id = s.experience_id join public.bases b on b.id = e.base_id
+          where e.kind = 'REGULAR' and b.slug = ${literal(edition.baseSlug)} and s.status::text not in ('CANCELLED', 'ARCHIVED')
+            and s.starts_at < ${literal(editionEndsAt(edition))}::timestamptz
+            and s.starts_at + make_interval(mins => s.duration_minutes) > ${literal(edition.startsAt)}::timestamptz`;
 }
 
 const CHECK_TAIL = (name: string) => `select check_name, result, status from checks
@@ -274,6 +289,12 @@ with checks as (
   select 'SESSAO_SEM_DUPLICIDADE',
          ${duplicateSessionCount(edition)}::text || ' sessão(ões) de evento na base ${edition.baseSlug} com início ${edition.startsAt}',
          case when ${duplicateSessionCount(edition)} = 0 then 'OK' else 'FALHOU' end
+  union all
+  select 'TURMAS_REGULARES_SOBREPOSTAS',
+         coalesce((select string_agg(e.slug || ' ' || to_char(s.starts_at at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') || ' ' || s.status::text || ' ('
+                    || (select count(*) from public.reservations r where r.session_id = s.id and r.status::text not in ('CANCELLED', 'EXPIRED'))::text || ' reserva(s) ativa(s))', '; ' order by s.starts_at)
+          ${overlappingRegularSessions(edition)}), 'nenhuma na base ${edition.baseSlug} entre o início e o fim do evento'),
+         case when exists (select 1 ${overlappingRegularSessions(edition)}) then 'ATENCAO' else 'OK' end
   union all
   select 'SEGURANCA_DOS_EVENTOS',
          case when ${SECURITY_APPLIED} then 'migration 202610310004 aplicada' else 'migration 202610310004 AUSENTE' end,

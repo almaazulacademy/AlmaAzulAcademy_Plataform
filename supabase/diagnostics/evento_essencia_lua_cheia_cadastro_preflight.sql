@@ -1,4 +1,4 @@
--- ESSÊNCIA — 2ª edição · Celebração da Lua Cheia — PREFLIGHT DO CADASTRO (SOMENTE LEITURA; GERADO, NÃO EDITAR À MÃO)
+-- ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia — PREFLIGHT DO CADASTRO (SOMENTE LEITURA; GERADO, NÃO EDITAR À MÃO)
 --
 -- Rodar no SQL Editor ANTES de supabase/maintenance/evento_essencia_lua_cheia_cadastro.sql.
 -- A última linha, EVENTO_CADASTRO_PREFLIGHT_OK, precisa estar OK. Guarde
@@ -22,10 +22,22 @@ with checks as (
   select 'SESSAO_SEM_DUPLICIDADE',
          (select count(*) from public.sessions s join public.experiences e on e.id = s.experience_id join public.bases b on b.id = e.base_id
           where e.kind = 'EVENT' and e.slug <> 'essencia-lua-cheia' and b.slug = 'concha-acustica'
-            and s.starts_at = '2026-11-24T18:00:00.000Z'::timestamptz and s.status <> 'ARCHIVED')::text || ' sessão(ões) de evento na base concha-acustica com início 2026-11-24T18:00:00.000Z',
+            and s.starts_at = '2026-11-23T19:30:00.000Z'::timestamptz and s.status <> 'ARCHIVED')::text || ' sessão(ões) de evento na base concha-acustica com início 2026-11-23T19:30:00.000Z',
          case when (select count(*) from public.sessions s join public.experiences e on e.id = s.experience_id join public.bases b on b.id = e.base_id
           where e.kind = 'EVENT' and e.slug <> 'essencia-lua-cheia' and b.slug = 'concha-acustica'
-            and s.starts_at = '2026-11-24T18:00:00.000Z'::timestamptz and s.status <> 'ARCHIVED') = 0 then 'OK' else 'FALHOU' end
+            and s.starts_at = '2026-11-23T19:30:00.000Z'::timestamptz and s.status <> 'ARCHIVED') = 0 then 'OK' else 'FALHOU' end
+  union all
+  select 'TURMAS_REGULARES_SOBREPOSTAS',
+         coalesce((select string_agg(e.slug || ' ' || to_char(s.starts_at at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') || ' ' || s.status::text || ' ('
+                    || (select count(*) from public.reservations r where r.session_id = s.id and r.status::text not in ('CANCELLED', 'EXPIRED'))::text || ' reserva(s) ativa(s))', '; ' order by s.starts_at)
+          from public.sessions s join public.experiences e on e.id = s.experience_id join public.bases b on b.id = e.base_id
+          where e.kind = 'REGULAR' and b.slug = 'concha-acustica' and s.status::text not in ('CANCELLED', 'ARCHIVED')
+            and s.starts_at < '2026-11-23T23:00:00.000Z'::timestamptz
+            and s.starts_at + make_interval(mins => s.duration_minutes) > '2026-11-23T19:30:00.000Z'::timestamptz), 'nenhuma na base concha-acustica entre o início e o fim do evento'),
+         case when exists (select 1 from public.sessions s join public.experiences e on e.id = s.experience_id join public.bases b on b.id = e.base_id
+          where e.kind = 'REGULAR' and b.slug = 'concha-acustica' and s.status::text not in ('CANCELLED', 'ARCHIVED')
+            and s.starts_at < '2026-11-23T23:00:00.000Z'::timestamptz
+            and s.starts_at + make_interval(mins => s.duration_minutes) > '2026-11-23T19:30:00.000Z'::timestamptz) then 'ATENCAO' else 'OK' end
   union all
   select 'SEGURANCA_DOS_EVENTOS',
          case when exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'experiences' and policyname = 'events hidden until published')

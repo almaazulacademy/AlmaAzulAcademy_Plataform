@@ -24,7 +24,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { eventBookingRejection, eventSalesOpen, loadSessionBookingRules, type RulesQueryClient } from "../lib/events/booking.ts";
+import { eventBookingContext, eventBookingRejection, eventSalesOpen, loadSessionBookingRules, type RulesQueryClient } from "../lib/events/booking.ts";
 import { DEMO_SLUG, editionDemoEvent, editionErrors, editionsErrors, type EventEdition } from "../lib/events/edition.ts";
 import { EVENT_EDITIONS, getEventEdition } from "../lib/events/editions.ts";
 import { parseEventContent, validateEventEditorial, type EventContent } from "../lib/events/editorial.ts";
@@ -553,7 +553,88 @@ test("legendas: o crédito da foto chega à página; sem crédito, nada é desen
   assert.match(page, /<EventImageCaption credit=\{item\.image\.credit\} \/>/);
   assert.match(page, /<EventImageCaption credit=\{content\.hero\.image\.credit\}/);
   assert.match(page, /<EventImageCaption credit=\{extra\.heroImageMobile\.credit\} className="left-auto right-3 sm:hidden" \/>/);
-  assert.equal((page.match(/<figure className="relative m-0 aspect-/g) ?? []).length, 2);
+  // Apresentação, destaque e (desde o PR C) os cartões das atividades simultâneas.
+  assert.equal((page.match(/<figure className="relative m-0 aspect-/g) ?? []).length, 3);
   // A foto de fundo da reserva é decorativa (alt vazio): sem legenda.
   assert.match(page, /<Image src=\{extra\.reservation\.image\.src\} alt="" fill/);
+});
+
+// ===========================================================================
+// E. Atividades simultâneas num momento da programação (PR C, genérico)
+// ===========================================================================
+
+function withParallel() {
+  const editorial = testEditorial();
+  const program = editorial.event.program as { items: Array<Record<string, unknown>> };
+  program.items.push({
+    time: "18:00",
+    timeLabel: "18h às 19h",
+    title: "Momento livre",
+    description: "Duas propostas ao mesmo tempo.",
+    hosts: ["Equipe de teste"],
+    parallel: [
+      { title: "Atividade A", description: "Primeira proposta.", hosts: ["Equipe A"], image: { src: "/images/eventos/essencia/capsula-deck-lago.jpg", alt: "Deck do Cápsula Bar", credit: "Legenda A" } },
+      { title: "Atividade B", description: "Segunda proposta.", hosts: ["Equipe B"] },
+    ],
+  });
+  return editorial;
+}
+
+test("simultâneas: validadas, opcionais e com pelo menos duas; eventos sem elas não mudam", () => {
+  const event = content(withParallel());
+  const moment = event.program.items.at(-1)!;
+  assert.deepEqual(moment.parallel.map((activity) => [activity.title, activity.hosts, activity.image?.credit ?? null]), [["Atividade A", ["Equipe A"], "Legenda A"], ["Atividade B", ["Equipe B"], null]]);
+  assert.ok(ESSENCIA.program.items.every((item) => item.parallel.length === 0), "1ª edição sem simultâneas");
+  assert.ok(TEST.program.items.every((item) => item.parallel.length === 0));
+  const one = withParallel() as unknown as { event: { program: { items: Array<Record<string, unknown>> } } };
+  (one.event.program.items.at(-1)!).parallel = [{ title: "Só A", description: "Sozinha." }];
+  assert.ok(parseEventContent(one.event).errors.some((error) => error.includes("pelo menos duas atividades simultâneas")));
+  const broken = withParallel() as unknown as { event: { program: { items: Array<Record<string, unknown>> } } };
+  (broken.event.program.items.at(-1)!).parallel = "A e B";
+  assert.ok(parseEventContent(broken.event).errors.some((error) => error.includes("devem ser uma lista")));
+});
+
+test("simultâneas: e-mail e resumo mostram o momento numa linha só; a 1ª edição não ganha nada", () => {
+  const event = content(withParallel());
+  const email = buildReservationConfirmationEmail(emailData(event, { startsAt: TEST_EDITION.startsAt, durationMinutes: 240 }));
+  assert.ok(email.text.includes("- 18h às 19h — Momento livre (com Equipe de teste). Ao mesmo tempo: Atividade A; Atividade B."));
+  const first = buildReservationConfirmationEmail(emailData(ESSENCIA, { experienceTitle: "ESSÊNCIA — Corpo, Mente e Natureza" }));
+  assert.ok(!first.text.includes("Ao mesmo tempo"));
+  const context = eventBookingContext(editionDemoEvent({ ...TEST_EDITION, editorial: withParallel() }));
+  assert.equal(context.program.at(-1)?.title, "Momento livre — ao mesmo tempo: Atividade A; Atividade B");
+  assert.equal(eventBookingContext(editionDemoEvent(ESSENCIA_EDITION)).program[0].title, "Canoa havaiana ao nascer do sol");
+});
+
+test("simultâneas na página: cartões lado a lado no computador, empilhados no celular, com selo e legendas", () => {
+  const page = source("components/events/event-page.tsx");
+  assert.match(page, /\{item\.parallel\.length \? <ParallelActivities activities=\{item\.parallel\} label=\{programItemTime\(item\)\} \/> : null\}/);
+  assert.match(page, /Acontecem ao mesmo tempo\{label \? ` · \$\{label\}` : ""\}/);
+  assert.match(page, /<ul className=\{cn\("mt-6 grid gap-6", activities\.length === 2 \? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3"\)\} aria-label="Atividades simultâneas">/);
+  assert.match(page, /<EventImageCaption credit=\{activity\.image\.credit\} \/>/);
+  assert.match(page, /<h4 className="font-event/);
+});
+
+test("preflight: turma regular sobreposta na mesma base vira ATENÇÃO, sem bloquear nem alterar nada", async () => {
+  const { db, fx } = await productionLike();
+  const clean = await report(db, editionPreflightSql(TEST_EDITION));
+  assert.equal(clean.get("TURMAS_REGULARES_SOBREPOSTAS")?.status, "OK");
+  assert.match(clean.get("TURMAS_REGULARES_SOBREPOSTAS")!.result, /^nenhuma na base concha-acustica/);
+
+  // Turma regular na base do evento, começando 1h depois do início dele, com uma reserva paga.
+  const overlapping = await fx.makeSession(fx.SUNSET_CONCHA.id, { price: 7_000, capacity: 12, startsIn: "50 days" });
+  await db.query(`update public.sessions set starts_at = $1::timestamptz + interval '1 hour' where id = $2::uuid`, [TEST_EDITION.startsAt, overlapping]);
+  await fx.reserve(overlapping, 2);
+  // Turma cancelada no mesmo horário: não conta.
+  const cancelled = await fx.makeSession(fx.SUNSET_CONCHA.id, { price: 7_000, capacity: 12, startsIn: "50 days" });
+  await db.query(`update public.sessions set starts_at = $1::timestamptz, status = 'CANCELLED' where id = $2::uuid`, [TEST_EDITION.startsAt, cancelled]);
+  const before = (await db.query<Row>(`select id, status::text, starts_at::text from public.sessions order by id`)).rows;
+
+  const pre = await report(db, editionPreflightSql(TEST_EDITION));
+  const row = pre.get("TURMAS_REGULARES_SOBREPOSTAS")!;
+  assert.equal(row.status, "ATENCAO");
+  assert.match(row.result, /^remada-sunset-concha-acustica 12\/12\/2026 16:00 OPEN \(1 reserva\(s\) ativa\(s\)\)$/);
+  assert.equal(pre.get("EVENTO_CADASTRO_PREFLIGHT_OK")?.status, "OK", "atenção não reprova");
+  assert.match(pre.get("EVENTO_CADASTRO_PREFLIGHT_OK")!.result, /0 falha\(s\), 1 ponto\(s\) de atenção/);
+  assert.deepEqual((await db.query<Row>(`select id, status::text, starts_at::text from public.sessions order by id`)).rows, before, "o preflight só lê");
+  await db.close();
 });

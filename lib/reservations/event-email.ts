@@ -18,7 +18,7 @@
 import { infoParagraphs, type EventContent } from "../events/editorial.ts";
 import { emailInfoItems } from "../events/email-readiness.ts";
 import { arrivalMatchesSession, clockText, deadlineShortText, sessionStartClock } from "../events/policy.ts";
-import { programItemTime } from "../events/presentation.ts";
+import { programItemTime, programParallelText } from "../events/presentation.ts";
 import { checkinQrImageUrl, checkinUrl } from "../checkin/token.ts";
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE } from "../contact.ts";
 import { formatSessionDate } from "../sessions/date-time.ts";
@@ -75,7 +75,9 @@ function info(content: EventContent, id: string) {
 function programLines(content: EventContent) {
   return content.program.items.map((item) => {
     const hosts = item.hosts.length ? ` (com ${item.hosts.length === 1 ? item.hosts[0] : `${item.hosts.slice(0, -1).join(", ")} e ${item.hosts[item.hosts.length - 1]}`})` : "";
-    return `${programItemTime(item)} — ${item.title}${hosts}`;
+    // Atividades simultâneas ficam na mesma linha: são um momento, não horários seguidos.
+    const parallel = programParallelText(item);
+    return `${programItemTime(item)} — ${item.title}${hosts}${parallel ? `. Ao mesmo tempo: ${parallel}.` : ""}`;
   });
 }
 
