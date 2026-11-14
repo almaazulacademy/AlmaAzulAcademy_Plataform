@@ -1,6 +1,7 @@
 /**
- * ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia (2ª edição,
- * versão definitiva aprovada em 14/11/2026, PR C).
+ * ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia (2ª edição, versão
+ * definitiva aprovada em 14/11/2026, PR C, com os ajustes finais do PR #68:
+ * identidade oficial e Educação Ambiental com Fernanda Garcia).
  *
  * Confere o conteúdo aprovado: identidade, 23/11 das 16h30 às 20h, R$ 160,
  * 24 vagas e até 6 por pedido, chegada com tolerância até 16h50, cancelamento
@@ -58,15 +59,21 @@ const body = (id: string) => CONTENT.info.items.find((item) => item.id === id)?.
 // Identidade e parâmetros
 // ===========================================================================
 
-test("identidade: ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia, edição especial de fim de ano", () => {
-  assert.equal(EDITION.title, "ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia");
+test("identidade oficial: ESSÊNCIA — Experiência Relax · Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano", () => {
+  const OFFICIAL = "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia";
+  assert.equal(EDITION.title, OFFICIAL, "checkout, e-mails, planilha e painel");
+  assert.equal(parsed.success && parsed.data.seo.title, OFFICIAL, "metadados");
   assert.equal(parsed.success && parsed.data.hero.title, "ESSÊNCIA");
-  assert.equal(CONTENT.subtitle, "Corpo, mente e natureza");
-  assert.equal(CONTENT.badge, "Edição especial · Celebração da Lua Cheia");
-  assert.equal(CONTENT.intro.eyebrow, "Especial de confraternização de fim de ano");
+  assert.equal(CONTENT.subtitle, "Experiência Relax");
+  assert.equal(CONTENT.badge, "Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano");
+  assert.equal(parsed.success && parsed.data.hero.eyebrow, CONTENT.badge);
+  assert.match(EDITION.summary, /^Especial de Confraternização de Fim de Ano:/);
+  assert.match(parsed.success ? parsed.data.seo.description : "", /^Especial de Confraternização de Fim de Ano/);
+  // "Corpo, mente e natureza" só como frase conceitual secundária (apresentação).
+  assert.equal(CONTENT.intro.eyebrow, "Corpo, mente e natureza");
+  assert.ok(![EDITION.title, CONTENT.subtitle, CONTENT.badge].some((text) => /Corpo, mente/i.test(text)));
   assert.equal(CONTENT.tagline, "Que tal celebrar a vida, compartilhar boas energias e receber os novos ciclos?");
-  assert.equal(parsed.success && parsed.data.seo.title, "ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia");
-  assert.doesNotMatch(JSON_TEXT, /Experiência Relax|2ª edição ·|\bRelax\b/, "sem a nomenclatura anterior (\"massagem relaxante\" é outra coisa)");
+  assert.doesNotMatch(JSON_TEXT, /2ª edição ·|Edição especial · Celebração/);
 });
 
 test("parâmetros: segunda 23/11/2026, 16h30 às 20h, R$ 160, 24 vagas, até 6 por pedido, em breve, não cadastrada", () => {
@@ -98,7 +105,7 @@ test("programação: cinco momentos, na ordem, com horários e responsáveis con
     ["17h", "Remada Alma Azul", ["Alma Azul Academy"]],
     ["17h45", "Superioga", ["Rapha Dantas"]],
     ["18h45", "Lanche saudável", ["NutreDF"]],
-    ["19h às 20h", "Momento de Bem-Estar e Conexão com a Natureza", ["Cure-se Bem"]],
+    ["19h às 20h", "Momento de Bem-Estar e Conexão com a Natureza", ["Cure-se Bem", "Fernanda Garcia"]],
   ]);
   const [reception, rowing, superioga, snack] = CONTENT.program.items;
   assert.match(reception.description, /acolhimento/);
@@ -110,16 +117,21 @@ test("programação: cinco momentos, na ordem, com horários e responsáveis con
   assert.ok(CONTENT.program.items.slice(0, 4).every((item) => item.parallel.length === 0));
 });
 
-test("19h às 20h: duas atividades simultâneas do Cure-se Bem, nunca como horários seguidos", () => {
+test("19h às 20h: duas atividades simultâneas — Cure-se Bem e Fernanda Garcia —, nunca como horários seguidos", () => {
   const moment = CONTENT.program.items[4];
   assert.equal(moment.time, "19:00");
   assert.equal(moment.timeLabel, "19h às 20h");
   assert.deepEqual(moment.parallel.map((activity) => [activity.title, activity.hosts]), [
     ["Massagem e Reflexologia", ["Cure-se Bem"]],
-    ["Educação Ambiental: Fauna e Flora do Cerrado", ["Cure-se Bem"]],
+    ["Educação Ambiental: Fauna e Flora do Cerrado", ["Fernanda Garcia"]],
   ]);
-  assert.match(moment.description, /ao mesmo tempo/);
-  assert.match(moment.description, /aproveite a Educação Ambiental enquanto aguarda/);
+  assert.match(moment.description, /ao mesmo tempo: massagem ou reflexologia com o Cure-se Bem e Educação Ambiental com Fernanda Garcia/);
+  // A Educação Ambiental nunca é atribuída ao Cure-se Bem.
+  assert.ok(!moment.parallel[1].hosts.includes("Cure-se Bem"));
+  // Nenhum texto atribui a Educação Ambiental ao Cure-se Bem; ela é sempre "com Fernanda Garcia".
+  assert.doesNotMatch(JSON_TEXT, /Cure-se Bem —|Bem-estar e educação ambiental|Educação Ambiental com o Cure-se Bem|educação ambiental com o Cure-se Bem/i);
+  assert.ok(CONTENT.partners.items.find((partner) => partner.name === "Cure-se Bem")?.role === "Realização · Massagem e reflexologia");
+  assert.match(moment.description, /Aproveite a Educação Ambiental enquanto aguarda o seu atendimento/);
   const [massage, education] = moment.parallel;
   assert.match(massage.description, /no local entre massagem relaxante ou reflexologia podal, conforme a disponibilidade dos terapeutas, com a utilização de óleos essenciais/);
   assert.doesNotMatch(massage.description, /minutos|\bmin\b|todos os participantes/i, "sem prometer duração de atendimento");
@@ -161,7 +173,7 @@ test("o que levar, crianças, segurança, clima e cancelamento conforme aprovado
   assert.doesNotMatch(JSON_TEXT, /idade mínima|a partir de \d+ anos|anos de idade/i, "nenhuma idade mínima inventada");
   assert.match(body("seguranca"), /inclusive crianças, com colete adequado/);
   assert.match(body("seguranca"), /condições seguras de navegação/);
-  assert.match(body("clima"), /o evento inteiro será reagendado — remada, Superioga, lanche saudável, Cure-se Bem e Educação Ambiental/);
+  assert.match(body("clima"), /o evento inteiro será reagendado — remada, Superioga, lanche saudável, massagem e reflexologia e Educação Ambiental/);
   assert.match(body("clima"), /não é realizado em versão parcial/);
   assert.deepEqual(CONTENT.cancellation, { deadline: "2026-11-21T12:00:00-03:00", timeZone: "America/Sao_Paulo", summary: "crédito para outra experiência da Alma Azul Academy ou reembolso, pelo atendimento da nossa equipe" });
   assert.match(body("cancelamento"), /21 de novembro de 2026, às 12h00 \(horário de Brasília\)/);
@@ -179,7 +191,8 @@ test("e-mails: confirmação com programação, simultâneas, lanche, crianças 
   assert.deepEqual(emailInfoItems(CONTENT).map((item) => item.title), ["O que levar", "Participação de crianças", "Segurança na remada", "Lanche saudável", "Condições climáticas"]);
   const emails = new Map(editionPreviewEmails(ESSENCIA_LUA_CHEIA_SLUG));
   const confirmation = emails.get("confirmacao")!;
-  assert.equal(confirmation.subject, "Ingresso confirmado — ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia · DEMOEDICAO");
+  assert.equal(confirmation.subject, "Ingresso confirmado — ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia · DEMOEDICAO");
+  assert.ok(confirmation.text.includes("Seu ingresso para o ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia está confirmado!"));
   for (const text of [
     "Data: segunda-feira, 23 de novembro de 2026",
     "Início: 16h30",
@@ -189,7 +202,7 @@ test("e-mails: confirmação com programação, simultâneas, lanche, crianças 
     "- 17h — Remada Alma Azul (com Alma Azul Academy)",
     "- 17h45 — Superioga (com Rapha Dantas)",
     "- 18h45 — Lanche saudável (com NutreDF)",
-    "- 19h às 20h — Momento de Bem-Estar e Conexão com a Natureza (com Cure-se Bem). Ao mesmo tempo: Massagem e Reflexologia; Educação Ambiental: Fauna e Flora do Cerrado.",
+    "- 19h às 20h — Momento de Bem-Estar e Conexão com a Natureza (com Cure-se Bem e Fernanda Garcia). Ao mesmo tempo: Massagem e Reflexologia; Educação Ambiental: Fauna e Flora do Cerrado.",
     "PARTICIPAÇÃO DE CRIANÇAS",
     "LANCHE SAUDÁVEL",
     "repelente",
@@ -199,7 +212,7 @@ test("e-mails: confirmação com programação, simultâneas, lanche, crianças 
   assert.ok(reschedule.text.includes("Ao mesmo tempo: Massagem e Reflexologia; Educação Ambiental: Fauna e Flora do Cerrado."));
   for (const [name, message] of emails) {
     if (!message) continue;
-    for (const absent of ["drink", "Drink", "música", "Música", "couvert", "1 dia antes", "roupa de banho", "Relax"]) {
+    for (const absent of ["drink", "Drink", "música", "Música", "couvert", "1 dia antes", "roupa de banho", "Corpo, Mente e Natureza"]) {
       assert.ok(!message.text.includes(absent) && !message.html.includes(absent), `${name} não pode citar: ${absent}`);
     }
   }
@@ -287,17 +300,20 @@ test("fotos: todas existem, sem metadados, leves; legendas da 1ª edição e dos
   }
 });
 
-test("parceiros: os cinco, com logotipos oficiais já aprovados; a Educação Ambiental usa a identidade do Cure-se Bem", () => {
+test("parceiros: os seis, com logotipos oficiais já aprovados; Fernanda Garcia na Educação Ambiental, sem marca de outro parceiro", () => {
   assert.deepEqual(CONTENT.partners.items.map((partner) => [partner.name, partner.role]), [
     ["Alma Azul Academy", "Realização · Remada em canoa havaiana"],
-    ["Cure-se Bem", "Realização · Bem-estar e educação ambiental"],
+    ["Cure-se Bem", "Realização · Massagem e reflexologia"],
     ["Cápsula Bar", "Realização · Local do evento"],
     ["Rapha Dantas", "Superioga"],
     ["NutreDF", "Lanche saudável"],
+    ["Fernanda Garcia", "Educação Ambiental · fauna e flora do Cerrado"],
   ]);
   const approved = new Set((ESSENCIA_EDITORIAL.event.partners.items as ReadonlyArray<{ logo?: { src: string } }>).map((partner) => partner.logo?.src));
-  for (const partner of CONTENT.partners.items) assert.ok(partner.logo && approved.has(partner.logo.src), `logo aprovado: ${partner.name}`);
+  for (const partner of CONTENT.partners.items.filter((item) => item.logo)) assert.ok(approved.has(partner.logo!.src), `logo aprovado: ${partner.name}`);
   assert.equal(CONTENT.partners.items[4].logo?.src, "/images/eventos/essencia/logo-nutre.png");
+  assert.equal(CONTENT.partners.items[5].logo, null, "Fernanda Garcia aparece pelo nome, sem o logo do Cure-se Bem");
+  assert.ok(CONTENT.included.items.includes("Educação Ambiental: fauna e flora do Cerrado, com Fernanda Garcia"));
 });
 
 // ===========================================================================

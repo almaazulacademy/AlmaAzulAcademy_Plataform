@@ -1,9 +1,10 @@
 # Changelog
 
-## ESSÊNCIA — 2ª edição definitiva: Corpo, Mente e Natureza | Celebração da Lua Cheia (não cadastrada)
+## ESSÊNCIA — 2ª edição definitiva: Experiência Relax | Celebração da Lua Cheia (não cadastrada)
 
+- **Identidade oficial**: "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia", Especial de Confraternização de Fim de Ano (checkout, e-mails, metadados e página); "Corpo, mente e natureza" só como frase conceitual secundária.
 - **Versão definitiva** da edição `essencia-lua-cheia`: segunda, 23/11/2026, das 16h30 às 20h (210 min), R$ 160, 24 vagas, até 6 por pedido, tolerância até 16h50, cancelamento até 21/11/2026 às 12h00, crianças acompanhadas (mesmo ingresso, contam nas vagas), "Reservas abrem em breve". Lanche da NutreDF incluso; sem drink e sem música.
-- **Atividades simultâneas** (`program.items[].parallel`, genérico): cartões lado a lado no computador e empilhados no celular, com o selo "Acontecem ao mesmo tempo"; no e-mail e no resumo antes do pagamento, numa linha só. Usado das 19h às 20h (massagem/reflexologia e educação ambiental, com o Cure-se Bem).
+- **Atividades simultâneas** (`program.items[].parallel`, genérico): cartões lado a lado no computador e empilhados no celular, com o selo "Acontecem ao mesmo tempo"; no e-mail e no resumo antes do pagamento, numa linha só. Usado das 19h às 20h: massagem e reflexologia com o Cure-se Bem e Educação Ambiental com Fernanda Garcia.
 - **Preflight do cadastro**: novo ponto de atenção `TURMAS_REGULARES_SOBREPOSTAS` (turmas regulares da mesma base com horário sobreposto). Só informa.
 - **Fotos**: drone noturno do Cápsula na reserva, drone na hora azul no lanche, mata de galeria do Córrego do Torto na Educação Ambiental; saem as do drink e da música. Scripts de cadastro regenerados e **não executados**. Sem migration, sem dado gravado, sem variável.
 
@@ -13,7 +14,7 @@
 - **Visual**: campos opcionais `theme: "dusk"` (da tarde à noite, sem cor nova), `spotlight` (bloco de destaque) e `program.imageShape: "portrait"`. Sem eles, a página não muda — a 1ª edição segue igual.
 - **Fotos** otimizadas em WebP, sem metadados, as da 1ª edição legendadas e sem ampliação; logos oficiais da 1ª edição.
 - **Prévia** em `/eventos/demonstracao/essencia-lua-cheia`; e-mails com `pnpm email:preview:edicao essencia-lua-cheia`; scripts de cadastro gerados e **não executados**.
-- Sem migration, sem dado gravado, sem variável. Detalhes em [docs/special-events.md](docs/special-events.md#essência--corpo-mente-e-natureza--celebração-da-lua-cheia-2ª-edição).
+- Sem migration, sem dado gravado, sem variável. Detalhes em [docs/special-events.md](docs/special-events.md#essência--experiência-relax--celebração-da-lua-cheia-2ª-edição).
 
 ## Eventos especiais — infraestrutura para várias edições
 

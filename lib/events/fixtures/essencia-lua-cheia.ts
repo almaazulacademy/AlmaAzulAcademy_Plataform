@@ -1,12 +1,13 @@
 /**
- * ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia (2ª edição,
- * edição especial de confraternização de fim de ano, 23/11/2026).
+ * ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia · Especial de
+ * Confraternização de Fim de Ano (2ª edição, 23/11/2026). "Corpo, mente e
+ * natureza" fica só como frase conceitual secundária.
  *
  * Conteúdo editorial no formato exato de `experiences.editorial_content`, com a
  * versão definitiva aprovada pelo Rudah em 14/11/2026 (PR C): 16h30 às 20h,
  * R$ 160, remada às 17h, Superioga, lanche da NutreDF e, das 19h às 20h, duas
- * atividades simultâneas do Cure-se Bem (massagem/reflexologia e educação
- * ambiental). Sem drink e sem música na programação.
+ * atividades simultâneas: massagem/reflexologia com o Cure-se Bem e educação
+ * ambiental com Fernanda Garcia (ajustes de 14/11/2026). Sem drink e sem música.
  *
  * Serve à prévia (`/eventos/demonstracao/essencia-lua-cheia`), à prévia do
  * e-mail (`pnpm email:preview:edicao essencia-lua-cheia`) e aos scripts de
@@ -52,7 +53,7 @@ const INTRO_IMAGE = {
 export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
   version: 1,
   hero: {
-    eyebrow: "Edição especial · Celebração da Lua Cheia",
+    eyebrow: "Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano",
     title: "ESSÊNCIA",
     subtitle: "Que tal celebrar a vida, compartilhar boas energias e receber os novos ciclos?",
     image: HERO,
@@ -67,7 +68,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
     { label: "Ingresso", value: "R$ 160 por pessoa" },
   ],
   about: {
-    eyebrow: "Especial de confraternização de fim de ano",
+    eyebrow: "Corpo, mente e natureza",
     title: "Natureza, movimento, autocuidado e celebração!",
     paragraphs: [
       "Um encontro especial de bem-estar, natureza, movimento, autocuidado, educação ambiental e conexão!",
@@ -81,13 +82,13 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
     image: RESERVA,
   },
   seo: {
-    title: "ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia",
-    description: "Edição especial de confraternização de fim de ano no Cápsula Bar, em Brasília: remada no Lago Paranoá, Superioga, lanche saudável, massagem ou reflexologia e educação ambiental sobre o Cerrado. 23 de novembro de 2026, das 16h30 às 20h.",
+    title: "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia",
+    description: "Especial de Confraternização de Fim de Ano no Cápsula Bar, em Brasília: remada no Lago Paranoá, Superioga, lanche saudável, massagem ou reflexologia e educação ambiental sobre o Cerrado. 23 de novembro de 2026, das 16h30 às 20h.",
   },
   event: {
     theme: "dusk",
-    badge: "Edição especial · Celebração da Lua Cheia",
-    subtitle: "Corpo, mente e natureza",
+    badge: "Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano",
+    subtitle: "Experiência Relax",
     tagline: "Que tal celebrar a vida, compartilhar boas energias e receber os novos ciclos?",
     highlights: ["Remada no Lago Paranoá", "Superioga", "Lanche saudável", "Bem-estar e Cerrado"],
     heroImageMobile: {
@@ -97,7 +98,8 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
     },
     cardImage: { src: HERO.src, alt: HERO.alt },
     intro: {
-      eyebrow: "Especial de confraternização de fim de ano",
+      // "Corpo, mente e natureza" fica como frase conceitual secundária.
+      eyebrow: "Corpo, mente e natureza",
       title: "Natureza, movimento, autocuidado e celebração!",
       paragraphs: [
         "Um encontro especial de bem-estar, natureza, movimento, autocuidado, educação ambiental e conexão!",
@@ -160,8 +162,8 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
           time: "19:00",
           timeLabel: "19h às 20h",
           title: "Momento de Bem-Estar e Conexão com a Natureza",
-          description: "Duas experiências acontecem ao mesmo tempo, ambas com o Cure-se Bem: aproveite a Educação Ambiental enquanto aguarda o seu atendimento de massagem ou reflexologia.",
-          hosts: ["Cure-se Bem"],
+          description: "Duas experiências acontecem ao mesmo tempo: massagem ou reflexologia com o Cure-se Bem e Educação Ambiental com Fernanda Garcia. Aproveite a Educação Ambiental enquanto aguarda o seu atendimento.",
+          hosts: ["Cure-se Bem", "Fernanda Garcia"],
           parallel: [
             {
               title: "Massagem e Reflexologia",
@@ -176,7 +178,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
             {
               title: "Educação Ambiental: Fauna e Flora do Cerrado",
               description: "Uma vivência educativa para crianças e adultos, com experiências de conexão com a natureza e descobertas sobre a riqueza da biodiversidade do Cerrado, seus animais, suas plantas e a importância da preservação ambiental.",
-              hosts: ["Cure-se Bem"],
+              hosts: ["Fernanda Garcia"],
               image: {
                 src: `${IMG}/educacao-ambiental-cerrado.webp`,
                 alt: "Mata de galeria do Cerrado acompanhando um córrego, vista do alto, com a paisagem do Distrito Federal ao fundo",
@@ -197,7 +199,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         "Superioga com Rapha Dantas",
         "Lanche saudável da NutreDF",
         "Massagem relaxante ou reflexologia podal com o Cure-se Bem, conforme a disponibilidade dos terapeutas",
-        "Educação Ambiental: fauna e flora do Cerrado",
+        "Educação Ambiental: fauna e flora do Cerrado, com Fernanda Garcia",
       ],
     },
     partners: {
@@ -205,10 +207,12 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
       title: "Uma celebração feita a muitas mãos.",
       items: [
         { name: "Alma Azul Academy", role: "Realização · Remada em canoa havaiana", logo: { src: "/images/branding/alma-azul-logo-dark.png", alt: "Logo Alma Azul Academy" } },
-        { name: "Cure-se Bem", role: "Realização · Bem-estar e educação ambiental", logo: { src: "/images/eventos/essencia/logo-cure-se-bem.png", alt: "Logo Cure-se Bem" } },
+        { name: "Cure-se Bem", role: "Realização · Massagem e reflexologia", logo: { src: "/images/eventos/essencia/logo-cure-se-bem.png", alt: "Logo Cure-se Bem" } },
         { name: "Cápsula Bar", role: "Realização · Local do evento", logo: { src: "/images/bases/concha-acustica/capsula-bar-logo.webp", alt: "Logo Cápsula Bar" } },
         { name: "Rapha Dantas", role: "Superioga", logo: { src: "/images/eventos/essencia/logo-superioga-rapha-dantas.jpg", alt: "Logo Superioga — Rapha Dantas" } },
         { name: "NutreDF", role: "Lanche saudável", logo: { src: "/images/eventos/essencia/logo-nutre.png", alt: "Logo Nutre" } },
+        // Sem logo: a Educação Ambiental não usa a marca de outro parceiro.
+        { name: "Fernanda Garcia", role: "Educação Ambiental · fauna e flora do Cerrado" },
       ],
     },
     info: {
@@ -244,7 +248,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         {
           id: "clima",
           title: "Condições climáticas",
-          body: "Se as condições climáticas impedirem a realização segura das atividades, o evento inteiro será reagendado — remada, Superioga, lanche saudável, Cure-se Bem e Educação Ambiental — e a nova data será comunicada aos participantes.\n\nO evento não é realizado em versão parcial nessas condições.",
+          body: "Se as condições climáticas impedirem a realização segura das atividades, o evento inteiro será reagendado — remada, Superioga, lanche saudável, massagem e reflexologia e Educação Ambiental — e a nova data será comunicada aos participantes.\n\nO evento não é realizado em versão parcial nessas condições.",
         },
         {
           id: "cancelamento",
@@ -278,8 +282,8 @@ export const ESSENCIA_LUA_CHEIA_STARTS_AT = "2026-11-23T19:30:00.000Z";
  */
 export const ESSENCIA_LUA_CHEIA_EDITION: EventEdition = {
   slug: ESSENCIA_LUA_CHEIA_SLUG,
-  title: "ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia",
-  summary: "Edição especial de confraternização de fim de ano: remada no Lago Paranoá, Superioga, lanche saudável, massagem ou reflexologia e educação ambiental sobre o Cerrado, no Cápsula Bar.",
+  title: "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia",
+  summary: "Especial de Confraternização de Fim de Ano: remada no Lago Paranoá, Superioga, lanche saudável, massagem ou reflexologia e educação ambiental sobre o Cerrado, no Cápsula Bar.",
   baseSlug: "concha-acustica",
   location: CONCHA_ACUSTICA_LOCATION,
   startsAt: ESSENCIA_LUA_CHEIA_STARTS_AT,

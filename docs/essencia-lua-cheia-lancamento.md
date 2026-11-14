@@ -1,6 +1,6 @@
-# ESSÊNCIA — Corpo, Mente e Natureza | Celebração da Lua Cheia — preparação e lançamento
+# ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia — preparação e lançamento
 
-[Eventos especiais](special-events.md#essência--corpo-mente-e-natureza--celebração-da-lua-cheia-2ª-edição) · [Abertura da 1ª edição](essencia-abertura.md)
+[Eventos especiais](special-events.md#essência--experiência-relax--celebração-da-lua-cheia-2ª-edição) · [Abertura da 1ª edição](essencia-abertura.md)
 
 ## Estado: código pronto, edição oculta
 
