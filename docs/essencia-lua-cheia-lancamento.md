@@ -4,9 +4,9 @@
 
 ## Estado em produção
 
-A segunda edição `essencia-lua-cheia` foi cadastrada como `DRAFT`, com uma sessão `CLOSED` e `comingSoon: true`. O site público lê somente eventos publicados. A prévia em desenvolvimento e no Preview da Vercel lê o editorial do repositório.
+A segunda edição `essencia-lua-cheia` está `PUBLISHED`, com uma sessão `CLOSED` e `comingSoon: true`. A página pública lê o título e o editorial do Supabase. A prévia de desenvolvimento e da Vercel lê o fixture do repositório. A nova foto precisa estar disponível no deploy antes da atualização editorial no banco.
 
-O nome oficial é **ESSÊNCIA — Corpo, Mente e Natureza**, com subtítulo **Celebração da Lua Cheia** e chamada **Especial de Confraternização de Fim de Ano!**. O título e o editorial do rascunho precisam receber a correção antes do preflight de publicação.
+O nome oficial é **ESSÊNCIA — Corpo, Mente e Natureza**, com subtítulo **Celebração da Lua Cheia** e chamada **Especial de Confraternização de Fim de Ano!**. Os ajustes de apresentação, programação, parceiros e foto precisam passar pelo roteiro abaixo antes do preflight de abertura.
 
 A edição é definida em `lib/events/fixtures/essencia-lua-cheia.ts`. Para regenerar os modelos locais de cadastro, use `pnpm events:edition-sql essencia-lua-cheia --modelo-local`. Para os scripts de publicação e abertura, use `pnpm events:edition-launch-sql essencia-lua-cheia`. Para os quatro arquivos da correção, use `pnpm events:essencia-lua-cheia-editorial-sql`. Gere a prévia de e-mail com `pnpm email:preview:edicao essencia-lua-cheia`.
 
@@ -15,34 +15,22 @@ A edição é definida em `lib/events/fixtures/essencia-lua-cheia.ts`. Para rege
 ### Etapa A — Revisão final
 
 - [ ] Fotos, horários e textos confirmados na prévia do Preview: `/eventos/demonstracao/essencia-lua-cheia` (computador e celular).
-- [ ] Prévia dos e-mails (`pnpm email:preview:edicao essencia-lua-cheia`): lanche da NutreDF presente, nenhum drink nem música, crianças, tolerância até 16h50, as duas atividades simultâneas na mesma linha, prazo 21/11 12h00.
+- [ ] Prévia dos e-mails (`pnpm email:preview:edicao essencia-lua-cheia`): lanche da Nutre - DF presente, nenhum drink nem música, crianças, tolerância até 16h50, as duas atividades simultâneas na mesma linha, prazo 21/11 12h00.
 - [ ] Se algo mudou: scripts regenerados, PR com CI verde, merge e deploy de Production **Ready**.
 - [ ] `main` com CI verde; o arquivo de cadastro do repositório é o que será colado.
 
-### Etapa B — Corrigir a identidade do rascunho existente
+### Atualização editorial da página publicada
 
-Após o merge e o deploy, use o SQL Editor de produção, um arquivo por consulta.
+Depois do deploy com a nova foto, execute um arquivo por consulta no SQL Editor de produção.
 
-1. Execute `supabase/diagnostics/evento_essencia_lua_cheia_editorial_preflight.sql`. Exija `EVENTO_EDITORIAL_PREFLIGHT_OK` com zero falhas. Guarde os IDs, a sessão e as linhas `OUTROS_EVENTOS`, `LISTAGENS_REGULARES`, `RESERVAS_POR_STATUS` e `INSCRICOES_DA_LISTA_POR_STATUS`.
-2. Com autorização específica e preflight válido, execute `supabase/maintenance/evento_essencia_lua_cheia_editorial_update.sql` uma vez. O aviso `EVENTO_EDITORIAL_ATUALIZADO` deve trazer os IDs já cadastrados.
-3. Execute `supabase/diagnostics/evento_essencia_lua_cheia_editorial_postcheck.sql`. Exija `EVENTO_EDITORIAL_POSTCHECK_OK` com zero falhas e compare os IDs e indicadores com o preflight. Confira o 404 da página pública e a ausência de formulário de reserva para o ID da sessão.
-4. Repita o preflight da Etapa C com o novo conteúdo. Interrompa em qualquer divergência.
+1. Rode `supabase/diagnostics/evento_essencia_lua_cheia_editorial_publicado_preflight.sql`. Exija `EVENTO_EDITORIAL_PUBLICADO_PREFLIGHT_OK` com zero falhas. Registre os IDs, a sessão e os indicadores de outros eventos, catálogo, reservas e lista de espera. O conteúdo deve corresponder à versão publicada após o PR #70.
+2. Com autorização específica, execute `supabase/maintenance/evento_essencia_lua_cheia_editorial_publicado_update.sql` uma vez. Compare os IDs do aviso `EVENTO_EDITORIAL_ATUALIZADO` com os do preflight.
+3. Execute `supabase/diagnostics/evento_essencia_lua_cheia_editorial_publicado_postcheck.sql`. Exija `EVENTO_EDITORIAL_PUBLICADO_POSTCHECK_OK` com zero falhas e compare os indicadores. Confira os textos, a foto e “Reservas abrem em breve” na página pública. Confirme que o endereço de reserva da sessão não exibe formulário. Interrompa em qualquer divergência.
+4. Rode o preflight de abertura quando a revisão terminar. A abertura exige autorização própria.
 
-O SQL usa a RPC auditada do painel, trava a experiência e a sessão e valida o título e o JSON de origem. O registro deve estar em rascunho, com a sessão fechada e sem reservas ou inscrições. O mesmo controle protege `supabase/rollback/evento_essencia_lua_cheia_editorial_update.rollback.sql`. Use a reversão somente com autorização específica e postcheck editorial aprovado, enquanto ainda for rascunho. Depois de reverter, execute novamente o preflight editorial para comprovar o retorno ao conteúdo original.
+A atualização usa a RPC auditada do painel. A transação trava a experiência e a sessão, exige o título e o editorial exatos de origem, página pública, sessão fechada e zero reservas e inscrições. As conferências pós-escrita na mesma transação protegem a sessão, o catálogo e as outras edições.
 
-### Etapa C — Publicação com reservas fechadas (autorização própria)
-
-Scripts gerados por `pnpm events:edition-launch-sql essencia-lua-cheia` (PR D). Publicam **só** `essencia-lua-cheia`, pela RPC do painel (`admin_update_event`, com auditoria). A sessão continua `CLOSED` e "Reservas abrem em breve" continua ativo. O interruptor de publicação já está ligado e **não** é tocado: desligá-lo esconderia a 1ª edição.
-
-- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_publicacao_preflight.sql` → `EVENTO_PUBLICACAO_PREFLIGHT_OK | OK`. Esperado: `EVENTO_EM_RASCUNHO`, `CONTEUDO_APROVADO_EM_BREVE = idêntico ao aprovado`, `SESSAO_FECHADA = CLOSED 23/11/2026 16:30 210min 16000 centavos 24 vagas`, `RESERVAS_E_INSCRICOES_DA_EDICAO = nenhuma reserva; 0 inscrição(ões) na lista; 24 vaga(s) livre(s)`. Guardar `OUTROS_EVENTOS`, `LISTAGENS_REGULARES`, `RESERVAS_POR_STATUS`, `INSCRICOES_DA_LISTA_POR_STATUS`.
-- [ ] `supabase/maintenance/evento_essencia_lua_cheia_publicacao.sql` → aviso `EVENTO_PUBLICADO_COM_VENDAS_BLOQUEADAS`.
-- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_publicacao_postcheck.sql` → `EVENTO_PUBLICACAO_POSTCHECK_OK | OK`, `SEM_CAMINHO_DE_RESERVA = 0`, e as quatro impressões iguais às do preflight.
-- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_publicacao_anon_check.sql` → `evento_visivel = 1`, `sessao_aberta_visivel = 0`, `sessao_reservavel = 0`, `pode_pre_reservar = false`.
-- [ ] Production: `/eventos/essencia-lua-cheia` com **"Reservas abrem em breve"**, card em `/eventos` e destaque na home; `/reservar/<sessionId>` sem formulário; a 1ª edição igual.
-
-**Interromper** (não seguir e avisar) se: o preflight der qualquer `FALHOU`; `TURMAS_REGULARES_SOBREPOSTAS` vier ATENÇÃO sem decisão; o script recusar (`EVENTO_*`); o postcheck mostrar diferença em `OUTROS_EVENTOS` ou `LISTAGENS_REGULARES`; a página aparecer com botão de reserva.
-
-**Desfazer**: `supabase/rollback/evento_essencia_lua_cheia_publicacao.rollback.sql` volta a rascunho (a página sai do ar). Recusa sem mudar nada se a sessão estiver aberta ou houver reserva/inscrição. Já em rascunho, não faz nada.
+Para reverter, use `supabase/rollback/evento_essencia_lua_cheia_editorial_publicado_update.rollback.sql` com autorização específica. A reversão exige a página publicada com a sessão fechada, o editorial revisado e zero reservas ou inscrições. Após o aviso `EVENTO_EDITORIAL_REVERTIDO`, execute novamente o preflight editorial publicado e confira a página e o bloqueio do checkout.
 
 ### Etapa D — Abertura das vendas (autorização própria, sensível)
 
@@ -51,7 +39,7 @@ Scripts gerados por `pnpm events:edition-launch-sql essencia-lua-cheia` (PR D). 
 - [ ] `supabase/diagnostics/evento_essencia_lua_cheia_abertura_preflight.sql` → `EVENTO_ABERTURA_PREFLIGHT_OK | OK`. Esperado: `EVENTO_PUBLICADO`, `SESSAO_FECHADA_COM_OS_DADOS`, `VAGAS_LIVRES = 24 de 24`, `SESSAO_NO_FUTURO = 23/11/2026 16:30`, `PRAZO_DE_CANCELAMENTO` OK (antes de 21/11 12h; depois, ATENÇÃO: a política anunciada já não vale), nenhuma reserva.
 - [ ] `supabase/maintenance/evento_essencia_lua_cheia_abertura.sql` → aviso `EVENTO_VENDAS_ABERTAS sessionId=…` (confere com o id do cadastro).
 - [ ] `supabase/diagnostics/evento_essencia_lua_cheia_abertura_postcheck.sql` → `EVENTO_ABERTURA_POSTCHECK_OK | OK`, `SESSAO_ABERTA = OPEN 23/11/2026 16:30 210min 16000 centavos 24 vagas`, `VAGAS = 24 livre(s) de 24`, `RESERVAVEL = 1`, impressões iguais às do preflight.
-- [ ] Compra real controlada de 1 ingresso: pagamento confirmado pela InfinitePay (webhook), e-mail com o lanche da NutreDF e sem drink, QR Code, planilha, painel, vagas de 24 para 23.
+- [ ] Compra real controlada de 1 ingresso: pagamento confirmado pela InfinitePay (webhook), e-mail com o lanche da Nutre - DF e sem drink, QR Code, planilha, painel, vagas de 24 para 23.
 - [ ] Lista de espera continua desligada (`EVENTS_WAITLIST_ENABLED` ausente).
 
 **Interromper** se: o preflight der `FALHOU`; o script recusar; o postcheck não mostrar 24 vagas e a sessão reservável; o checkout recusar a compra controlada; a 1ª edição ou outra impressão mudar.

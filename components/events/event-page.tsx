@@ -254,9 +254,9 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
                   <div className="relative grid h-24 place-items-center">
                     {partner.logo ? (
                       <Image src={partner.logo.src} alt={partner.logo.alt} fill sizes="240px" className="object-contain" />
-                    ) : (
+                    ) : extra.theme !== "dusk" ? (
                       <span aria-hidden="true" className="font-event text-2xl font-extrabold uppercase tracking-[0.04em] text-forest">{partner.name}</span>
-                    )}
+                    ) : null}
                   </div>
                   <p className="mt-6 font-semibold text-ink">{partner.name}</p>
                   {partner.role ? <p className="mt-1 text-sm leading-6 text-ink/60">{partner.role}</p> : null}

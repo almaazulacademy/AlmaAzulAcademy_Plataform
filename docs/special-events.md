@@ -90,7 +90,7 @@ Tema ou formato desconhecido é recusado pelo validador. Com quatro parceiros ou
 
 ## ESSÊNCIA — Corpo, Mente e Natureza (2ª edição)
 
-Edição `essencia-lua-cheia`, em `lib/events/fixtures/essencia-lua-cheia.ts`, registrada em `lib/events/editions.ts`. Versão definitiva aprovada em 14/11/2026 (PR C, #68, com os ajustes finais de identidade e da Educação Ambiental), sobre o conteúdo do PR B (#67). **Cadastrada como rascunho**. A correção editorial precede a publicação. Prévia em `/eventos/demonstracao/essencia-lua-cheia` (dev e Preview).
+Edição `essencia-lua-cheia`, em `lib/events/fixtures/essencia-lua-cheia.ts`, registrada em `lib/events/editions.ts`. Versão definitiva aprovada em 14/11/2026 (PR C, #68, com os ajustes finais de identidade e da Educação Ambiental), sobre o conteúdo do PR B (#67). **Publicada com reservas bloqueadas**. Prévia em `/eventos/demonstracao/essencia-lua-cheia` (dev e Preview).
 
 | Item | Valor |
 | --- | --- |
@@ -100,10 +100,10 @@ Edição `essencia-lua-cheia`, em `lib/events/fixtures/essencia-lua-cheia.ts`, r
 | Chegada | Recepção às 16h30; tolerância até 16h50 (`arrival`); remada às 17h00 |
 | Cancelamento | Até 21/11/2026 às 12h00 de Brasília (`2026-11-21T12:00:00-03:00`): crédito ou reembolso pelo atendimento da equipe (manual) |
 | Reservas | `comingSoon: true`. Lista de espera desligada |
-| Alimentação | Lanche saudável da NutreDF às 18h45, incluso (texto `alimentacao`). Sem drink, sem música na programação |
+| Alimentação | Lanche saudável da Nutre - DF às 18h45, incluso (texto `alimentacao`). Sem drink, sem música na programação |
 | Visual | `theme: "dusk"`, `program.imageShape: "portrait"`, sem `spotlight` |
 
-Programação: 16h30 Recepção e boas-vindas · 17h Remada Alma Azul (canoa havaiana, colete obrigatório, sem horário astronômico da Lua) · 17h45 Superioga (Rapha Dantas, tapete próprio) · 18h45 Lanche saudável (NutreDF) · **19h às 20h** Momento de Bem-Estar e Conexão com a Natureza, com duas atividades **simultâneas** (`parallel`): Massagem e Reflexologia com o **Cure-se Bem** (escolha no local, conforme a disponibilidade dos terapeutas) e Educação Ambiental: Fauna e Flora do Cerrado com **Fernanda Garcia** (crianças e adultos).
+Programação: 16h30 Recepção e boas-vindas · 17h Remada Alma Azul (canoa havaiana, colete obrigatório, sem horário astronômico da Lua) · 17h45 Superioga (Rapha Dantas, tapete próprio) · 18h45 Lanche saudável (Nutre - DF) · **19h às 20h** Momento de Bem-Estar e Conexão com a Natureza, com duas atividades **simultâneas** (`parallel`): Massagem e Reflexologia com o **Cure-se Bem** (escolha no local, conforme a disponibilidade dos terapeutas) e Educação Ambiental: Fauna e Flora do Cerrado com **Fernanda Garcia** (crianças e adultos).
 
 Informações: chegada; o que levar (roupas que possam molhar, muda de roupa, toalha, tapete, água, repelente, agasalho); participação de crianças (só com responsável, mesmo ingresso, contam nas 24 vagas, colete adequado obrigatório; nenhuma idade mínima definida); segurança na remada; lanche; clima (o evento inteiro é reagendado, sem versão parcial); cancelamento. O e-mail traz programação, o que levar, crianças (`email: true`), segurança, lanche, clima e a política.
 
@@ -116,12 +116,12 @@ Informações: chegada; o que levar (roupas que possam molhar, muda de roupa, to
 | `recepcao-deck-lago.webp` | `FOTOS CAPSULA/CAPSULA BAR/DSC00153.jpg` | 16h30 | — |
 | `remada-entardecer.webp` | `SUNSET/IMG_8245.heic` | 17h | Remada Sunset · Alma Azul Academy |
 | `superioga-1a-edicao.webp` (720×900) | `EVENTOS/ESSENCIA/ESSENCIA 07:11/WhatsApp Image 2026-11-07 at 09.40.21.jpeg` | 17h45 | Registro da 1ª edição do ESSÊNCIA · 07/11/2026 |
-| `lanche-capsula-hora-azul.webp` (1080×1350) | `FOTOS CAPSULA DRONE /DJI_20261113224823_0226_D.JPG` | 18h45 (não há registro do lanche da 1ª edição; a foto não mostra comida) | — |
+| `lanche-1a-edicao.webp` (1200×1600) | `ESSENCIA 07:11/WhatsApp Image 2026-11-13 at 13.57.51.jpeg` | 18h45. Mesas com alimentos e participantes em prática de yoga | Registro da 1ª edição do ESSÊNCIA · 07/11/2026 |
 | `bem-estar-1a-edicao.webp` (720×900) | `…/WhatsApp Image 2026-11-07 at 09.40.21 (2).jpeg` | Massagem e Reflexologia | Registro da 1ª edição do ESSÊNCIA · 07/11/2026 |
 | `educacao-ambiental-cerrado.webp` (1400×1050) | `Alma Azul Midias/Imagens BSB/Base Lago Norte/Imersao Paranoa/DJI_20261102134256_0095_D.JPG` (recorte sem canoas) | Educação Ambiental | Córrego do Torto · Cerrado do Distrito Federal |
 | `reserva-capsula-noite.webp` (2400×1350) | `FOTOS CAPSULA DRONE /DJI_20261113225235_0235_D.JPG` | Fundo da reserva | — |
 
-Parceiros: Alma Azul Academy, Cure-se Bem (massagem e reflexologia), Cápsula Bar, Rapha Dantas (Superioga), NutreDF (lanche) e Fernanda Garcia (Educação Ambiental). Logos: os oficiais já aprovados, sem alteração; Fernanda Garcia aparece pelo nome, sem o logo de outro parceiro.
+Parceiros: Alma Azul Academy, Cure-se Bem (massagem e reflexologia), Cápsula Bar, Rapha Dantas (Superioga), Nutre - DF (lanche) e Fernanda Garcia (Educação Ambiental). Logos: os oficiais já aprovados, sem alteração; Fernanda Garcia aparece pelo nome, sem o logo de outro parceiro.
 
 **E-mail**: `pnpm email:preview:edicao essencia-lua-cheia` gera `.preview/evento-essencia-lua-cheia-*.{html,txt}` (só arquivos; o script não envia).
 
