@@ -1,5 +1,10 @@
 # Changelog
 
+## ESSÊNCIA — ajustes da página publicada
+
+- Revisão da apresentação, da remada e da orientação durante a atividade de educação ambiental. Identificação de Nutre - DF e foto original da 1ª edição na programação. O logo do Cure-se Bem aparece no seu próprio card, e Fernanda Garcia é identificada por nome e função.
+- SQL auditado para corrigir a edição publicada com a sessão fechada. Inclui preflight, postcheck e reversão.
+
 ## ESSÊNCIA — 2ª edição: scripts de publicação e abertura (não executados)
 
 - **`pnpm events:edition-launch-sql <slug>`** (genérico): gera, de uma edição registrada, a **publicação com vendas bloqueadas** (preflight, script, postcheck, conferência como `anon`, desfazer) e a **abertura das vendas** (preflight, script, postcheck, desfazer).

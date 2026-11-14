@@ -31,7 +31,7 @@ import {
   publicacaoPreflightSql,
   publicacaoSql,
 } from "../scripts/events/edition-launch-sql.ts";
-import { editorialFiles } from "../scripts/events/essencia-lua-cheia-editorial-sql.ts";
+import { editorialFiles, publishedEditorialFiles } from "../scripts/events/essencia-lua-cheia-editorial-sql.ts";
 import { applyMigration, fullDatabase } from "./support/full-database.ts";
 import { createPgliteAdmin } from "./support/pglite-admin.ts";
 import { PRODUCTION_ONLY } from "./support/production-only-schema.ts";
@@ -298,6 +298,8 @@ test("correção editorial: atualiza o rascunho original, preserva IDs e sessão
   const [preflight, update, postcheck, rollback] = Object.values(editorialFiles);
   const oldEditorial = update.match(/expected_content constant jsonb := \$json\$(.*?)\$json\$/)?.[1];
   assert.ok(oldEditorial);
+  const publishedEditorial = JSON.parse(update.match(/replacement_content constant jsonb := \$json\$(.*?)\$json\$/)?.[1] ?? "");
+  const initialEdition = { ...EDITION, editorial: publishedEditorial };
   assert.equal(createHash("sha256").update(oldEditorial).digest("hex"),
     "2e7424366ea4c3fd393f9a29d058755acc1d20edb9a87dc77c0c4e3d00e073ed",
     "JSON exato do cadastro em 8b0c96c");
@@ -322,7 +324,7 @@ test("correção editorial: atualiza o rascunho original, preserva IDs e sessão
   assert.ok((await notices(db, update)).some((note) => note.startsWith("EVENTO_EDITORIAL_ATUALIZADO")));
   const corrected = await snapshot();
   assert.deepEqual(corrected, {
-    experience: { ...(original.experience as object), title: EDITION.title, editorial_content: EDITION.editorial },
+    experience: { ...(original.experience as object), title: EDITION.title, editorial_content: publishedEditorial },
     session: original.session,
   });
   const final = await report(db, postcheck);
@@ -330,7 +332,7 @@ test("correção editorial: atualiza o rascunho original, preserva IDs e sessão
   for (const name of ["SESSAO_FECHADA", "OUTROS_EVENTOS", "LISTAGENS_REGULARES", "RESERVAS_POR_STATUS", "INSCRICOES_DA_LISTA_POR_STATUS"]) {
     assert.equal(final.get(name)?.result, initial.get(name)?.result, name);
   }
-  const publication = await report(db, source(PATHS.publicacaoPreflight));
+  const publication = await report(db, publicacaoPreflightSql(initialEdition));
   for (const [name, row] of publication) assert.equal(row.status, "OK", name);
   await refuses(db, update, /EVENTO_EDITORIAL_ORIGEM/);
   assert.ok((await notices(db, rollback)).some((note) => note.startsWith("EVENTO_EDITORIAL_REVERTIDO")));
@@ -338,7 +340,55 @@ test("correção editorial: atualiza o rascunho original, preserva IDs e sessão
   assert.deepEqual(await untouched(db), baseline);
 
   await db.exec(update);
-  await db.exec(source(PATHS.publicacao));
+  await db.exec(publicacaoSql(initialEdition));
   await refuses(db, rollback, /EVENTO_EDITORIAL_ESTADO/);
   assert.deepEqual(await untouched(db), baseline);
+});
+
+
+test("editorial publicado: preserva publicação e sessão fechada, libera o preflight de abertura e reverte só os ajustes", async (t) => {
+  const db = await productionLike();
+  t.after(() => db.close());
+  for (const [path, sql] of Object.entries(publishedEditorialFiles)) assert.equal(source(path), sql, path);
+  const [preflight, update, postcheck, rollback] = Object.values(publishedEditorialFiles);
+  const originalEditorial = update.match(/expected_content constant jsonb := \$json\$(.*?)\$json\$/)?.[1];
+  assert.ok(originalEditorial);
+  assert.equal(createHash("sha256").update(originalEditorial).digest("hex"),
+    "2c4c1a922679073df37c27c779025dfd96740804eb359c2a7557546bfec72fa3",
+    "JSON exato aprovado e publicado desde 2b386d8");
+  const originalEdition = { ...EDITION, editorial: JSON.parse(originalEditorial) };
+  await db.exec(editionCadastroSql({ ...originalEdition, registered: false }));
+  await refuses(db, update, /EVENTO_EDITORIAL_ESTADO/);
+  await db.exec(publicacaoSql(originalEdition));
+
+  const snapshot = async () => (await db.query<Row>(`
+    select to_jsonb(e) - 'updated_at' as experience, to_jsonb(s) as session
+    from public.experiences e join public.sessions s on s.experience_id = e.id where e.slug = $1
+  `, [SLUG])).rows[0];
+  const original = await snapshot();
+  const baseline = await untouched(db);
+  const before = await report(db, preflight);
+  for (const [name, row] of before) assert.equal(row.status, "OK", name);
+  await refuses(db, rollback, /EVENTO_EDITORIAL_ORIGEM/);
+  assert.equal((await report(db, source(PATHS.aberturaPreflight))).get("EVENTO_ABERTURA_PREFLIGHT_OK")?.status, "FALHOU");
+
+  assert.ok((await notices(db, update)).some((note) => note.startsWith("EVENTO_EDITORIAL_ATUALIZADO")));
+  assert.deepEqual(await snapshot(), {
+    experience: { ...(original.experience as object), editorial_content: EDITION.editorial },
+    session: original.session,
+  });
+  const after = await report(db, postcheck);
+  for (const [name, row] of after) assert.equal(row.status, "OK", name);
+  for (const name of ["SESSAO_FECHADA", "OUTROS_EVENTOS", "LISTAGENS_REGULARES", "RESERVAS_POR_STATUS", "INSCRICOES_DA_LISTA_POR_STATUS"]) {
+    assert.equal(after.get(name)?.result, before.get(name)?.result, name);
+  }
+  assert.equal((await report(db, source(PATHS.aberturaPreflight))).get("EVENTO_ABERTURA_PREFLIGHT_OK")?.status, "OK");
+  await refuses(db, update, /EVENTO_EDITORIAL_ORIGEM/);
+  assert.ok((await notices(db, rollback)).some((note) => note.startsWith("EVENTO_EDITORIAL_REVERTIDO")));
+  assert.deepEqual(await snapshot(), original);
+  assert.deepEqual(await untouched(db), baseline);
+
+  await db.exec(update);
+  await db.exec(source(PATHS.abertura));
+  await refuses(db, rollback, /EVENTO_EDITORIAL_ORIGEM|EVENTO_EDITORIAL_SESSAO/);
 });

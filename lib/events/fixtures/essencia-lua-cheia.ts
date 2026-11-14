@@ -4,7 +4,7 @@
  *
  * Conteúdo editorial no formato exato de `experiences.editorial_content`, com a
  * versão definitiva aprovada pelo Rudah em 14/11/2026 (PR C): 16h30 às 20h,
- * R$ 160, remada às 17h, Superioga, lanche da NutreDF e, das 19h às 20h, duas
+ * R$ 160, remada às 17h, Superioga, lanche da Nutre - DF e, das 19h às 20h, duas
  * atividades simultâneas: massagem/reflexologia com o Cure-se Bem e educação
  * ambiental com Fernanda Garcia (ajustes de 14/11/2026). Sem drink e sem música.
  *
@@ -19,8 +19,8 @@
  * Fotos (`public/images/eventos/essencia-lua-cheia/`): as da 1ª edição levam a
  * legenda "Registro da 1ª edição do ESSÊNCIA · 07/11/2026"; as de outras
  * experiências e lugares levam o nome deles, para não parecerem desta edição.
- * Não há registro do lanche da 1ª edição nas pastas: o momento do lanche usa
- * uma foto do Cápsula, sem mostrar comida. Logos: os oficiais já aprovados.
+ * A foto do lanche mostra as mesas e a prática de Superioga na 1ª edição.
+ * Logos: os oficiais já aprovados.
  *
  * Módulo puro, sem imports de aplicação: é lido pelo Next e pelos testes.
  */
@@ -72,7 +72,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
   ],
   about: {
     eyebrow: "Corpo, mente e natureza",
-    title: "Natureza, movimento, autocuidado e celebração!",
+    title: "Lua Cheia, Movimento e Autocuidado",
     paragraphs: [
       "Um encontro especial de bem-estar, natureza, movimento, autocuidado, educação ambiental e conexão!",
     ],
@@ -102,7 +102,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
     cardImage: { src: HERO.src, alt: HERO.alt },
     intro: {
       eyebrow: "Corpo, mente e natureza",
-      title: "Natureza, movimento, autocuidado e celebração!",
+      title: "Lua Cheia, Movimento e Autocuidado",
       paragraphs: [
         "Um encontro especial de bem-estar, natureza, movimento, autocuidado, educação ambiental e conexão!",
         "Nesta edição especial do ESSÊNCIA, vamos celebrar nossas amizades, conquistas e experiências vividas ao longo do ano, compartilhando bons momentos e agradecendo por tudo que vivemos.",
@@ -128,7 +128,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         {
           time: "17:00",
           title: "Remada Alma Azul",
-          description: "Um convite para contemplar o despertar da Lua, movimentar o corpo e viver a magia do contato com a natureza. A remada é realizada em canoas havaianas, com acompanhamento da equipe Alma Azul Academy e uso obrigatório de colete salva-vidas.",
+          description: "Um convite para contemplar o pôr do sol e presenciar o despertar da Lua Cheia de dentro da água. Uma remada leve em canoas havaianas, acompanhada pela equipe Alma Azul Academy. Não é necessário ter experiência prévia na modalidade.",
           hosts: ["Alma Azul Academy"],
           note: "Colete salva-vidas obrigatório, inclusive para crianças.",
           image: {
@@ -152,19 +152,20 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         {
           time: "18:45",
           title: "Lanche saudável",
-          description: "Momento de alimentação saudável e convivência, com o lanche da NutreDF.",
-          hosts: ["NutreDF"],
+          description: "Momento de alimentação saudável e convivência, com o lanche da Nutre - DF.",
+          hosts: ["Nutre - DF"],
           note: "Incluído no ingresso, sem cobrança adicional.",
           image: {
-            src: `${IMG}/lanche-capsula-hora-azul.webp`,
-            alt: "Cápsula Bar iluminado ao anoitecer, com pessoas reunidas nas mesas sob o céu azul profundo",
+            src: `${IMG}/lanche-1a-edicao.webp`,
+            alt: "Duas mesas amarelas com alimentos, bebidas e produtos à frente dos participantes em prática de yoga no Cápsula Bar",
+            credit: FIRST_EDITION,
           },
         },
         {
           time: "19:00",
           timeLabel: "19h às 20h",
           title: "Momento de Bem-Estar e Conexão com a Natureza",
-          description: "Duas experiências acontecem ao mesmo tempo: massagem ou reflexologia com o Cure-se Bem e Educação Ambiental com Fernanda Garcia. Aproveite a Educação Ambiental enquanto aguarda o seu atendimento.",
+          description: "Duas experiências acontecem ao mesmo tempo: massagem ou reflexologia com o Cure-se Bem e Educação Ambiental com Fernanda Garcia. Aproveite um momento enriquecedor de educação ambiental enquanto aguarda o seu atendimento.",
           hosts: ["Cure-se Bem", "Fernanda Garcia"],
           parallel: [
             {
@@ -199,7 +200,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         "Recepção e boas-vindas",
         "Remada em canoa havaiana, com colete salva-vidas",
         "Superioga com Rapha Dantas",
-        "Lanche saudável da NutreDF",
+        "Lanche saudável da Nutre - DF",
         "Massagem relaxante ou reflexologia podal com o Cure-se Bem, conforme a disponibilidade dos terapeutas",
         "Educação Ambiental: fauna e flora do Cerrado, com Fernanda Garcia",
       ],
@@ -212,7 +213,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         { name: "Cure-se Bem", role: "Realização · Massagem e reflexologia", logo: { src: "/images/eventos/essencia/logo-cure-se-bem.png", alt: "Logo Cure-se Bem" } },
         { name: "Cápsula Bar", role: "Realização · Local do evento", logo: { src: "/images/bases/concha-acustica/capsula-bar-logo.webp", alt: "Logo Cápsula Bar" } },
         { name: "Rapha Dantas", role: "Superioga", logo: { src: "/images/eventos/essencia/logo-superioga-rapha-dantas.jpg", alt: "Logo Superioga — Rapha Dantas" } },
-        { name: "NutreDF", role: "Lanche saudável", logo: { src: "/images/eventos/essencia/logo-nutre.png", alt: "Logo Nutre" } },
+        { name: "Nutre - DF", role: "Lanche saudável", logo: { src: "/images/eventos/essencia/logo-nutre.png", alt: "Logo Nutre - DF" } },
         // Sem logo: a Educação Ambiental não usa a marca de outro parceiro.
         { name: "Fernanda Garcia", role: "Educação Ambiental · fauna e flora do Cerrado" },
       ],
@@ -245,7 +246,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         {
           id: "alimentacao",
           title: "Lanche saudável",
-          body: "O ingresso inclui o lanche saudável da NutreDF, servido às 18h45, sem cobrança adicional.",
+          body: "O ingresso inclui o lanche saudável da Nutre - DF, servido às 18h45, sem cobrança adicional.",
         },
         {
           id: "clima",
