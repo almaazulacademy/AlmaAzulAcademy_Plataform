@@ -123,10 +123,11 @@ function sessionCheck(edition: EventEdition, status: "CLOSED" | "OPEN", name: st
          case when (select count(*) from sess) = 1 and (select count(*) from sess s where s.status = '${status}' and ${sessionMatches(edition)}) = 1 then 'OK' else 'FALHOU' end`;
 }
 
-function contentCheck(json: string, name: string) {
+function contentCheck(edition: EventEdition, json: string, name: string) {
+  const matches = `title = ${literal(edition.title)} and editorial_content = $json$${json}$json$::jsonb`;
   return `  select '${name}',
-         case when (select editorial_content = $json$${json}$json$::jsonb from ev) then 'idêntico ao aprovado' else coalesce((select 'diferente' from ev), 'ausente') end,
-         case when (select editorial_content = $json$${json}$json$::jsonb from ev) and (select public.experience_editorial_is_publishable(editorial_content) from ev) then 'OK' else 'FALHOU' end`;
+         case when (select ${matches} from ev) then 'idêntico ao aprovado' else coalesce((select 'diferente' from ev), 'ausente') end,
+         case when (select ${matches} from ev) and (select public.experience_editorial_is_publishable(editorial_content) from ev) then 'OK' else 'FALHOU' end`;
 }
 
 function commonChecks(edition: EventEdition, options: { reservationsMustBeZero: boolean }) {
@@ -194,7 +195,7 @@ checks as (
          coalesce((select kind || '/' || status || ', active=' || coalesce(legacy_active, 'sem coluna') from ev), 'ausente') as result,
          case when (select status = 'DRAFT' and coalesce(legacy_active, 'false') = 'false' from ev) then 'OK' else 'FALHOU' end as status
   union all
-${contentCheck(approved(edition), "CONTEUDO_APROVADO_EM_BREVE")}
+${contentCheck(edition, approved(edition), "CONTEUDO_APROVADO_EM_BREVE")}
   union all
 ${sessionCheck(edition, "CLOSED", "SESSAO_FECHADA")}
   union all
@@ -241,7 +242,7 @@ begin
   if target.status <> 'DRAFT' then
     raise exception 'EVENTO_ESTADO: esperado DRAFT, encontrado % (publicação já feita?)', target.status;
   end if;
-  if target.editorial_content <> $json$${approved(edition)}$json$::jsonb
+  if target.title is distinct from ${literal(edition.title)} or target.editorial_content is distinct from $json$${approved(edition)}$json$::jsonb
      or not public.experience_editorial_is_publishable(target.editorial_content) then
     raise exception 'EVENTO_CONTEUDO: conteúdo diferente do aprovado (com "em breve")';
   end if;
@@ -302,7 +303,7 @@ checks as (
          coalesce((select kind || '/' || status from ev), 'ausente') as result,
          case when (select status = 'PUBLISHED' from ev) then 'OK' else 'FALHOU' end as status
   union all
-${contentCheck(approved(edition), "CONTEUDO_APROVADO_EM_BREVE")}
+${contentCheck(edition, approved(edition), "CONTEUDO_APROVADO_EM_BREVE")}
   union all
 ${sessionCheck(edition, "CLOSED", "SESSAO_FECHADA")}
   union all
@@ -403,7 +404,7 @@ checks as (
          coalesce((select kind || '/' || status from ev), 'ausente') as result,
          case when (select status = 'PUBLISHED' from ev) then 'OK' else 'FALHOU' end as status
   union all
-${contentCheck(approved(edition), "CONTEUDO_APROVADO_EM_BREVE")}
+${contentCheck(edition, approved(edition), "CONTEUDO_APROVADO_EM_BREVE")}
   union all
 ${sessionCheck(edition, "CLOSED", "SESSAO_FECHADA_COM_OS_DADOS")}
   union all
@@ -457,7 +458,7 @@ begin
   if not found or target.status <> 'PUBLISHED' then
     raise exception 'EVENTO_ESTADO: esperada a edição publicada';
   end if;
-  if target.editorial_content <> $json$${approved(edition)}$json$::jsonb then
+  if target.title is distinct from ${literal(edition.title)} or target.editorial_content is distinct from $json$${approved(edition)}$json$::jsonb then
     raise exception 'EVENTO_CONTEUDO: esperado o conteúdo aprovado com "em breve" (abertura já feita?)';
   end if;
   if (select publication_enabled from public.special_event_settings where singleton) is distinct from true then
@@ -529,7 +530,7 @@ checks as (
          coalesce((select kind || '/' || status from ev), 'ausente') as result,
          case when (select status = 'PUBLISHED' from ev) then 'OK' else 'FALHOU' end as status
   union all
-${contentCheck(JSON.stringify(openedEditorial(edition)), "CONTEUDO_APROVADO_VENDA_ABERTA")}
+${contentCheck(edition, JSON.stringify(openedEditorial(edition)), "CONTEUDO_APROVADO_VENDA_ABERTA")}
   union all
 ${sessionCheck(edition, "OPEN", "SESSAO_ABERTA")}
   union all

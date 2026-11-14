@@ -88,13 +88,13 @@ Campos opcionais do bloco `event`, para uma edição ter identidade própria sem
 
 Tema ou formato desconhecido é recusado pelo validador. Com quatro parceiros ou menos, a grade fica com quatro colunas.
 
-## ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia (2ª edição)
+## ESSÊNCIA — Corpo, Mente e Natureza (2ª edição)
 
-Edição `essencia-lua-cheia`, em `lib/events/fixtures/essencia-lua-cheia.ts`, registrada em `lib/events/editions.ts`. Versão definitiva aprovada em 14/11/2026 (PR C, #68, com os ajustes finais de identidade e da Educação Ambiental), sobre o conteúdo do PR B (#67). **Ainda não cadastrada**: prévia em `/eventos/demonstracao/essencia-lua-cheia` (dev e Preview).
+Edição `essencia-lua-cheia`, em `lib/events/fixtures/essencia-lua-cheia.ts`, registrada em `lib/events/editions.ts`. Versão definitiva aprovada em 14/11/2026 (PR C, #68, com os ajustes finais de identidade e da Educação Ambiental), sobre o conteúdo do PR B (#67). **Cadastrada como rascunho**. A correção editorial precede a publicação. Prévia em `/eventos/demonstracao/essencia-lua-cheia` (dev e Preview).
 
 | Item | Valor |
 | --- | --- |
-| Identidade | ESSÊNCIA — Experiência Relax · Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano. Nome completo (checkout, e-mail, planilha, metadados): "ESSÊNCIA — Experiência Relax \| Celebração da Lua Cheia". "Corpo, mente e natureza" só como frase conceitual secundária (apresentação) |
+| Identidade | ESSÊNCIA — Corpo, Mente e Natureza. Subtítulo “Celebração da Lua Cheia” e chamada “Especial de Confraternização de Fim de Ano!”. |
 | Data e horário | Segunda, 23/11/2026, das 16h30 às 20h em Brasília — `2026-11-23T19:30:00.000Z`, 210 min |
 | Ingresso, vagas, pedido | R$ 160 (16000 centavos), 24 vagas, até 6 por pedido. Crianças pagam o mesmo e contam nas vagas |
 | Chegada | Recepção às 16h30; tolerância até 16h50 (`arrival`); remada às 17h00 |

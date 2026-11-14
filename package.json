@@ -20,6 +20,7 @@
     "events:essencia-publicacao-sql": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/events/essencia-publicacao-sql.ts",
     "events:essencia-editorial-sql": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/events/essencia-editorial-sql.ts",
     "events:essencia-editorial-publicado-sql": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/events/essencia-editorial-publicado-sql.ts",
+    "events:essencia-lua-cheia-editorial-sql": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/events/essencia-lua-cheia-editorial-sql.ts",
     "events:edition-sql": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/events/edition-cadastro-sql.ts",
     "events:edition-launch-sql": "node --experimental-strip-types --import ./tests/support/alias-hooks.mjs scripts/events/edition-launch-sql.ts"
   },

@@ -1,4 +1,4 @@
--- ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia — DESFAZER A PUBLICAÇÃO (SOMENTE COM DECISÃO EXPLÍCITA) (GERADO por `pnpm events:edition-launch-sql essencia-lua-cheia`; NÃO EDITAR À MÃO)
+-- ESSÊNCIA — Corpo, Mente e Natureza — DESFAZER A PUBLICAÇÃO (SOMENTE COM DECISÃO EXPLÍCITA) (GERADO por `pnpm events:edition-launch-sql essencia-lua-cheia`; NÃO EDITAR À MÃO)
 --
 -- Volta essencia-lua-cheia a rascunho pelo caminho do painel: a página sai do ar. NÃO mexe
 -- no interruptor (as outras edições continuam no ar), não apaga nada. Recusa, sem

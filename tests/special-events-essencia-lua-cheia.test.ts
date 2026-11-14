@@ -1,5 +1,5 @@
 /**
- * ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia (2ª edição, versão
+ * ESSÊNCIA — Corpo, Mente e Natureza (2ª edição, versão
  * definitiva aprovada em 14/11/2026, PR C, com os ajustes finais do PR #68:
  * identidade oficial e Educação Ambiental com Fernanda Garcia).
  *
@@ -59,30 +59,28 @@ const body = (id: string) => CONTENT.info.items.find((item) => item.id === id)?.
 // Identidade e parâmetros
 // ===========================================================================
 
-test("identidade oficial: ESSÊNCIA — Experiência Relax · Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano", () => {
-  const OFFICIAL = "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia";
+test("identidade oficial: ESSÊNCIA — Corpo, Mente e Natureza · Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano", () => {
+  const OFFICIAL = "ESSÊNCIA — Corpo, Mente e Natureza";
   assert.equal(EDITION.title, OFFICIAL, "checkout, e-mails, planilha e painel");
   assert.equal(parsed.success && parsed.data.seo.title, OFFICIAL, "metadados");
-  assert.equal(parsed.success && parsed.data.hero.title, "ESSÊNCIA");
-  assert.equal(CONTENT.subtitle, "Experiência Relax");
-  assert.equal(CONTENT.badge, "Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano");
+  assert.equal(parsed.success && parsed.data.hero.title, OFFICIAL);
+  assert.equal(CONTENT.subtitle, "Celebração da Lua Cheia");
+  assert.equal(CONTENT.badge, "Especial de Confraternização de Fim de Ano!");
   assert.equal(parsed.success && parsed.data.hero.eyebrow, CONTENT.badge);
   assert.match(EDITION.summary, /^Especial de Confraternização de Fim de Ano:/);
   assert.match(parsed.success ? parsed.data.seo.description : "", /^Especial de Confraternização de Fim de Ano/);
-  // "Corpo, mente e natureza" só como frase conceitual secundária (apresentação).
   assert.equal(CONTENT.intro.eyebrow, "Corpo, mente e natureza");
-  assert.ok(![EDITION.title, CONTENT.subtitle, CONTENT.badge].some((text) => /Corpo, mente/i.test(text)));
   assert.equal(CONTENT.tagline, "Que tal celebrar a vida, compartilhar boas energias e receber os novos ciclos?");
-  assert.doesNotMatch(JSON_TEXT, /2ª edição ·|Edição especial · Celebração/);
+  assert.doesNotMatch(JSON_TEXT, /Experiência Relax|2ª edição ·|Edição especial · Celebração/);
 });
 
-test("parâmetros: segunda 23/11/2026, 16h30 às 20h, R$ 160, 24 vagas, até 6 por pedido, em breve, não cadastrada", () => {
+test("parâmetros: segunda 23/11/2026, 16h30 às 20h, R$ 160, 24 vagas, até 6 por pedido, em breve, cadastrada em rascunho", () => {
   assert.equal(EDITION.slug, "essencia-lua-cheia");
   assert.equal(getEventEdition(ESSENCIA_LUA_CHEIA_SLUG), EDITION);
   assert.deepEqual(EVENT_EDITIONS.map((edition) => edition.slug), ["essencia", "essencia-lua-cheia"]);
   assert.deepEqual(editionErrors(EDITION), []);
-  assert.deepEqual(editionCadastroErrors(EDITION), []);
-  assert.equal(EDITION.registered, false);
+  assert.match(editionCadastroErrors(EDITION).join(" "), /já está cadastrada/);
+  assert.equal(EDITION.registered, true);
   assert.equal(EDITION.startsAt, "2026-11-23T19:30:00.000Z");
   assert.equal(sessionStartClock(EDITION.startsAt), "16:30");
   assert.equal(new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long" }).format(new Date(EDITION.startsAt)), "segunda-feira");
@@ -191,8 +189,8 @@ test("e-mails: confirmação com programação, simultâneas, lanche, crianças 
   assert.deepEqual(emailInfoItems(CONTENT).map((item) => item.title), ["O que levar", "Participação de crianças", "Segurança na remada", "Lanche saudável", "Condições climáticas"]);
   const emails = new Map(editionPreviewEmails(ESSENCIA_LUA_CHEIA_SLUG));
   const confirmation = emails.get("confirmacao")!;
-  assert.equal(confirmation.subject, "Ingresso confirmado — ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia · DEMOEDICAO");
-  assert.ok(confirmation.text.includes("Seu ingresso para o ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia está confirmado!"));
+  assert.equal(confirmation.subject, "Ingresso confirmado — ESSÊNCIA — Corpo, Mente e Natureza · DEMOEDICAO");
+  assert.ok(confirmation.text.includes("Seu ingresso para o ESSÊNCIA — Corpo, Mente e Natureza está confirmado!"));
   for (const text of [
     "Data: segunda-feira, 23 de novembro de 2026",
     "Início: 16h30",
@@ -212,7 +210,7 @@ test("e-mails: confirmação com programação, simultâneas, lanche, crianças 
   assert.ok(reschedule.text.includes("Ao mesmo tempo: Massagem e Reflexologia; Educação Ambiental: Fauna e Flora do Cerrado."));
   for (const [name, message] of emails) {
     if (!message) continue;
-    for (const absent of ["drink", "Drink", "música", "Música", "couvert", "1 dia antes", "roupa de banho", "Corpo, Mente e Natureza"]) {
+    for (const absent of ["drink", "Drink", "música", "Música", "couvert", "1 dia antes", "roupa de banho", "Experiência Relax"]) {
       assert.ok(!message.text.includes(absent) && !message.html.includes(absent), `${name} não pode citar: ${absent}`);
     }
   }
@@ -228,6 +226,8 @@ test("resumo antes do pagamento: o momento das 19h mostra as duas atividades jun
     ["18h45", "Lanche saudável"],
     ["19h às 20h", "Momento de Bem-Estar e Conexão com a Natureza — ao mesmo tempo: Massagem e Reflexologia; Educação Ambiental: Fauna e Flora do Cerrado"],
   ]);
+  assert.equal(context.title, "ESSÊNCIA — Corpo, Mente e Natureza");
+  assert.equal(context.subtitle, "Celebração da Lua Cheia");
   assert.equal(context.maxPerOrder, 6);
   assert.equal(context.timeRange, "16H30 ÀS 20H");
   assert.equal(context.arrivalNote, "Início às 16h30, com tolerância de chegada até 16h50.");
@@ -343,10 +343,11 @@ test("visual: tema dusk e fotos verticais; a 1ª edição segue igual", () => {
 const PATHS = editionCadastroPaths(ESSENCIA_LUA_CHEIA_SLUG);
 
 test("scripts: os arquivos do repositório são exatamente os gerados da edição", () => {
-  assert.equal(source(PATHS.preflight), editionPreflightSql(EDITION), "rode pnpm events:edition-sql essencia-lua-cheia");
-  assert.equal(source(PATHS.cadastro), editionCadastroSql(EDITION));
-  assert.equal(source(PATHS.postcheck), editionPostcheckSql(EDITION));
-  assert.equal(source(PATHS.rollback), editionRollbackSql(EDITION));
+  const model = { ...EDITION, registered: false };
+  assert.equal(source(PATHS.preflight), editionPreflightSql(model), "rode pnpm events:edition-sql essencia-lua-cheia --modelo-local");
+  assert.equal(source(PATHS.cadastro), editionCadastroSql(model));
+  assert.equal(source(PATHS.postcheck), editionPostcheckSql(model));
+  assert.equal(source(PATHS.rollback), editionRollbackSql(model));
   const cadastro = source(PATHS.cadastro);
   assert.deepEqual(JSON.parse(cadastro.match(/\$json\$([\s\S]*?)\$json\$/)?.[1] ?? ""), ESSENCIA_LUA_CHEIA_EDITORIAL);
   assert.match(cadastro, /'2026-11-23T19:30:00\.000Z'::timestamptz,\n {4}210,\n {4}16000,\n {4}24\n/);

@@ -112,7 +112,7 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
           <div className="max-w-4xl animate-fade-up [text-shadow:0_2px_24px_rgba(0,0,0,0.35)]">
             {preview ? <EventDemoBanner /> : null}
             <EventEyebrow>{extra.badge}</EventEyebrow>
-            <h1 className="mt-6 font-event text-[clamp(2.75rem,11vw,9.5rem)] font-extrabold uppercase leading-[0.88] tracking-[-0.02em]">
+            <h1 className={cn("mt-6 font-event font-extrabold uppercase tracking-[-0.02em]", extra.theme === "dusk" ? "text-balance text-[clamp(2.25rem,7vw,5.5rem)] leading-[0.95]" : "text-[clamp(2.75rem,11vw,9.5rem)] leading-[0.88]")}>
               {content.hero.title}
             </h1>
             <p className="mt-4 font-event text-lg font-bold uppercase tracking-[0.18em] text-ember sm:text-2xl">{extra.subtitle}</p>
