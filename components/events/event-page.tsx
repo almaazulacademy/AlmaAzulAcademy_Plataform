@@ -8,7 +8,7 @@ import { eventDisplayFont } from "@/components/events/fonts";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { eventSalesOpen } from "@/lib/events/booking";
-import { infoParagraphs, visibleInfoItems } from "@/lib/events/editorial";
+import { infoParagraphs, visibleInfoItems, type EventProgramActivity } from "@/lib/events/editorial";
 import { clockText, deadlineShortText } from "@/lib/events/policy";
 import { eventCta, eventDayLabel, eventLongDate, eventPrice, eventScheduleLabel, programItemTime, spotsLabel } from "@/lib/events/presentation";
 import type { PublicEvent } from "@/lib/events/public";
@@ -184,6 +184,7 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
                     <EventImageCaption credit={item.image.credit} />
                   </figure>
                 ) : null}
+                {item.parallel.length ? <ParallelActivities activities={item.parallel} label={programItemTime(item)} /> : null}
               </li>
             ))}
           </ol>
@@ -362,6 +363,39 @@ export function EventPage({ event, preview = false, bookingOpen: globalBookingOp
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * Atividades simultâneas de um momento: cartões lado a lado no computador e
+ * empilhados no celular, com o selo de que acontecem ao mesmo tempo. Genérico:
+ * qualquer evento com `program.items[].parallel` usa o mesmo bloco.
+ */
+function ParallelActivities({ activities, label }: { activities: EventProgramActivity[]; label: string }) {
+  return (
+    <div className="lg:col-span-2">
+      <p className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-white/85">
+        <Clock aria-hidden="true" className="size-4 text-ember" />
+        Acontecem ao mesmo tempo{label ? ` · ${label}` : ""}
+      </p>
+      <ul className={cn("mt-6 grid gap-6", activities.length === 2 ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3")} aria-label="Atividades simultâneas">
+        {activities.map((activity) => (
+          <li key={activity.title} className="flex flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04]">
+            {activity.image ? (
+              <figure className="relative m-0 aspect-[4/3] overflow-hidden">
+                <EditorialImage src={activity.image.src} alt={activity.image.alt} sizes="(min-width: 768px) 45vw, 100vw" className="object-cover" />
+                <EventImageCaption credit={activity.image.credit} />
+              </figure>
+            ) : null}
+            <div className="p-6 sm:p-8">
+              <h4 className="font-event text-xl font-bold uppercase leading-tight sm:text-2xl">{activity.title}</h4>
+              {activity.hosts.length ? <p className="mt-2 text-sm font-semibold text-ember">Com {joinHosts(activity.hosts)}.</p> : null}
+              <p className="mt-4 text-base leading-7 text-white/75 sm:text-lg sm:leading-8">{activity.description}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

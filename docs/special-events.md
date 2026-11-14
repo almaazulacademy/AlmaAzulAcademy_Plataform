@@ -76,56 +76,57 @@ Testes: `tests/special-events-editions.test.ts`.
 
 ### Atmosfera, destaque e fotos verticais (opcionais)
 
-Três campos opcionais do bloco `event`, para uma edição ter identidade própria sem código novo. Sem eles, a página é a de sempre (a da 1ª edição):
+Campos opcionais do bloco `event`, para uma edição ter identidade própria sem código novo. Sem eles, a página é a de sempre (a da 1ª edição):
 
 | Campo | Efeito |
 | --- | --- |
 | `theme: "dusk"` | Da luz quente da tarde ao azul profundo da noite: apresentação e programação em degradê (tons de `night`, `ember` e `lake`, sem cor nova), informações e reserva em azul-noite. Na linha do tempo, o marcador vai do âmbar do sol ao branco da Lua cheia, crescendo a cada atividade |
 | `spotlight` | Bloco de destaque entre a programação e o que está incluso: `eyebrow`, `title`, `paragraphs[]`, `note` e `image` (com legenda). Ex.: o drink de cortesia |
 | `program.imageShape: "portrait"` | Fotos da programação em 4:5, com largura máxima de 28 rem — para fotos verticais ou pequenas (nunca ampliadas a tela cheia) |
+| `program.items[].parallel` | Atividades **simultâneas** num mesmo momento (duas ou mais, cada uma com `title`, `description`, `hosts` e `image`): cartões lado a lado no computador, empilhados no celular, com o selo "Acontecem ao mesmo tempo · <horário>". No e-mail e no resumo antes do pagamento, o momento fica numa linha só ("Ao mesmo tempo: A; B"). Com uma só atividade, o validador recusa |
 
 Tema ou formato desconhecido é recusado pelo validador. Com quatro parceiros ou menos, a grade fica com quatro colunas.
 
-## ESSÊNCIA — 2ª edição · Celebração da Lua Cheia (PR B)
+## ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia (2ª edição)
 
-Edição `essencia-lua-cheia`, em `lib/events/fixtures/essencia-lua-cheia.ts`, registrada em `lib/events/editions.ts`. **Ainda não cadastrada**: prévia em `/eventos/demonstracao/essencia-lua-cheia` (dev e Preview).
+Edição `essencia-lua-cheia`, em `lib/events/fixtures/essencia-lua-cheia.ts`, registrada em `lib/events/editions.ts`. Versão definitiva aprovada em 14/11/2026 (PR C, #68, com os ajustes finais de identidade e da Educação Ambiental), sobre o conteúdo do PR B (#67). **Ainda não cadastrada**: prévia em `/eventos/demonstracao/essencia-lua-cheia` (dev e Preview).
 
 | Item | Valor |
 | --- | --- |
-| Data e início | 24/11/2026 (terça), 15h em Brasília — `2026-11-24T18:00:00.000Z` |
-| Duração técnica | 240 min (até o início da confraternização, às 19h). Página e e-mail dizem "A partir das 15h", sem fim anunciado |
-| Ingresso, vagas, pedido | R$ 150 (15000 centavos), 24 vagas, até 6 por pedido |
-| Chegada | Recomendada às 14h50; recepção às 15h00; tolerância até 15h15 (`arrival`) |
-| Cancelamento | Até 22/11/2026 às 12h00 de Brasília (`2026-11-22T12:00:00-03:00`), crédito ou reembolso pelo atendimento da equipe (manual) |
-| Reservas | `comingSoon: true` — "Reservas abrem em breve" até a abertura explícita. Lista de espera desligada |
-| Alimentação | Nenhuma: não há texto `alimentacao`. O drink de cortesia (com ou sem álcool) é o item `drink`, com `email: true`, e o destaque `spotlight` |
-| Visual | `theme: "dusk"`, `program.imageShape: "portrait"` |
+| Identidade | ESSÊNCIA — Experiência Relax · Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano. Nome completo (checkout, e-mail, planilha, metadados): "ESSÊNCIA — Experiência Relax \| Celebração da Lua Cheia". "Corpo, mente e natureza" só como frase conceitual secundária (apresentação) |
+| Data e horário | Segunda, 23/11/2026, das 16h30 às 20h em Brasília — `2026-11-23T19:30:00.000Z`, 210 min |
+| Ingresso, vagas, pedido | R$ 160 (16000 centavos), 24 vagas, até 6 por pedido. Crianças pagam o mesmo e contam nas vagas |
+| Chegada | Recepção às 16h30; tolerância até 16h50 (`arrival`); remada às 17h00 |
+| Cancelamento | Até 21/11/2026 às 12h00 de Brasília (`2026-11-21T12:00:00-03:00`): crédito ou reembolso pelo atendimento da equipe (manual) |
+| Reservas | `comingSoon: true`. Lista de espera desligada |
+| Alimentação | Lanche saudável da NutreDF às 18h45, incluso (texto `alimentacao`). Sem drink, sem música na programação |
+| Visual | `theme: "dusk"`, `program.imageShape: "portrait"`, sem `spotlight` |
 
-Programação: 15h Recepção e boas-vindas · 15h15 Superioga (Rapha Dantas) · 16h30 Momento de Bem-Estar (Cure-se Bem) · 17h30 Remada Alma Azul · O Despertar da Lua Cheia · 19h Música no Cápsula Bar. Sem horário do nascimento da Lua, sem show.
+Programação: 16h30 Recepção e boas-vindas · 17h Remada Alma Azul (canoa havaiana, colete obrigatório, sem horário astronômico da Lua) · 17h45 Superioga (Rapha Dantas, tapete próprio) · 18h45 Lanche saudável (NutreDF) · **19h às 20h** Momento de Bem-Estar e Conexão com a Natureza, com duas atividades **simultâneas** (`parallel`): Massagem e Reflexologia com o **Cure-se Bem** (escolha no local, conforme a disponibilidade dos terapeutas) e Educação Ambiental: Fauna e Flora do Cerrado com **Fernanda Garcia** (crianças e adultos).
 
-**Fotos** (`public/images/eventos/essencia-lua-cheia/`, WebP sem metadados; as da 1ª edição no tamanho original, sem ampliação):
+Informações: chegada; o que levar (roupas que possam molhar, muda de roupa, toalha, tapete, água, repelente, agasalho); participação de crianças (só com responsável, mesmo ingresso, contam nas 24 vagas, colete adequado obrigatório; nenhuma idade mínima definida); segurança na remada; lanche; clima (o evento inteiro é reagendado, sem versão parcial); cancelamento. O e-mail traz programação, o que levar, crianças (`email: true`), segurança, lanche, clima e a política.
 
-| Arquivo | Origem (pasta `Capsula + Alma Azul`) | Uso | Legenda |
+**Fotos** (`public/images/eventos/essencia-lua-cheia/`, WebP sem metadados, nenhuma ampliada):
+
+| Arquivo | Origem | Uso | Legenda |
 | --- | --- | --- | --- |
-| `hero-lua-desktop.webp` (2400×1350), `hero-lua-mobile.webp` (1080×1920) | `LUA CHEIA/IMG_3420.jpg` | Hero e card | Remada da Lua Cheia · Alma Azul Academy |
-| `apresentacao-capsula-entardecer.webp` | `CAPSULA BAR 2/DSC00390.jpg` | Apresentação | — |
-| `recepcao-deck-lago.webp` | `CAPSULA BAR 2/DSC00153.jpg` | 15h | — |
-| `superioga-1a-edicao.webp` (720×900) | `EVENTOS/ESSENCIA/ESSENCIA 07:11/WhatsApp Image 2026-11-07 at 09.40.21.jpeg` | 15h15 | Registro da 1ª edição do ESSÊNCIA · 07/11/2026 |
-| `bem-estar-1a-edicao.webp` (720×900) | `…/WhatsApp Image 2026-11-07 at 09.40.21 (2).jpeg` | 16h30 | Registro da 1ª edição do ESSÊNCIA · 07/11/2026 |
-| `remada-entardecer.webp` | `SUNSET/IMG_8245.heic` | 17h30 | Remada Sunset · Alma Azul Academy |
-| `musica-capsula-noite.webp` | `CAPSULA BAR/HOO00630.jpg` | 19h | — |
-| `drink-capsula-neon.webp` | `CAPSULA BAR 2/DSC00504.jpg` | Destaque do drink | — |
-| `experiences/remada-lua-cheia/remada-lua-cheia-hero.webp` | Repositório (`LUA CHEIA/IMG_3512.jpg`) | Fundo da reserva | — |
+| `hero-lua-desktop.webp` (2400×1350), `hero-lua-mobile.webp` (1080×1920) | `Capsula + Alma Azul/LUA CHEIA/IMG_3420.jpg` | Hero e card (mantida após comparação com os drones de 13/11) | Remada da Lua Cheia · Alma Azul Academy |
+| `apresentacao-capsula-entardecer.webp` | `FOTOS CAPSULA/CAPSULA BAR/DSC00390.jpg` | Apresentação | — |
+| `recepcao-deck-lago.webp` | `FOTOS CAPSULA/CAPSULA BAR/DSC00153.jpg` | 16h30 | — |
+| `remada-entardecer.webp` | `SUNSET/IMG_8245.heic` | 17h | Remada Sunset · Alma Azul Academy |
+| `superioga-1a-edicao.webp` (720×900) | `EVENTOS/ESSENCIA/ESSENCIA 07:11/WhatsApp Image 2026-11-07 at 09.40.21.jpeg` | 17h45 | Registro da 1ª edição do ESSÊNCIA · 07/11/2026 |
+| `lanche-capsula-hora-azul.webp` (1080×1350) | `FOTOS CAPSULA DRONE /DJI_20261113224823_0226_D.JPG` | 18h45 (não há registro do lanche da 1ª edição; a foto não mostra comida) | — |
+| `bem-estar-1a-edicao.webp` (720×900) | `…/WhatsApp Image 2026-11-07 at 09.40.21 (2).jpeg` | Massagem e Reflexologia | Registro da 1ª edição do ESSÊNCIA · 07/11/2026 |
+| `educacao-ambiental-cerrado.webp` (1400×1050) | `Alma Azul Midias/Imagens BSB/Base Lago Norte/Imersao Paranoa/DJI_20261102134256_0095_D.JPG` (recorte sem canoas) | Educação Ambiental | Córrego do Torto · Cerrado do Distrito Federal |
+| `reserva-capsula-noite.webp` (2400×1350) | `FOTOS CAPSULA DRONE /DJI_20261113225235_0235_D.JPG` | Fundo da reserva | — |
 
-Logos: os oficiais já usados na 1ª edição (Alma Azul, Cure-se Bem, Cápsula Bar, Superioga/Rapha Dantas), sem alteração.
+Parceiros: Alma Azul Academy, Cure-se Bem (massagem e reflexologia), Cápsula Bar, Rapha Dantas (Superioga), NutreDF (lanche) e Fernanda Garcia (Educação Ambiental). Logos: os oficiais já aprovados, sem alteração; Fernanda Garcia aparece pelo nome, sem o logo de outro parceiro.
 
 **E-mail**: `pnpm email:preview:edicao essencia-lua-cheia` gera `.preview/evento-essencia-lua-cheia-*.{html,txt}` (só arquivos; o script não envia).
 
-**Cadastro (não executado)**: `pnpm events:edition-sql essencia-lua-cheia` gerou `supabase/diagnostics/evento_essencia_lua_cheia_cadastro_{preflight,postcheck}.sql`, `supabase/maintenance/evento_essencia_lua_cheia_cadastro.sql` e `supabase/rollback/evento_essencia_lua_cheia_cadastro.rollback.sql`; o teste confere que são os gerados e os roda num banco montado como produção. Ordem, cada passo com autorização: merge dos PRs A e B (deploy) → preflight → cadastro → postcheck → publicação em "em breve" → abertura (`comingSoon: false` por atualização editorial + sessão aberta no painel) → compra controlada.
+**Cadastro (não executado)**: `pnpm events:edition-sql essencia-lua-cheia` gera os quatro scripts `evento_essencia_lua_cheia_cadastro*`; o teste confere que são os gerados e os roda num banco montado como produção. O preflight lista, como **ATENÇÃO** informativa, turmas regulares na mesma base com horário sobreposto ao do evento (`TURMAS_REGULARES_SOBREPOSTAS`); nada é alterado. Procedimento e checklist: [essencia-lua-cheia-lancamento.md](essencia-lua-cheia-lancamento.md).
 
 Testes: `tests/special-events-essencia-lua-cheia.test.ts`.
-
-Estado, ocultação, ajustes e checklist do lançamento: [essencia-lua-cheia-lancamento.md](essencia-lua-cheia-lancamento.md).
 
 ## Fases
 

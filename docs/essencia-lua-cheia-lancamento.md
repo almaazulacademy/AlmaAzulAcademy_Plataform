@@ -1,10 +1,10 @@
-# ESSÊNCIA — 2ª edição · Celebração da Lua Cheia — preparação e lançamento
+# ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia — preparação e lançamento
 
-[Eventos especiais](special-events.md#essência--2ª-edição--celebração-da-lua-cheia-pr-b) · [Abertura da 1ª edição](essencia-abertura.md)
+[Eventos especiais](special-events.md#essência--experiência-relax--celebração-da-lua-cheia-2ª-edição) · [Abertura da 1ª edição](essencia-abertura.md)
 
 ## Estado: código pronto, edição oculta
 
-A 2ª edição (`essencia-lua-cheia`) existe **só no código**: conteúdo em `lib/events/fixtures/essencia-lua-cheia.ts`, fotos em `public/images/eventos/essencia-lua-cheia/`, scripts de cadastro gerados e **não executados**. Nada no banco: nenhuma experiência, nenhuma sessão, nenhuma reserva.
+A 2ª edição (`essencia-lua-cheia`, segunda 23/11/2026, 16h30 às 20h, R$ 160, versão definitiva do PR C) existe **só no código**: conteúdo em `lib/events/fixtures/essencia-lua-cheia.ts`, fotos em `public/images/eventos/essencia-lua-cheia/`, scripts de cadastro gerados e **não executados**. Nada no banco: nenhuma experiência, nenhuma sessão, nenhuma reserva.
 
 **Por que ela não aparece no site de Production**, mesmo com `EVENTS_PUBLIC_ENABLED` e `EVENT_BOOKING_OPEN` ligadas:
 
@@ -54,7 +54,7 @@ Validação automática da edição (`editionErrors`): chegada igual ao início 
 ### Etapa A — Revisão final
 
 - [ ] Fotos, horários e textos confirmados na prévia do Preview: `/eventos/demonstracao/essencia-lua-cheia` (computador e celular).
-- [ ] Prévia dos e-mails (`pnpm email:preview:edicao essencia-lua-cheia`): drink presente, nenhuma alimentação, chegada 15h15, prazo 22/11 12h00.
+- [ ] Prévia dos e-mails (`pnpm email:preview:edicao essencia-lua-cheia`): lanche da NutreDF presente, nenhum drink nem música, crianças, tolerância até 16h50, as duas atividades simultâneas na mesma linha, prazo 21/11 12h00.
 - [ ] Se algo mudou: scripts regenerados, PR com CI verde, merge e deploy de Production **Ready**.
 - [ ] `main` com CI verde; o arquivo de cadastro do repositório é o que será colado.
 
@@ -62,13 +62,13 @@ Validação automática da edição (`editionErrors`): chegada igual ao início 
 
 No SQL Editor de produção, um script por vez:
 
-- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_cadastro_preflight.sql` → última linha `EVENTO_CADASTRO_PREFLIGHT_OK | OK`. Guardar `OUTROS_EVENTOS`, `LISTAGENS_REGULARES`, `RESERVAS_POR_STATUS`, `INSCRICOES_DA_LISTA_POR_STATUS`.
+- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_cadastro_preflight.sql` → última linha `EVENTO_CADASTRO_PREFLIGHT_OK | OK`. `TURMAS_REGULARES_SOBREPOSTAS` deve dizer "nenhuma…"; se vier **ATENÇÃO**, decidir no painel o que fazer com a turma listada antes de seguir (o script não mexe em nada). Guardar `OUTROS_EVENTOS`, `LISTAGENS_REGULARES`, `RESERVAS_POR_STATUS`, `INSCRICOES_DA_LISTA_POR_STATUS`.
 - [ ] `supabase/maintenance/evento_essencia_lua_cheia_cadastro.sql` (já tem `begin; set local lock_timeout = '5s'; … commit;`). Mensagem `EVENTO_CRIADO experienceId=… sessionId=…` — anotar os dois ids.
-- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_cadastro_postcheck.sql` → `EVENTO_CADASTRO_POSTCHECK_OK | OK`, `SESSAO_FECHADA = CLOSED 24/11/2026 15:00 240min 15000 centavos 24 vagas`, `EDICAO_FORA_DAS_LEITURAS_PUBLICAS = 0 na listagem, 0 na página, 0 sessão(ões) públicas`, e as quatro contagens iguais às do preflight.
+- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_cadastro_postcheck.sql` → `EVENTO_CADASTRO_POSTCHECK_OK | OK`, `SESSAO_FECHADA = CLOSED 23/11/2026 16:30 210min 16000 centavos 24 vagas`, `EDICAO_FORA_DAS_LEITURAS_PUBLICAS = 0 na listagem, 0 na página, 0 sessão(ões) públicas`, e as quatro contagens iguais às do preflight.
 - [ ] Site de Production: `/eventos` sem a 2ª edição e `/eventos/essencia-lua-cheia` em 404.
 - [ ] Desfazer, se preciso (só em rascunho, sessão fechada, sem reserva): `supabase/rollback/evento_essencia_lua_cheia_cadastro.rollback.sql`.
 
-O cadastro recusa sozinho: slug já usado, outra sessão de evento na mesma base às 15h de 24/11, migration de segurança `202610310004` ausente, conteúdo sem `comingSoon: true`, rascunho visível numa leitura pública.
+O cadastro recusa sozinho: slug já usado, outra sessão de evento na mesma base às 16h30 de 23/11, migration de segurança `202610310004` ausente, conteúdo sem `comingSoon: true`, rascunho visível numa leitura pública.
 
 ### Etapa C — Publicação com reservas fechadas
 
@@ -82,7 +82,7 @@ O cadastro recusa sozinho: slug já usado, outra sessão de evento na mesma base
 
 - [ ] Tirar o "em breve" **desta** edição: atualização editorial com `event.reservation.comingSoon = false` (por script com conferências; nenhuma variável muda).
 - [ ] Abrir a sessão pelo painel (Sessões → abrir) ou `admin_update_session(..., 'OPEN', ...)`.
-- [ ] Compra real controlada de 1 ingresso: pagamento confirmado pela InfinitePay (webhook), e-mail com o drink e sem lanche, QR Code, planilha, painel, vagas de 24 para 23.
+- [ ] Compra real controlada de 1 ingresso: pagamento confirmado pela InfinitePay (webhook), e-mail com o lanche da NutreDF e sem drink, QR Code, planilha, painel, vagas de 24 para 23.
 - [ ] Lista de espera continua desligada (`EVENTS_WAITLIST_ENABLED` ausente).
 - [ ] Encerrar vendas: fechar a sessão no painel (a página diz "Reservas encerradas"). Não remover `EVENT_BOOKING_OPEN`.
 

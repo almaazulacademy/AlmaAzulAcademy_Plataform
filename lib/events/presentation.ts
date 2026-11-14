@@ -144,6 +144,17 @@ export function eventScheduleLabel(scheduleLabel: string | null | undefined, sta
   return scheduleLabel ? scheduleLabel.toUpperCase() : eventTimeRange(startsAt, durationMinutes);
 }
 
+/** "A; B" — as atividades simultâneas de um momento, para e-mail e resumo. Vazio sem elas. */
+export function programParallelText(item: { parallel?: ReadonlyArray<{ title: string }> }) {
+  return (item.parallel ?? []).map((activity) => activity.title).join("; ");
+}
+
+/** O título de um momento em texto corrido, com as atividades simultâneas quando houver. */
+export function programItemSummary(item: { title: string; parallel?: ReadonlyArray<{ title: string }> }) {
+  const parallel = programParallelText(item);
+  return parallel ? `${item.title} — ao mesmo tempo: ${parallel}` : item.title;
+}
+
 /** O horário de uma atividade: o rótulo flexível, quando há, ou o horário exato. */
 export function programItemTime(item: { time: string | null; timeLabel: string | null }) {
   return item.timeLabel ?? (item.time ? programTimeLabel(item.time) : "");

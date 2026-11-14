@@ -1,5 +1,5 @@
 -- =============================================================================
--- ESSÊNCIA — 2ª edição · Celebração da Lua Cheia — DESFAZER O CADASTRO (GERADO; SOMENTE COM DECISÃO EXPLÍCITA)
+-- ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia — DESFAZER O CADASTRO (GERADO; SOMENTE COM DECISÃO EXPLÍCITA)
 -- =============================================================================
 --
 -- Remove a edição essencia-lua-cheia e a sessão dela **só** se ela ainda estiver em
