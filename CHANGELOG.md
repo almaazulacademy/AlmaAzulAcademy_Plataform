@@ -7,9 +7,9 @@
 - Nenhum script mexe no interruptor de publicação, em variáveis, reservas, pagamentos, lista de espera, turmas regulares ou na 1ª edição. Os desfazer nunca apagam nada e recusam quando já existe reserva ou inscrição.
 - Gerados para `essencia-lua-cheia` e testados num banco PGlite montado como produção. Nada executado em produção.
 
-## ESSÊNCIA — 2ª edição definitiva: Experiência Relax | Celebração da Lua Cheia (não cadastrada)
+## ESSÊNCIA — 2ª edição (23/11/2026)
 
-- **Identidade oficial**: "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia", Especial de Confraternização de Fim de Ano (checkout, e-mails, metadados e página); "Corpo, mente e natureza" só como frase conceitual secundária.
+- **Identidade oficial** do rascunho: “ESSÊNCIA — Corpo, Mente e Natureza”. Subtítulo “Celebração da Lua Cheia” e chamada “Especial de Confraternização de Fim de Ano!”. A correção editorial tem preflight, postcheck e reversão próprios.
 - **Versão definitiva** da edição `essencia-lua-cheia`: segunda, 23/11/2026, das 16h30 às 20h (210 min), R$ 160, 24 vagas, até 6 por pedido, tolerância até 16h50, cancelamento até 21/11/2026 às 12h00, crianças acompanhadas (mesmo ingresso, contam nas vagas), "Reservas abrem em breve". Lanche da NutreDF incluso; sem drink e sem música.
 - **Atividades simultâneas** (`program.items[].parallel`, genérico): cartões lado a lado no computador e empilhados no celular, com o selo "Acontecem ao mesmo tempo"; no e-mail e no resumo antes do pagamento, numa linha só. Usado das 19h às 20h: massagem e reflexologia com o Cure-se Bem e Educação Ambiental com Fernanda Garcia.
 - **Preflight do cadastro**: novo ponto de atenção `TURMAS_REGULARES_SOBREPOSTAS` (turmas regulares da mesma base com horário sobreposto). Só informa.

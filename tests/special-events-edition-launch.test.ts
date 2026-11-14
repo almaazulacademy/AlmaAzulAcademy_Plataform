@@ -12,14 +12,14 @@ import "./support/essencia-clock.ts";
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 
 import type { PGlite } from "@electric-sql/pglite";
 
 import { eventBookingRejection, loadSessionBookingRules, type RulesQueryClient } from "../lib/events/booking.ts";
 import { ESSENCIA_LUA_CHEIA_EDITION, ESSENCIA_LUA_CHEIA_EDITORIAL, ESSENCIA_LUA_CHEIA_SLUG } from "../lib/events/fixtures/essencia-lua-cheia.ts";
-import { EDITION_ADMIN_EMAIL, editionCadastroPaths } from "../scripts/events/edition-cadastro-sql.ts";
+import { EDITION_ADMIN_EMAIL, editionCadastroPaths, editionCadastroSql } from "../scripts/events/edition-cadastro-sql.ts";
 import {
   aberturaPreflightSql,
   aberturaRollbackSql,
@@ -31,6 +31,7 @@ import {
   publicacaoPreflightSql,
   publicacaoSql,
 } from "../scripts/events/edition-launch-sql.ts";
+import { editorialFiles } from "../scripts/events/essencia-lua-cheia-editorial-sql.ts";
 import { applyMigration, fullDatabase } from "./support/full-database.ts";
 import { createPgliteAdmin } from "./support/pglite-admin.ts";
 import { PRODUCTION_ONLY } from "./support/production-only-schema.ts";
@@ -287,4 +288,57 @@ test("banco como produção: mudança fora do roteiro (preço, vagas ou conteúd
   // O rollback de abertura com a venda já fechada e em breve não faz nada.
   assert.ok((await notices(db, aberturaRollbackSql(EDITION))).some((notice) => /nada a fazer/.test(notice)));
   await db.close();
+});
+
+
+test("correção editorial: atualiza o rascunho original, preserva IDs e sessão e permite o novo preflight", async (t) => {
+  const db = await productionLike();
+  t.after(() => db.close());
+  for (const [path, sql] of Object.entries(editorialFiles)) assert.equal(source(path), sql, path);
+  const [preflight, update, postcheck, rollback] = Object.values(editorialFiles);
+  const oldEditorial = update.match(/expected_content constant jsonb := \$json\$(.*?)\$json\$/)?.[1];
+  assert.ok(oldEditorial);
+  assert.equal(createHash("sha256").update(oldEditorial).digest("hex"),
+    "2e7424366ea4c3fd393f9a29d058755acc1d20edb9a87dc77c0c4e3d00e073ed",
+    "JSON exato do cadastro em 8b0c96c");
+  const originalTitle = "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia";
+  await refuses(db, update, /EVENTO_EDITORIAL_ESTADO/);
+  await db.exec(editionCadastroSql({ ...EDITION, registered: false, title: originalTitle, editorial: JSON.parse(oldEditorial) }));
+
+  const snapshot = async () => (await db.query<Row>(`
+    select to_jsonb(e) - 'updated_at' as experience, to_jsonb(s) as session
+    from public.experiences e join public.sessions s on s.experience_id = e.id where e.slug = $1
+  `, [SLUG])).rows[0];
+  const baseline = await untouched(db);
+  const initial = await report(db, preflight);
+  for (const [name, row] of initial) assert.equal(row.status, "OK", name);
+  assert.equal((await report(db, source(PATHS.publicacaoPreflight))).get("EVENTO_PUBLICACAO_PREFLIGHT_OK")?.status, "FALHOU");
+  await refuses(db, rollback, /EVENTO_EDITORIAL_ORIGEM/);
+  await db.query("update public.sessions set price_cents = 15000 where experience_id = (select id from public.experiences where slug = $1)", [SLUG]);
+  await refuses(db, update, /EVENTO_EDITORIAL_SESSAO/);
+  await db.query("update public.sessions set price_cents = 16000 where experience_id = (select id from public.experiences where slug = $1)", [SLUG]);
+  const original = await snapshot();
+
+  assert.ok((await notices(db, update)).some((note) => note.startsWith("EVENTO_EDITORIAL_ATUALIZADO")));
+  const corrected = await snapshot();
+  assert.deepEqual(corrected, {
+    experience: { ...(original.experience as object), title: EDITION.title, editorial_content: EDITION.editorial },
+    session: original.session,
+  });
+  const final = await report(db, postcheck);
+  for (const [name, row] of final) assert.equal(row.status, "OK", name);
+  for (const name of ["SESSAO_FECHADA", "OUTROS_EVENTOS", "LISTAGENS_REGULARES", "RESERVAS_POR_STATUS", "INSCRICOES_DA_LISTA_POR_STATUS"]) {
+    assert.equal(final.get(name)?.result, initial.get(name)?.result, name);
+  }
+  const publication = await report(db, source(PATHS.publicacaoPreflight));
+  for (const [name, row] of publication) assert.equal(row.status, "OK", name);
+  await refuses(db, update, /EVENTO_EDITORIAL_ORIGEM/);
+  assert.ok((await notices(db, rollback)).some((note) => note.startsWith("EVENTO_EDITORIAL_REVERTIDO")));
+  assert.deepEqual(await snapshot(), original);
+  assert.deepEqual(await untouched(db), baseline);
+
+  await db.exec(update);
+  await db.exec(source(PATHS.publicacao));
+  await refuses(db, rollback, /EVENTO_EDITORIAL_ESTADO/);
+  assert.deepEqual(await untouched(db), baseline);
 });

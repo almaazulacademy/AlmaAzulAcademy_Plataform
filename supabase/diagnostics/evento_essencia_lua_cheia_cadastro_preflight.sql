@@ -1,4 +1,4 @@
--- ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia — PREFLIGHT DO CADASTRO (SOMENTE LEITURA; GERADO, NÃO EDITAR À MÃO)
+-- ESSÊNCIA — Corpo, Mente e Natureza — PREFLIGHT DO CADASTRO (SOMENTE LEITURA; GERADO, NÃO EDITAR À MÃO)
 --
 -- Rodar no SQL Editor ANTES de supabase/maintenance/evento_essencia_lua_cheia_cadastro.sql.
 -- A última linha, EVENTO_CADASTRO_PREFLIGHT_OK, precisa estar OK. Guarde

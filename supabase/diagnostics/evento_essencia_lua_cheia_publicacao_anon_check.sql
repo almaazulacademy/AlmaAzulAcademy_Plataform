@@ -1,4 +1,4 @@
--- ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia — PUBLICAÇÃO — CONFERÊNCIA COMO anon (SOMENTE LEITURA) (GERADO por `pnpm events:edition-launch-sql essencia-lua-cheia`; NÃO EDITAR À MÃO)
+-- ESSÊNCIA — Corpo, Mente e Natureza — PUBLICAÇÃO — CONFERÊNCIA COMO anon (SOMENTE LEITURA) (GERADO por `pnpm events:edition-launch-sql essencia-lua-cheia`; NÃO EDITAR À MÃO)
 --
 -- O postcheck roda com o dono do banco, que não passa pelas políticas. Aqui, como a
 -- chave pública, o esperado com a edição publicada e a sessão fechada é:

@@ -467,7 +467,11 @@ export function editionCadastroFiles(edition: EventEdition) {
 
 if (process.argv[1]?.endsWith("edition-cadastro-sql.ts")) {
   const slug = process.argv[2] ?? "";
-  const edition = getEventEdition(slug);
+  const registeredEdition = getEventEdition(slug);
+  // Modelos para testes locais de edições já cadastradas exigem opção explícita.
+  const edition = registeredEdition && process.argv[3] === "--modelo-local"
+    ? { ...registeredEdition, registered: false }
+    : registeredEdition;
   if (!edition) {
     console.error(`Edição "${slug}" não está registrada em lib/events/editions.ts.`);
     process.exit(1);

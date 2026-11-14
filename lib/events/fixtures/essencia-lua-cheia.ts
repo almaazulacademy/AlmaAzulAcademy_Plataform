@@ -1,7 +1,6 @@
 /**
- * ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia · Especial de
- * Confraternização de Fim de Ano (2ª edição, 23/11/2026). "Corpo, mente e
- * natureza" fica só como frase conceitual secundária.
+ * ESSÊNCIA — Corpo, Mente e Natureza · Celebração da Lua Cheia
+ * Especial de Confraternização de Fim de Ano! (2ª edição, 23/11/2026).
  *
  * Conteúdo editorial no formato exato de `experiences.editorial_content`, com a
  * versão definitiva aprovada pelo Rudah em 14/11/2026 (PR C): 16h30 às 20h,
@@ -11,8 +10,8 @@
  *
  * Serve à prévia (`/eventos/demonstracao/essencia-lua-cheia`), à prévia do
  * e-mail (`pnpm email:preview:edicao essencia-lua-cheia`) e aos scripts de
- * cadastro gerados (`pnpm events:edition-sql essencia-lua-cheia`). Nada daqui é
- * gravado no banco nem aparece em Production sem o cadastro autorizado.
+ * lançamento gerados. A correção de identidade no rascunho de produção é
+ * aplicada pelo roteiro de atualização editorial.
  *
  * Nasce com `reservation.comingSoon = true`: publicada, a edição mostra
  * "Reservas abrem em breve" e o servidor recusa reserva até a abertura explícita.
@@ -30,6 +29,10 @@ import type { EventEdition } from "../edition.ts";
 import { CONCHA_ACUSTICA_LOCATION } from "./essencia.ts";
 
 export const ESSENCIA_LUA_CHEIA_SLUG = "essencia-lua-cheia";
+
+const TITLE = "ESSÊNCIA — Corpo, Mente e Natureza";
+const SUBTITLE = "Celebração da Lua Cheia";
+const CALL = "Especial de Confraternização de Fim de Ano!";
 
 const IMG = "/images/eventos/essencia-lua-cheia";
 const FIRST_EDITION = "Registro da 1ª edição do ESSÊNCIA · 07/11/2026";
@@ -53,8 +56,8 @@ const INTRO_IMAGE = {
 export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
   version: 1,
   hero: {
-    eyebrow: "Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano",
-    title: "ESSÊNCIA",
+    eyebrow: CALL,
+    title: TITLE,
     subtitle: "Que tal celebrar a vida, compartilhar boas energias e receber os novos ciclos?",
     image: HERO,
     primaryCta: { label: "Garantir minha vaga", href: "#reserva" },
@@ -82,13 +85,13 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
     image: RESERVA,
   },
   seo: {
-    title: "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia",
+    title: TITLE,
     description: "Especial de Confraternização de Fim de Ano no Cápsula Bar, em Brasília: remada no Lago Paranoá, Superioga, lanche saudável, massagem ou reflexologia e educação ambiental sobre o Cerrado. 23 de novembro de 2026, das 16h30 às 20h.",
   },
   event: {
     theme: "dusk",
-    badge: "Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano",
-    subtitle: "Experiência Relax",
+    badge: CALL,
+    subtitle: SUBTITLE,
     tagline: "Que tal celebrar a vida, compartilhar boas energias e receber os novos ciclos?",
     highlights: ["Remada no Lago Paranoá", "Superioga", "Lanche saudável", "Bem-estar e Cerrado"],
     heroImageMobile: {
@@ -98,7 +101,6 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
     },
     cardImage: { src: HERO.src, alt: HERO.alt },
     intro: {
-      // "Corpo, mente e natureza" fica como frase conceitual secundária.
       eyebrow: "Corpo, mente e natureza",
       title: "Natureza, movimento, autocuidado e celebração!",
       paragraphs: [
@@ -277,12 +279,12 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
 export const ESSENCIA_LUA_CHEIA_STARTS_AT = "2026-11-23T19:30:00.000Z";
 
 /**
- * A 2ª edição no registro de edições. Ainda não cadastrada em produção.
+ * A 2ª edição está cadastrada em produção como rascunho.
  * Duração técnica de 210 minutos: das 16h30 às 20h, o horário anunciado.
  */
 export const ESSENCIA_LUA_CHEIA_EDITION: EventEdition = {
   slug: ESSENCIA_LUA_CHEIA_SLUG,
-  title: "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia",
+  title: TITLE,
   summary: "Especial de Confraternização de Fim de Ano: remada no Lago Paranoá, Superioga, lanche saudável, massagem ou reflexologia e educação ambiental sobre o Cerrado, no Cápsula Bar.",
   baseSlug: "concha-acustica",
   location: CONCHA_ACUSTICA_LOCATION,
@@ -291,5 +293,5 @@ export const ESSENCIA_LUA_CHEIA_EDITION: EventEdition = {
   priceCents: 16_000,
   capacity: 24,
   editorial: ESSENCIA_LUA_CHEIA_EDITORIAL,
-  registered: false,
+  registered: true,
 };
