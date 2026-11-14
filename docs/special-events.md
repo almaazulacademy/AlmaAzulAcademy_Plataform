@@ -45,6 +45,7 @@ Infraestrutura preparada para a 2ª edição do ESSÊNCIA e as próximas (PR A, 
 | Ver a página | `/eventos/demonstracao/<slug>` (só dev e Preview; sem banco, sem checkout). A listagem `/eventos/demonstracao` mostra todas as edições registradas |
 | Validar | `editionErrors`: slug (minúsculas e hífens, nunca `demonstracao`), título, resumo, base, início ISO com deslocamento, duração, preço, capacidade (1–500), máximo por pedido ≤ capacidade, chegada igual ao início, prazo de cancelamento antes do início, conteúdo válido. O registro recusa slug repetido |
 | Gerar o cadastro | `pnpm events:edition-sql <slug>` → `supabase/diagnostics/evento_<slug>_cadastro_{preflight,postcheck}.sql`, `supabase/maintenance/evento_<slug>_cadastro.sql`, `supabase/rollback/evento_<slug>_cadastro.rollback.sql`. Nada é executado: o SQL é rodado à mão, com autorização |
+| Gerar a publicação e a abertura | `pnpm events:edition-launch-sql <slug>` → `evento_<slug>_publicacao{_preflight,,_postcheck,_anon_check}.sql` e `evento_<slug>_abertura{_preflight,,_postcheck}.sql`, com os desfazer em `supabase/rollback/`. Publicação: rascunho → publicada, sessão segue `CLOSED`, "em breve" segue ativo. Abertura: sai o "em breve" **só desta edição** e a sessão abre. Pelas RPCs do painel, numa transação, com estado anterior exigido; nunca mexem no interruptor, em variáveis, reservas, pagamentos ou outras edições; os desfazer recusam se houver reserva ou inscrição |
 
 A 1ª edição está no registro com `registered: true` (cadastrada em 31/10/2026): a prévia funciona e o gerador recusa um novo cadastro dela. Os scripts `essencia_*` ficam como estão, como histórico.
 
@@ -125,6 +126,8 @@ Parceiros: Alma Azul Academy, Cure-se Bem (massagem e reflexologia), Cápsula Ba
 **E-mail**: `pnpm email:preview:edicao essencia-lua-cheia` gera `.preview/evento-essencia-lua-cheia-*.{html,txt}` (só arquivos; o script não envia).
 
 **Cadastro (não executado)**: `pnpm events:edition-sql essencia-lua-cheia` gera os quatro scripts `evento_essencia_lua_cheia_cadastro*`; o teste confere que são os gerados e os roda num banco montado como produção. O preflight lista, como **ATENÇÃO** informativa, turmas regulares na mesma base com horário sobreposto ao do evento (`TURMAS_REGULARES_SOBREPOSTAS`); nada é alterado. Procedimento e checklist: [essencia-lua-cheia-lancamento.md](essencia-lua-cheia-lancamento.md).
+
+**Publicação e abertura (não executadas)**: `pnpm events:edition-launch-sql essencia-lua-cheia` gera os nove scripts `evento_essencia_lua_cheia_publicacao*` e `evento_essencia_lua_cheia_abertura*`; o teste `tests/special-events-edition-launch.test.ts` confere que são os gerados e roda a sequência inteira (cadastro → publicação → abertura → desfazer, com duplicadas e fora de ordem recusadas) num banco montado como produção.
 
 Testes: `tests/special-events-essencia-lua-cheia.test.ts`.
 

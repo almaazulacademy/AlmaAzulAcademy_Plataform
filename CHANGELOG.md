@@ -1,5 +1,12 @@
 # Changelog
 
+## ESSÊNCIA — 2ª edição: scripts de publicação e abertura (não executados)
+
+- **`pnpm events:edition-launch-sql <slug>`** (genérico): gera, de uma edição registrada, a **publicação com vendas bloqueadas** (preflight, script, postcheck, conferência como `anon`, desfazer) e a **abertura das vendas** (preflight, script, postcheck, desfazer).
+- Publicação: rascunho → publicada pela RPC do painel, sessão continua `CLOSED` e "Reservas abrem em breve" continua ativo. Abertura: tira o "em breve" só desta edição e abre só a sessão dela (mesmos início, duração, preço e vagas). Ambas exigem o estado exato anterior, travam as linhas, conferem o resultado na própria transação e recusam se rodadas duas vezes ou fora de ordem.
+- Nenhum script mexe no interruptor de publicação, em variáveis, reservas, pagamentos, lista de espera, turmas regulares ou na 1ª edição. Os desfazer nunca apagam nada e recusam quando já existe reserva ou inscrição.
+- Gerados para `essencia-lua-cheia` e testados num banco PGlite montado como produção. Nada executado em produção.
+
 ## ESSÊNCIA — 2ª edição definitiva: Experiência Relax | Celebração da Lua Cheia (não cadastrada)
 
 - **Identidade oficial**: "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia", Especial de Confraternização de Fim de Ano (checkout, e-mails, metadados e página); "Corpo, mente e natureza" só como frase conceitual secundária.

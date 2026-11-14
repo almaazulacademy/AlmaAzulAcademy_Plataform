@@ -4,7 +4,7 @@
 
 ## Estado: código pronto, edição oculta
 
-A 2ª edição (`essencia-lua-cheia`, segunda 23/11/2026, 16h30 às 20h, R$ 160, versão definitiva do PR C) existe **só no código**: conteúdo em `lib/events/fixtures/essencia-lua-cheia.ts`, fotos em `public/images/eventos/essencia-lua-cheia/`, scripts de cadastro gerados e **não executados**. Nada no banco: nenhuma experiência, nenhuma sessão, nenhuma reserva.
+A 2ª edição (`essencia-lua-cheia`, segunda 23/11/2026, 16h30 às 20h, R$ 160, versão definitiva do PR C) existe **só no código**: conteúdo em `lib/events/fixtures/essencia-lua-cheia.ts`, fotos em `public/images/eventos/essencia-lua-cheia/`, scripts de cadastro, publicação e abertura gerados e **não executados**. Nada no banco: nenhuma experiência, nenhuma sessão, nenhuma reserva.
 
 **Por que ela não aparece no site de Production**, mesmo com `EVENTS_PUBLIC_ENABLED` e `EVENT_BOOKING_OPEN` ligadas:
 
@@ -70,23 +70,43 @@ No SQL Editor de produção, um script por vez:
 
 O cadastro recusa sozinho: slug já usado, outra sessão de evento na mesma base às 16h30 de 23/11, migration de segurança `202610310004` ausente, conteúdo sem `comingSoon: true`, rascunho visível numa leitura pública.
 
-### Etapa C — Publicação com reservas fechadas
+### Etapa C — Publicação com reservas fechadas (autorização própria)
 
-- [ ] Publicar pela RPC do painel (`admin_update_event(ator, experienceId, título, resumo, 'PUBLISHED', imagem, ordem, conteúdo)`), com o mesmo conteúdo cadastrado; a sessão continua `CLOSED`. Antes, gerar um script com conferências, como o `essencia_publicacao.sql` da 1ª edição.
-- [ ] Conferir em Production: `/eventos/essencia-lua-cheia` com **"Reservas abrem em breve"**, card em `/eventos` e destaque na home; `/reservar/<sessionId>` sem formulário.
-- [ ] Voltar atrás: `admin_update_event(..., 'DRAFT', ...)` tira a página do ar.
+Scripts gerados por `pnpm events:edition-launch-sql essencia-lua-cheia` (PR D). Publicam **só** `essencia-lua-cheia`, pela RPC do painel (`admin_update_event`, com auditoria). A sessão continua `CLOSED` e "Reservas abrem em breve" continua ativo. O interruptor de publicação já está ligado e **não** é tocado: desligá-lo esconderia a 1ª edição.
 
-### Etapa D — Abertura das vendas
+- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_publicacao_preflight.sql` → `EVENTO_PUBLICACAO_PREFLIGHT_OK | OK`. Esperado: `EVENTO_EM_RASCUNHO`, `CONTEUDO_APROVADO_EM_BREVE = idêntico ao aprovado`, `SESSAO_FECHADA = CLOSED 23/11/2026 16:30 210min 16000 centavos 24 vagas`, `RESERVAS_E_INSCRICOES_DA_EDICAO = nenhuma reserva; 0 inscrição(ões) na lista; 24 vaga(s) livre(s)`. Guardar `OUTROS_EVENTOS`, `LISTAGENS_REGULARES`, `RESERVAS_POR_STATUS`, `INSCRICOES_DA_LISTA_POR_STATUS`.
+- [ ] `supabase/maintenance/evento_essencia_lua_cheia_publicacao.sql` → aviso `EVENTO_PUBLICADO_COM_VENDAS_BLOQUEADAS`.
+- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_publicacao_postcheck.sql` → `EVENTO_PUBLICACAO_POSTCHECK_OK | OK`, `SEM_CAMINHO_DE_RESERVA = 0`, e as quatro impressões iguais às do preflight.
+- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_publicacao_anon_check.sql` → `evento_visivel = 1`, `sessao_aberta_visivel = 0`, `sessao_reservavel = 0`, `pode_pre_reservar = false`.
+- [ ] Production: `/eventos/essencia-lua-cheia` com **"Reservas abrem em breve"**, card em `/eventos` e destaque na home; `/reservar/<sessionId>` sem formulário; a 1ª edição igual.
 
-`EVENT_BOOKING_OPEN` já está ligada em Production: a venda abre assim que as duas condições abaixo valerem.
+**Interromper** (não seguir e avisar) se: o preflight der qualquer `FALHOU`; `TURMAS_REGULARES_SOBREPOSTAS` vier ATENÇÃO sem decisão; o script recusar (`EVENTO_*`); o postcheck mostrar diferença em `OUTROS_EVENTOS` ou `LISTAGENS_REGULARES`; a página aparecer com botão de reserva.
 
-- [ ] Tirar o "em breve" **desta** edição: atualização editorial com `event.reservation.comingSoon = false` (por script com conferências; nenhuma variável muda).
-- [ ] Abrir a sessão pelo painel (Sessões → abrir) ou `admin_update_session(..., 'OPEN', ...)`.
+**Desfazer**: `supabase/rollback/evento_essencia_lua_cheia_publicacao.rollback.sql` volta a rascunho (a página sai do ar). Recusa sem mudar nada se a sessão estiver aberta ou houver reserva/inscrição. Já em rascunho, não faz nada.
+
+### Etapa D — Abertura das vendas (autorização própria, sensível)
+
+`EVENT_BOOKING_OPEN` e `EVENTS_PUBLIC_ENABLED` já estão ligadas em Production e **não mudam**: assim que a abertura terminar, o checkout desta edição passa a funcionar. A abertura tira `comingSoon` **só desta edição** (o resto do conteúdo fica idêntico) e abre **só a sessão dela** pela RPC do painel (`admin_update_session`), mantendo início, duração, preço e vagas.
+
+- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_abertura_preflight.sql` → `EVENTO_ABERTURA_PREFLIGHT_OK | OK`. Esperado: `EVENTO_PUBLICADO`, `SESSAO_FECHADA_COM_OS_DADOS`, `VAGAS_LIVRES = 24 de 24`, `SESSAO_NO_FUTURO = 23/11/2026 16:30`, `PRAZO_DE_CANCELAMENTO` OK (antes de 21/11 12h; depois, ATENÇÃO: a política anunciada já não vale), nenhuma reserva.
+- [ ] `supabase/maintenance/evento_essencia_lua_cheia_abertura.sql` → aviso `EVENTO_VENDAS_ABERTAS sessionId=…` (confere com o id do cadastro).
+- [ ] `supabase/diagnostics/evento_essencia_lua_cheia_abertura_postcheck.sql` → `EVENTO_ABERTURA_POSTCHECK_OK | OK`, `SESSAO_ABERTA = OPEN 23/11/2026 16:30 210min 16000 centavos 24 vagas`, `VAGAS = 24 livre(s) de 24`, `RESERVAVEL = 1`, impressões iguais às do preflight.
 - [ ] Compra real controlada de 1 ingresso: pagamento confirmado pela InfinitePay (webhook), e-mail com o lanche da NutreDF e sem drink, QR Code, planilha, painel, vagas de 24 para 23.
 - [ ] Lista de espera continua desligada (`EVENTS_WAITLIST_ENABLED` ausente).
-- [ ] Encerrar vendas: fechar a sessão no painel (a página diz "Reservas encerradas"). Não remover `EVENT_BOOKING_OPEN`.
+
+**Interromper** se: o preflight der `FALHOU`; o script recusar; o postcheck não mostrar 24 vagas e a sessão reservável; o checkout recusar a compra controlada; a 1ª edição ou outra impressão mudar.
+
+**Desfazer**: `supabase/rollback/evento_essencia_lua_cheia_abertura.rollback.sql` fecha a sessão e devolve o "em breve" — **só enquanto não existe nenhuma reserva** (de qualquer situação) nem inscrição. Com reserva, recusa sem mudar nada: o procedimento é fechar a sessão pelo painel ("Reservas encerradas") e tratar reservas, pagamentos e reembolsos caso a caso. Nunca apaga dados. Encerrar vendas normalmente: fechar a sessão no painel; não remover `EVENT_BOOKING_OPEN`.
+
+## Garantias dos scripts de lançamento
+
+- Só a edição `essencia-lua-cheia` (por slug e `kind = 'EVENT'`); a impressão das outras edições e o catálogo regular são comparados dentro da própria transação.
+- Cada script exige o estado anterior exato e trava as linhas (`for update`, `lock_timeout = 5s`): duplicado ou fora de ordem, recusa e nada muda.
+- Tudo pelas RPCs do painel, com auditoria (`EVENT_UPDATED`, `SESSION_UPDATED`); nenhum `update` direto, `delete`, `truncate` ou `drop`.
+- Nunca tocam o interruptor de publicação, variáveis da Vercel, reservas, pagamentos, lista de espera, turmas regulares nem a 1ª edição.
+- Testados (`tests/special-events-edition-launch.test.ts`) num banco PGlite montado como produção: sequência completa, idempotência, ordem, recusas com reserva, mudança de preço, vagas ou conteúdo fora do roteiro.
 
 ## Pendências registradas
 
-- Conferência de leitura (preflight) em produção não rodada em 13/11/2026: a sessão do Supabase no navegador tinha expirado. Ela é o primeiro passo da Etapa B.
-- Scripts com conferências para a publicação (Etapa C), a abertura (Etapa D) e eventuais atualizações editoriais depois do cadastro: gerar quando as etapas forem autorizadas.
+- Conferência de leitura (preflight) do cadastro em produção ainda não rodada: é o primeiro passo da Etapa B.
+- Atualização editorial depois do cadastro (se o conteúdo mudar): exige script próprio, ainda não gerado para esta edição.
