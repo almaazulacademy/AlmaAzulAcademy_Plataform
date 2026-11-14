@@ -51,7 +51,7 @@ export const EDITION_ADMIN_EMAIL = "almaazulacademy@gmail.com";
 /** md5 do corpo de `experiences_fill_legacy_columns` com a regra do `active` (migration 202610310003). */
 const LEGACY_ACTIVE_RULE_MD5 = "4ee78d0a6fcbc88ca58c7c22875152f5";
 
-function literal(value: string) {
+export function literal(value: string) {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
@@ -95,14 +95,14 @@ function cardImage(edition: EventEdition) {
 // --- Conferências comuns ----------------------------------------------------
 
 /** A migration 202610310004 (segurança das leituras e da reserva de evento) está aplicada? */
-const SECURITY_APPLIED = `exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'experiences' and policyname = 'events hidden until published')
+export const SECURITY_APPLIED = `exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'experiences' and policyname = 'events hidden until published')
      and exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'sessions' and policyname = 'event sessions hidden until published')
      and exists (select 1 from pg_trigger where tgrelid = 'public.reservations'::regclass and tgname = 'reservations_event_publication_guard')
      and exists (select 1 from pg_trigger where tgrelid = 'public.waitlist_entries'::regclass and tgname = 'waitlist_entries_event_publication_guard')
      and exists (select 1 from pg_proc where proname = 'event_publication_allows' and pronamespace = 'public'::regnamespace)`;
 
 /** Impressão das outras edições: status, conteúdo e sessões. Precisa sair igual no postcheck. */
-function otherEventsFingerprint(slug: string) {
+export function otherEventsFingerprint(slug: string) {
   return `(select coalesce(count(*)::text || ' evento(s) [' || string_agg(e.slug || '=' || e.status, ', ' order by e.slug) || '] ' || md5(string_agg(e.id::text || e.status || e.editorial_content::text || coalesce((
             select string_agg(s.id::text || s.status::text || s.starts_at::text || s.capacity || s.price_cents || s.duration_minutes, ',' order by s.id)
             from public.sessions s where s.experience_id = e.id), ''), '|' order by e.id)), 'nenhum outro evento')
@@ -117,26 +117,26 @@ function duplicateSessionCount(edition: EventEdition) {
 }
 
 /** Fim da sessão do evento: início + duração. */
-function editionEndsAt(edition: EventEdition) {
+export function editionEndsAt(edition: EventEdition) {
   return new Date(Date.parse(edition.startsAt) + edition.durationMinutes * 60_000).toISOString();
 }
 
 /** Turmas regulares (não canceladas nem arquivadas) na mesma base, com horário sobreposto ao do evento. */
-function overlappingRegularSessions(edition: EventEdition) {
+export function overlappingRegularSessions(edition: EventEdition) {
   return `from public.sessions s join public.experiences e on e.id = s.experience_id join public.bases b on b.id = e.base_id
           where e.kind = 'REGULAR' and b.slug = ${literal(edition.baseSlug)} and s.status::text not in ('CANCELLED', 'ARCHIVED')
             and s.starts_at < ${literal(editionEndsAt(edition))}::timestamptz
             and s.starts_at + make_interval(mins => s.duration_minutes) > ${literal(edition.startsAt)}::timestamptz`;
 }
 
-const CHECK_TAIL = (name: string) => `select check_name, result, status from checks
+export const CHECK_TAIL = (name: string) => `select check_name, result, status from checks
 union all
 select '${name}',
        (select count(*) filter (where status = 'FALHOU')::text || ' falha(s), ' || count(*) filter (where status = 'ATENCAO')::text || ' ponto(s) de atenção' from checks),
        case when exists (select 1 from checks where status = 'FALHOU') then 'FALHOU' else 'OK' end;
 `;
 
-const COMMON_COUNTS = `  union all
+export const COMMON_COUNTS = `  union all
   select 'LISTAGENS_REGULARES',
          (select count(*)::text from public.list_public_regular_experiences()) || ' experiências, ' || (select count(*)::text from public.list_public_regular_catalog()) || ' no catálogo',
          'OK'
