@@ -31,6 +31,7 @@ import {
   publicacaoPreflightSql,
   publicacaoSql,
 } from "../scripts/events/edition-launch-sql.ts";
+import { scheduleFiles, scheduleIds } from "../scripts/events/essencia-lua-cheia-programacao-sql.ts";
 import { editorialFiles, publishedEditorialFiles } from "../scripts/events/essencia-lua-cheia-editorial-sql.ts";
 import { applyMigration, fullDatabase } from "./support/full-database.ts";
 import { createPgliteAdmin } from "./support/pglite-admin.ts";
@@ -220,7 +221,7 @@ test("banco como produção: cadastro → publicação (em breve) → abertura �
   const openPre = await report(db, source(PATHS.aberturaPreflight));
   for (const [name, row] of openPre) assert.equal(row.status, "OK", `${name}: ${row.result}`);
   assert.equal(openPre.get("VAGAS_LIVRES")?.result, "24 de 24");
-  assert.equal(openPre.get("SESSAO_NO_FUTURO")?.result, "23/11/2026 16:30");
+  assert.equal(openPre.get("SESSAO_NO_FUTURO")?.result, "23/11/2026 17:15");
 
   assert.ok((await notices(db, source(PATHS.abertura))).includes(`EVENTO_VENDAS_ABERTAS sessionId=${sessionId}`));
   const opened = await state(db);
@@ -229,7 +230,7 @@ test("banco como produção: cadastro → publicação (em breve) → abertura �
 
   const openPost = await report(db, source(PATHS.aberturaPostcheck));
   for (const [name, row] of openPost) assert.equal(row.status, "OK", `${name}: ${row.result}`);
-  assert.equal(openPost.get("SESSAO_ABERTA")?.result, "OPEN 23/11/2026 16:30 210min 16000 centavos 24 vagas");
+  assert.equal(openPost.get("SESSAO_ABERTA")?.result, "OPEN 23/11/2026 17:15 195min 16000 centavos 24 vagas");
   assert.equal(openPost.get("VAGAS")?.result, "24 livre(s) de 24");
   for (const key of ["OUTROS_EVENTOS", "LISTAGENS_REGULARES", "RESERVAS_POR_STATUS", "INSCRICOES_DA_LISTA_POR_STATUS"]) assert.equal(openPost.get(key)?.result, pre.get(key)?.result, key);
 
@@ -299,13 +300,13 @@ test("correção editorial: atualiza o rascunho original, preserva IDs e sessão
   const oldEditorial = update.match(/expected_content constant jsonb := \$json\$(.*?)\$json\$/)?.[1];
   assert.ok(oldEditorial);
   const publishedEditorial = JSON.parse(update.match(/replacement_content constant jsonb := \$json\$(.*?)\$json\$/)?.[1] ?? "");
-  const initialEdition = { ...EDITION, editorial: publishedEditorial };
+  const initialEdition = { ...EDITION, startsAt: "2026-11-23T19:30:00.000Z", durationMinutes: 210, editorial: publishedEditorial };
   assert.equal(createHash("sha256").update(oldEditorial).digest("hex"),
     "2e7424366ea4c3fd393f9a29d058755acc1d20edb9a87dc77c0c4e3d00e073ed",
     "JSON exato do cadastro em 8b0c96c");
   const originalTitle = "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia";
   await refuses(db, update, /EVENTO_EDITORIAL_ESTADO/);
-  await db.exec(editionCadastroSql({ ...EDITION, registered: false, title: originalTitle, editorial: JSON.parse(oldEditorial) }));
+  await db.exec(editionCadastroSql({ ...initialEdition, registered: false, title: originalTitle, editorial: JSON.parse(oldEditorial) }));
 
   const snapshot = async () => (await db.query<Row>(`
     select to_jsonb(e) - 'updated_at' as experience, to_jsonb(s) as session
@@ -356,7 +357,8 @@ test("editorial publicado: preserva publicação e sessão fechada, libera o pre
   assert.equal(createHash("sha256").update(originalEditorial).digest("hex"),
     "2c4c1a922679073df37c27c779025dfd96740804eb359c2a7557546bfec72fa3",
     "JSON exato aprovado e publicado desde 2b386d8");
-  const originalEdition = { ...EDITION, editorial: JSON.parse(originalEditorial) };
+  const originalEdition = { ...EDITION, startsAt: "2026-11-23T19:30:00.000Z", durationMinutes: 210, editorial: JSON.parse(originalEditorial) };
+  const revisedEdition = { ...originalEdition, editorial: JSON.parse(update.match(/replacement_content constant jsonb := \$json\$(.*?)\$json\$/)?.[1] ?? "") };
   await db.exec(editionCadastroSql({ ...originalEdition, registered: false }));
   await refuses(db, update, /EVENTO_EDITORIAL_ESTADO/);
   await db.exec(publicacaoSql(originalEdition));
@@ -370,11 +372,11 @@ test("editorial publicado: preserva publicação e sessão fechada, libera o pre
   const before = await report(db, preflight);
   for (const [name, row] of before) assert.equal(row.status, "OK", name);
   await refuses(db, rollback, /EVENTO_EDITORIAL_ORIGEM/);
-  assert.equal((await report(db, source(PATHS.aberturaPreflight))).get("EVENTO_ABERTURA_PREFLIGHT_OK")?.status, "FALHOU");
+  assert.equal((await report(db, aberturaPreflightSql(revisedEdition))).get("EVENTO_ABERTURA_PREFLIGHT_OK")?.status, "FALHOU");
 
   assert.ok((await notices(db, update)).some((note) => note.startsWith("EVENTO_EDITORIAL_ATUALIZADO")));
   assert.deepEqual(await snapshot(), {
-    experience: { ...(original.experience as object), editorial_content: EDITION.editorial },
+    experience: { ...(original.experience as object), editorial_content: revisedEdition.editorial },
     session: original.session,
   });
   const after = await report(db, postcheck);
@@ -382,13 +384,68 @@ test("editorial publicado: preserva publicação e sessão fechada, libera o pre
   for (const name of ["SESSAO_FECHADA", "OUTROS_EVENTOS", "LISTAGENS_REGULARES", "RESERVAS_POR_STATUS", "INSCRICOES_DA_LISTA_POR_STATUS"]) {
     assert.equal(after.get(name)?.result, before.get(name)?.result, name);
   }
-  assert.equal((await report(db, source(PATHS.aberturaPreflight))).get("EVENTO_ABERTURA_PREFLIGHT_OK")?.status, "OK");
+  assert.equal((await report(db, aberturaPreflightSql(revisedEdition))).get("EVENTO_ABERTURA_PREFLIGHT_OK")?.status, "OK");
   await refuses(db, update, /EVENTO_EDITORIAL_ORIGEM/);
   assert.ok((await notices(db, rollback)).some((note) => note.startsWith("EVENTO_EDITORIAL_REVERTIDO")));
   assert.deepEqual(await snapshot(), original);
   assert.deepEqual(await untouched(db), baseline);
 
   await db.exec(update);
-  await db.exec(source(PATHS.abertura));
+  await db.exec(aberturaSql(revisedEdition));
   await refuses(db, rollback, /EVENTO_EDITORIAL_ORIGEM|EVENTO_EDITORIAL_SESSAO/);
+});
+
+test("programação: mantém pagamentos, reservas existentes e novas compras; rollback exige as mesmas reservas", async (t) => {
+  const db = await productionLike();
+  t.after(() => db.close());
+  for (const [path, sql] of Object.entries(scheduleFiles)) assert.equal(source(path), sql, path);
+  const oldEditorial = JSON.parse(source("scripts/events/essencia-lua-cheia-editorial-0deab56.json"));
+  const original = { ...EDITION, startsAt: "2026-11-23T19:30:00.000Z", durationMinutes: 210, editorial: oldEditorial };
+  await db.exec(editionCadastroSql({ ...original, registered: false }));
+  await db.exec(publicacaoSql(original));
+  await db.exec(aberturaSql(original));
+  const experience = (await db.query<{ id: string }>("select id from public.experiences where slug = $1", [SLUG])).rows[0].id;
+  const session = (await state(db)).session_id as string;
+  const [preflight, update, postcheck, rollback] = Object.values(scheduleFiles).map(sql =>
+    sql.replaceAll(scheduleIds.experience, experience).replaceAll(scheduleIds.session, session));
+  const pending = await preReserve(db, session, 2);
+  const confirmed = await preReserve(db, session, 1);
+  await db.query("update public.reservations set status = 'CONFIRMED', confirmed_at = now() where id = $1", [confirmed.reservationId]);
+  await db.query(`insert into public.payment_events (reservation_id, provider, provider_event_id, event_type, amount_cents, payload)
+    values ($1, 'infinitepay', 'test-schedule-paid', 'PAYMENT_CONFIRMED', 16000, '{}'::jsonb)`, [confirmed.reservationId]);
+
+  const data = async () => (await db.query(`
+    select (select jsonb_agg(to_jsonb(r) order by r.id) from public.reservations r where r.session_id = $1) as bookings,
+      (select jsonb_agg(to_jsonb(p) order by p.id) from public.payment_events p join public.reservations r on r.id = p.reservation_id where r.session_id = $1) as payments
+  `, [session])).rows;
+  const originalData = await data();
+  const rest = await untouched(db);
+  const pre = (await db.exec(preflight)).flatMap(r => r.rows as Check[]);
+  assert.equal(pre.find(r => r.check_name === "EVENTO_PROGRAMACAO_PREFLIGHT_OK")?.status, "OK");
+  assert.match(pre.find(r => r.check_name === "RESERVAS_POR_STATUS")?.result ?? "", /CONFIRMED=1.*PRE_RESERVED=1/);
+
+  assert.ok((await notices(db, update)).some(note => note.startsWith("EVENTO_PROGRAMACAO_ATUALIZADA")));
+  assert.deepEqual(await data(), originalData);
+  assert.deepEqual(await untouched(db), rest);
+  const info = (await db.query<{ starts_at: Date; duration_minutes: number }>(
+    "select starts_at, duration_minutes from public.get_booking_session($1)", [session],
+  )).rows[0];
+  assert.equal(info.starts_at.toISOString(), EDITION.startsAt);
+  assert.equal(info.duration_minutes, 195);
+  assert.equal((await state(db)).spots, 21);
+  const rules = await bookingRules(db, session);
+  assert.ok(rules?.kind === "EVENT");
+  assert.equal(rules.maxPerOrder, 6);
+  const post = (await db.exec(postcheck)).flatMap(r => r.rows as Check[]);
+  assert.equal(post.find(r => r.check_name === "EVENTO_PROGRAMACAO_POSTCHECK_OK")?.status, "OK");
+  await refuses(db, update, /EVENTO_PROGRAMACAO_SESSAO/);
+  await db.exec(rollback);
+  assert.deepEqual(await data(), originalData);
+  assert.deepEqual(await untouched(db), rest);
+
+  await db.exec(update);
+  const newBooking = await preReserve(db, session, 1);
+  assert.notEqual(newBooking.reservationId, pending.reservationId);
+  await refuses(db, rollback, /EVENTO_PROGRAMACAO_REVERSAO/);
+  assert.equal((await state(db)).spots, 20);
 });

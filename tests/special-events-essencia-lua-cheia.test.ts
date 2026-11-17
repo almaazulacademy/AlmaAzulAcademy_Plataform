@@ -1,18 +1,4 @@
-/**
- * ESSÊNCIA — Corpo, Mente e Natureza (2ª edição, versão
- * definitiva aprovada em 14/11/2026, PR C, com os ajustes finais do PR #68:
- * identidade oficial e Educação Ambiental com Fernanda Garcia).
- *
- * Confere o conteúdo aprovado: identidade, 23/11 das 16h30 às 20h, R$ 160,
- * 24 vagas e até 6 por pedido, chegada com tolerância até 16h50, cancelamento
- * até 21/11 às 12h, crianças acompanhadas, programação com as atividades
- * simultâneas das 19h às 20h, lanche da Nutre - DF incluso e nada de drink ou
- * música; parceiros, fotos e legendas; e-mails; "em breve"; e os scripts de
- * cadastro gerados, rodados num banco montado como produção. Nada é executado
- * em produção.
- */
-
-// Primeiro import: o relógio precisa estar no lugar antes de qualquer banco.
+/** Conteúdo aprovado e integração da segunda edição do ESSÊNCIA. */
 import "./support/essencia-clock.ts";
 
 import assert from "node:assert/strict";
@@ -76,18 +62,18 @@ test("identidade oficial: ESSÊNCIA — Corpo, Mente e Natureza · Celebração 
   assert.doesNotMatch(JSON_TEXT, /Experiência Relax|2ª edição ·|Edição especial · Celebração/);
 });
 
-test("parâmetros: segunda 23/11/2026, 16h30 às 20h, R$ 160, 24 vagas, até 6 por pedido, em breve, cadastrada em rascunho", () => {
+test("parâmetros: segunda 23/11/2026, 17h15 às 20h30, R$ 160, 24 vagas, até 6 por pedido, modelo de prévia com reservas bloqueadas", () => {
   assert.equal(EDITION.slug, "essencia-lua-cheia");
   assert.equal(getEventEdition(ESSENCIA_LUA_CHEIA_SLUG), EDITION);
   assert.deepEqual(EVENT_EDITIONS.map((edition) => edition.slug), ["essencia", "essencia-lua-cheia"]);
   assert.deepEqual(editionErrors(EDITION), []);
   assert.match(editionCadastroErrors(EDITION).join(" "), /já está cadastrada/);
   assert.equal(EDITION.registered, true);
-  assert.equal(EDITION.startsAt, "2026-11-23T19:30:00.000Z");
-  assert.equal(sessionStartClock(EDITION.startsAt), "16:30");
+  assert.equal(EDITION.startsAt, "2026-11-23T20:15:00.000Z");
+  assert.equal(sessionStartClock(EDITION.startsAt), "17:15");
   assert.equal(new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long" }).format(new Date(EDITION.startsAt)), "segunda-feira");
-  assert.equal(EDITION.durationMinutes, 210);
-  assert.equal(eventScheduleLabel(CONTENT.scheduleLabel, EDITION.startsAt, EDITION.durationMinutes), "16H30 ÀS 20H");
+  assert.equal(EDITION.durationMinutes, 195);
+  assert.equal(eventScheduleLabel(CONTENT.scheduleLabel, EDITION.startsAt, EDITION.durationMinutes), "17H15 ÀS 20H30");
   assert.equal(EDITION.priceCents, 16_000);
   assert.equal(EDITION.capacity, 24);
   assert.equal(CONTENT.reservation.maxPerOrder, 6);
@@ -99,53 +85,31 @@ test("parâmetros: segunda 23/11/2026, 16h30 às 20h, R$ 160, 24 vagas, até 6 p
 // Programação e atividades simultâneas
 // ===========================================================================
 
-test("programação: cinco momentos, na ordem, com horários e responsáveis confirmados", () => {
-  assert.deepEqual(CONTENT.program.items.map((item) => [programItemTime(item), item.title, item.hosts]), [
-    ["16h30", "Recepção e boas-vindas", []],
-    ["17h", "Remada Alma Azul", ["Alma Azul Academy"]],
-    ["17h45", "Superioga", ["Rapha Dantas"]],
-    ["18h45", "Lanche saudável", ["Nutre - DF"]],
-    ["19h às 20h", "Momento de Bem-Estar e Conexão com a Natureza", ["Cure-se Bem", "Fernanda Garcia"]],
-  ]);
-  const [reception, rowing, superioga, snack] = CONTENT.program.items;
-  assert.match(reception.description, /acolhimento/);
-  assert.equal(rowing.description, "Um convite para contemplar o pôr do sol e presenciar o despertar da Lua Cheia de dentro da água. Uma remada leve em canoas havaianas, acompanhada pela equipe Alma Azul Academy. Não é necessário ter experiência prévia na modalidade.");
+test("programação: horários, simultaneidade e responsabilidades", () => {
+  const [reception, rowing, parallel, snack, care] = CONTENT.program.items;
+  assert.deepEqual(CONTENT.program.items.map(programItemTime), ["17h15", "17h30", "18h30", "19h30", "19h30 às 20h30"]);
+  assert.equal(reception.title, "Recepção e acolhimento");
+  assert.deepEqual(rowing.hosts, ["Alma Azul Academy"]);
+  assert.match(rowing.description, /conforme as condições naturais/);
+  assert.match(rowing.description, /Não é necessário ter experiência prévia/);
   assert.equal(rowing.note, "Colete salva-vidas obrigatório, inclusive para crianças.");
-  assert.doesNotMatch(rowing.description, /\d{1,2}h\d{0,2}|\d{1,2}:\d{2}|garant/i, "sem horário astronômico nem garantia de visibilidade da Lua");
-  assert.equal(superioga.note, "Traga seu próprio tapete.");
-  assert.equal(snack.note, "Incluído no ingresso, sem cobrança adicional.");
-  assert.ok(CONTENT.program.items.slice(0, 4).every((item) => item.parallel.length === 0));
-});
-
-test("19h às 20h: duas atividades simultâneas — Cure-se Bem e Fernanda Garcia —, nunca como horários seguidos", () => {
-  const moment = CONTENT.program.items[4];
-  assert.equal(moment.time, "19:00");
-  assert.equal(moment.timeLabel, "19h às 20h");
-  assert.deepEqual(moment.parallel.map((activity) => [activity.title, activity.hosts]), [
-    ["Massagem e Reflexologia", ["Cure-se Bem"]],
-    ["Educação Ambiental: Fauna e Flora do Cerrado", ["Fernanda Garcia"]],
+  assert.deepEqual(parallel.parallel.map((activity) => [activity.title, activity.hosts]), [
+    ["Superioga", ["Rapha Dantas"]],
+    ["Dinâmica educativa sobre a fauna e a flora do Cerrado", ["Instituto Equilibraí", "Fernanda Garcia"]],
   ]);
-  assert.match(moment.description, /Aproveite um momento enriquecedor de educação ambiental enquanto aguarda o seu atendimento\.$/);
-  assert.match(moment.description, /ao mesmo tempo: massagem ou reflexologia com o Cure-se Bem e Educação Ambiental com Fernanda Garcia/);
-  // A Educação Ambiental nunca é atribuída ao Cure-se Bem.
-  assert.ok(!moment.parallel[1].hosts.includes("Cure-se Bem"));
-  // Nenhum texto atribui a Educação Ambiental ao Cure-se Bem; ela é sempre "com Fernanda Garcia".
-  assert.doesNotMatch(JSON_TEXT, /Cure-se Bem —|Bem-estar e educação ambiental|Educação Ambiental com o Cure-se Bem|educação ambiental com o Cure-se Bem/i);
-  assert.ok(CONTENT.partners.items.find((partner) => partner.name === "Cure-se Bem")?.role === "Realização · Massagem e reflexologia");
-  const [massage, education] = moment.parallel;
-  assert.match(massage.description, /no local entre massagem relaxante ou reflexologia podal, conforme a disponibilidade dos terapeutas, com a utilização de óleos essenciais/);
-  assert.doesNotMatch(massage.description, /minutos|\bmin\b|todos os participantes/i, "sem prometer duração de atendimento");
-  assert.match(education.description, /crianças e adultos/);
-  assert.match(education.description, /biodiversidade do Cerrado, seus animais, suas plantas e a importância da preservação ambiental/);
-  // Um só momento: não há outro item às 19h ou 20h.
-  assert.equal(CONTENT.program.items.filter((item) => /^(19|20):/.test(item.time ?? "")).length, 1);
+  assert.match(parallel.description, /opcional.*crianças e adolescentes.*supervisão adequada/);
+  assert.match(parallel.parallel[0].description, /Traga seu próprio tapete/);
+  assert.equal(snack.note, "Incluído no ingresso, sem cobrança adicional.");
+  assert.equal(snack.time, care.time);
+  assert.deepEqual(care.hosts, ["Cure-se Bem"]);
+  assert.match(care.description, /massagem terapêutica ou reflexologia podal, conforme a disponibilidade dos profissionais/);
 });
 
 test("sem drink e sem música; lanche da Nutre - DF incluso, sem cardápio inventado", () => {
   assert.doesNotMatch(JSON_TEXT, /drink|álcool|música|musica|show|couvert/i);
   assert.ok(CONTENT.spotlight === null, "o destaque do drink saiu");
   assert.ok(CONTENT.included.items.includes("Lanche saudável da Nutre - DF"));
-  assert.match(body("alimentacao"), /lanche saudável da Nutre - DF, servido às 18h45, sem cobrança adicional/);
+  assert.match(body("alimentacao"), /lanche saudável da Nutre - DF, servido às 19h30, sem cobrança adicional/);
   assert.doesNotMatch(JSON_TEXT, /cardápio|ingrediente|vegano|vegetariano|glúten|lactose|caloria|restriç/i);
   assert.equal(CONTENT.included.items.length, 6);
 });
@@ -154,12 +118,12 @@ test("sem drink e sem música; lanche da Nutre - DF incluso, sem cardápio inven
 // Informações operacionais
 // ===========================================================================
 
-test("chegada: recepção 16h30, tolerância até 16h50, remada às 17h00; nada da versão anterior", () => {
-  assert.deepEqual(CONTENT.arrival, { startTime: "16:30", toleranceUntil: "16:50" });
+test("chegada: recepção 17h15, tolerância até 17h30, remada às 17h30; nada da versão anterior", () => {
+  assert.deepEqual(CONTENT.arrival, { startTime: "17:15", toleranceUntil: "17:30" });
   assert.ok(arrivalMatchesSession(CONTENT.arrival!, EDITION.startsAt, EDITION.durationMinutes));
-  assert.match(body("chegada"), /16h30/);
-  assert.match(body("chegada"), /até 16h50/);
-  assert.match(body("chegada"), /17h00 começa a remada/);
+  assert.match(body("chegada"), /17h15/);
+  assert.match(body("chegada"), /até as 17h30/);
+  assert.match(body("chegada"), /horário de início da remada/);
   assert.doesNotMatch(JSON_TEXT, /14h50|15h15|15h00|22 de novembro|24 de novembro|24\/11|R\$ ?150/);
 });
 
@@ -195,21 +159,21 @@ test("e-mails: confirmação com programação, simultâneas, lanche, crianças 
   assert.ok(confirmation.text.includes("Seu ingresso para o ESSÊNCIA — Corpo, Mente e Natureza está confirmado!"));
   for (const text of [
     "Data: segunda-feira, 23 de novembro de 2026",
-    "Início: 16h30",
-    "Tolerância de chegada: até 16h50",
-    "Encerramento previsto: 20h00",
-    "- 16h30 — Recepção e boas-vindas",
-    "- 17h — Remada Alma Azul (com Alma Azul Academy)",
-    "- 17h45 — Superioga (com Rapha Dantas)",
-    "- 18h45 — Lanche saudável (com Nutre - DF)",
-    "- 19h às 20h — Momento de Bem-Estar e Conexão com a Natureza (com Cure-se Bem e Fernanda Garcia). Ao mesmo tempo: Massagem e Reflexologia; Educação Ambiental: Fauna e Flora do Cerrado.",
+    "Início: 17h15",
+    "Tolerância de chegada: até 17h30",
+    "Encerramento previsto: 20h30",
+    "- 17h15 — Recepção e acolhimento",
+    "- 17h30 — Remada Alma Azul (com Alma Azul Academy)",
+    "- 18h30 — Superioga e dinâmica educativa. Ao mesmo tempo: Superioga; Dinâmica educativa sobre a fauna e a flora do Cerrado.",
+    "- 19h30 — Lanche saudável (com Nutre - DF)",
+    "- 19h30 às 20h30 — Autocuidado com Cure-se Bem (com Cure-se Bem)",
     "PARTICIPAÇÃO DE CRIANÇAS",
     "LANCHE SAUDÁVEL",
     "repelente",
     "Prazo: 21/11/2026 às 12h00 (horário de Brasília).",
   ]) assert.ok(confirmation.text.includes(text), `confirmação sem: ${text}`);
   const reschedule = emails.get("reagendamento")!;
-  assert.ok(reschedule.text.includes("Ao mesmo tempo: Massagem e Reflexologia; Educação Ambiental: Fauna e Flora do Cerrado."));
+  assert.ok(reschedule.text.includes("Ao mesmo tempo: Superioga; Dinâmica educativa sobre a fauna e a flora do Cerrado."));
   for (const [name, message] of emails) {
     if (!message) continue;
     for (const absent of ["drink", "Drink", "música", "Música", "couvert", "1 dia antes", "roupa de banho", "Experiência Relax"]) {
@@ -219,20 +183,20 @@ test("e-mails: confirmação com programação, simultâneas, lanche, crianças 
   assert.doesNotMatch(source("scripts/email/event-edition-preview.ts"), /getEmailProvider|\.send\(|getSupabase|\.rpc\(/);
 });
 
-test("resumo antes do pagamento: o momento das 19h mostra as duas atividades juntas", () => {
+test("resumo antes do pagamento: o momento das 18h30 mostra as duas atividades juntas", () => {
   const context = eventBookingContext(editionDemoEvent(EDITION));
   assert.deepEqual(context.program.map((item) => [item.time, item.title]), [
-    ["16h30", "Recepção e boas-vindas"],
-    ["17h", "Remada Alma Azul"],
-    ["17h45", "Superioga"],
-    ["18h45", "Lanche saudável"],
-    ["19h às 20h", "Momento de Bem-Estar e Conexão com a Natureza — ao mesmo tempo: Massagem e Reflexologia; Educação Ambiental: Fauna e Flora do Cerrado"],
+    ["17h15", "Recepção e acolhimento"],
+    ["17h30", "Remada Alma Azul"],
+    ["18h30", "Superioga e dinâmica educativa — ao mesmo tempo: Superioga; Dinâmica educativa sobre a fauna e a flora do Cerrado"],
+    ["19h30", "Lanche saudável"],
+    ["19h30 às 20h30", "Autocuidado com Cure-se Bem"],
   ]);
   assert.equal(context.title, "ESSÊNCIA — Corpo, Mente e Natureza");
   assert.equal(context.subtitle, "Celebração da Lua Cheia");
   assert.equal(context.maxPerOrder, 6);
-  assert.equal(context.timeRange, "16H30 ÀS 20H");
-  assert.equal(context.arrivalNote, "Início às 16h30, com tolerância de chegada até 16h50.");
+  assert.equal(context.timeRange, "17H15 ÀS 20H30");
+  assert.equal(context.arrivalNote, "Início às 17h15, com tolerância de chegada até 17h30.");
 });
 
 test("em breve: com a venda global ligada, a edição diz 'Reservas abrem em breve' e o servidor recusa", () => {
@@ -279,13 +243,13 @@ test("fotos: todas existem, sem metadados, leves; legendas da 1ª edição e dos
   }
   const credits = Object.fromEntries(CONTENT.program.items.map((item) => [item.title, item.image?.credit ?? null]));
   assert.deepEqual(credits, {
-    "Recepção e boas-vindas": null,
+    "Recepção e acolhimento": null,
     "Remada Alma Azul": "Remada Sunset · Alma Azul Academy",
-    Superioga: FIRST_EDITION,
+    "Superioga e dinâmica educativa": null,
     "Lanche saudável": FIRST_EDITION,
-    "Momento de Bem-Estar e Conexão com a Natureza": null,
+    "Autocuidado com Cure-se Bem": FIRST_EDITION,
   });
-  assert.deepEqual(CONTENT.program.items[4].parallel.map((activity) => activity.image?.credit), [FIRST_EDITION, "Córrego do Torto · Cerrado do Distrito Federal"]);
+  assert.deepEqual(CONTENT.program.items[2].parallel.map((activity) => activity.image?.credit), [FIRST_EDITION, "Córrego do Torto · Cerrado do Distrito Federal"]);
   assert.equal(parsed.success && parsed.data.hero.image.credit, "Remada da Lua Cheia · Alma Azul Academy");
   assert.match(CONTENT.program.items[3].image!.alt, /Duas mesas amarelas com alimentos/);
   const size = (name: string) => webpSize(readFileSync(new URL(`../public/images/eventos/essencia-lua-cheia/${name}`, import.meta.url)));
@@ -308,14 +272,14 @@ test("parceiros: os seis, com logotipos oficiais já aprovados; Fernanda Garcia 
     ["Cápsula Bar", "Realização · Local do evento"],
     ["Rapha Dantas", "Superioga"],
     ["Nutre - DF", "Lanche saudável"],
-    ["Fernanda Garcia", "Educação Ambiental · fauna e flora do Cerrado"],
+    ["Instituto Equilibraí", "Dinâmica educativa · fauna e flora do Cerrado, com Fernanda Garcia"],
   ]);
   const approved = new Set((ESSENCIA_EDITORIAL.event.partners.items as ReadonlyArray<{ logo?: { src: string } }>).map((partner) => partner.logo?.src));
   for (const partner of CONTENT.partners.items.filter((item) => item.logo)) assert.ok(approved.has(partner.logo!.src), `logo aprovado: ${partner.name}`);
   assert.equal(CONTENT.partners.items[4].logo?.src, "/images/eventos/essencia/logo-nutre.png");
   assert.equal(CONTENT.partners.items.filter((partner) => partner.logo?.src.endsWith("/logo-cure-se-bem.png")).length, 1);
   assert.equal(CONTENT.partners.items[5].logo, null, "Fernanda Garcia aparece pelo nome, sem o logo do Cure-se Bem");
-  assert.ok(CONTENT.included.items.includes("Educação Ambiental: fauna e flora do Cerrado, com Fernanda Garcia"));
+  assert.ok(CONTENT.included.items.includes("Dinâmica educativa opcional sobre o Cerrado, com o Instituto Equilibraí e Fernanda Garcia"));
 });
 
 // ===========================================================================
@@ -352,7 +316,7 @@ test("scripts: os arquivos do repositório são exatamente os gerados da ediçã
   assert.equal(source(PATHS.rollback), editionRollbackSql(model));
   const cadastro = source(PATHS.cadastro);
   assert.deepEqual(JSON.parse(cadastro.match(/\$json\$([\s\S]*?)\$json\$/)?.[1] ?? ""), ESSENCIA_LUA_CHEIA_EDITORIAL);
-  assert.match(cadastro, /'2026-11-23T19:30:00\.000Z'::timestamptz,\n {4}210,\n {4}16000,\n {4}24\n/);
+  assert.match(cadastro, /'2026-11-23T20:15:00\.000Z'::timestamptz,\n {4}195,\n {4}16000,\n {4}24\n/);
   assert.doesNotMatch(cadastro, /publication_enabled = true|status = 'OPEN'|'PUBLISHED'|update public\.special_event_settings/);
   assert.match(source(PATHS.preflight), /TURMAS_REGULARES_SOBREPOSTAS/);
 });
@@ -377,7 +341,7 @@ test("banco como produção: preflight → cadastro → postcheck aprovam; a 1ª
   await db.exec(source(PATHS.cadastro));
   const post = await report(source(PATHS.postcheck));
   for (const [name, row] of post) assert.equal(row.status, "OK", `${name}: ${row.result}`);
-  assert.equal(post.get("SESSAO_FECHADA")?.result, "CLOSED 23/11/2026 16:30 210min 16000 centavos 24 vagas");
+  assert.equal(post.get("SESSAO_FECHADA")?.result, "CLOSED 23/11/2026 17:15 195min 16000 centavos 24 vagas");
   assert.equal(post.get("RESERVAS_EM_BREVE")?.result, "comingSoon=true; até 6 por pedido; cancelamento até 2026-11-21T12:00:00-03:00");
   for (const key of ["OUTROS_EVENTOS", "LISTAGENS_REGULARES", "RESERVAS_POR_STATUS", "INSCRICOES_DA_LISTA_POR_STATUS"]) assert.equal(post.get(key)?.result, pre.get(key)?.result, key);
   assert.deepEqual(await snapshot(), before, "a 1ª edição não muda");
