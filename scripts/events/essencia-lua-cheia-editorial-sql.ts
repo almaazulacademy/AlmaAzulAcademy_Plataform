@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
-import { ESSENCIA_LUA_CHEIA_EDITION as currentEdition } from "../../lib/events/fixtures/essencia-lua-cheia.ts";
+import { ESSENCIA_LUA_CHEIA_EDITION as currentEdition, ESSENCIA_LUA_CHEIA_EDITORIAL } from "../../lib/events/fixtures/essencia-lua-cheia.ts";
 import { COMMON_COUNTS, EDITION_ADMIN_EMAIL, SECURITY_APPLIED, editionFileStem, literal, otherEventsFingerprint } from "./edition-cadastro-sql.ts";
 
 // Parâmetros históricos da correção editorial anterior à mudança de horário.
@@ -11,7 +11,7 @@ const previousTitle = "ESSÊNCIA — Experiência Relax | Celebração da Lua Ch
 const previousBadge = "Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano";
 // Conteúdo publicado a partir do PR #70. O snapshot também mantém os SQLs
 // históricos do rascunho reproduzíveis após as correções na edição publicada.
-const publishedEditorial = JSON.parse(readFileSync(new URL("./essencia-lua-cheia-editorial-2b386d8.json", import.meta.url), "utf8")) as typeof editorial;
+const publishedEditorial = JSON.parse(readFileSync(new URL("./essencia-lua-cheia-editorial-2b386d8.json", import.meta.url), "utf8")) as typeof ESSENCIA_LUA_CHEIA_EDITORIAL;
 const publishedTitle = publishedEditorial.seo.title;
 const previousEditorial = {
   ...publishedEditorial,

@@ -420,7 +420,7 @@ test("programação: mantém pagamentos, reservas existentes e novas compras; ro
   `, [session])).rows;
   const originalData = await data();
   const rest = await untouched(db);
-  const pre = (await db.exec<Check>(preflight)).flatMap(r => r.rows);
+  const pre = (await db.exec(preflight)).flatMap(r => r.rows as Check[]);
   assert.equal(pre.find(r => r.check_name === "EVENTO_PROGRAMACAO_PREFLIGHT_OK")?.status, "OK");
   assert.match(pre.find(r => r.check_name === "RESERVAS_POR_STATUS")?.result ?? "", /CONFIRMED=1.*PRE_RESERVED=1/);
 
@@ -433,8 +433,10 @@ test("programação: mantém pagamentos, reservas existentes e novas compras; ro
   assert.equal(info.starts_at.toISOString(), EDITION.startsAt);
   assert.equal(info.duration_minutes, 195);
   assert.equal((await state(db)).spots, 21);
-  assert.equal((await bookingRules(db, session))?.maxPerOrder, 6);
-  const post = (await db.exec<Check>(postcheck)).flatMap(r => r.rows);
+  const rules = await bookingRules(db, session);
+  assert.ok(rules?.kind === "EVENT");
+  assert.equal(rules.maxPerOrder, 6);
+  const post = (await db.exec(postcheck)).flatMap(r => r.rows as Check[]);
   assert.equal(post.find(r => r.check_name === "EVENTO_PROGRAMACAO_POSTCHECK_OK")?.status, "OK");
   await refuses(db, update, /EVENTO_PROGRAMACAO_SESSAO/);
   await db.exec(rollback);
