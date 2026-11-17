@@ -1,30 +1,4 @@
-/**
- * ESSÊNCIA — Corpo, Mente e Natureza · Celebração da Lua Cheia
- * Especial de Confraternização de Fim de Ano! (2ª edição, 23/11/2026).
- *
- * Conteúdo editorial no formato exato de `experiences.editorial_content`, com a
- * versão definitiva aprovada pelo Rudah em 14/11/2026 (PR C): 16h30 às 20h,
- * R$ 160, remada às 17h, Superioga, lanche da Nutre - DF e, das 19h às 20h, duas
- * atividades simultâneas: massagem/reflexologia com o Cure-se Bem e educação
- * ambiental com Fernanda Garcia (ajustes de 14/11/2026). Sem drink e sem música.
- *
- * Serve à prévia (`/eventos/demonstracao/essencia-lua-cheia`), à prévia do
- * e-mail (`pnpm email:preview:edicao essencia-lua-cheia`) e aos scripts de
- * lançamento gerados. A correção de identidade no rascunho de produção é
- * aplicada pelo roteiro de atualização editorial.
- *
- * Nasce com `reservation.comingSoon = true`: publicada, a edição mostra
- * "Reservas abrem em breve" e o servidor recusa reserva até a abertura explícita.
- *
- * Fotos (`public/images/eventos/essencia-lua-cheia/`): as da 1ª edição levam a
- * legenda "Registro da 1ª edição do ESSÊNCIA · 07/11/2026"; as de outras
- * experiências e lugares levam o nome deles, para não parecerem desta edição.
- * A foto do lanche mostra as mesas e a prática de Superioga na 1ª edição.
- * Logos: os oficiais já aprovados.
- *
- * Módulo puro, sem imports de aplicação: é lido pelo Next e pelos testes.
- */
-
+/** Editorial da segunda edição do ESSÊNCIA e modelo dos dados da sessão. */
 import type { EventEdition } from "../edition.ts";
 import { CONCHA_ACUSTICA_LOCATION } from "./essencia.ts";
 
@@ -62,11 +36,11 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
     image: HERO,
     primaryCta: { label: "Garantir minha vaga", href: "#reserva" },
     secondaryCta: { label: "Ver a programação", href: "#programacao" },
-    details: ["23 de novembro de 2026", "16h30 às 20h", "Cápsula Bar · Brasília"],
+    details: ["23 de novembro de 2026", "17h15 às 20h30", "Cápsula Bar · Brasília"],
   },
   quickFacts: [
     { label: "Data", value: "23/11/2026" },
-    { label: "Horário", value: "16h30 às 20h" },
+    { label: "Horário", value: "17h15 às 20h30" },
     { label: "Local", value: "Cápsula Bar" },
     { label: "Ingresso", value: "R$ 160 por pessoa" },
   ],
@@ -86,7 +60,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
   },
   seo: {
     title: TITLE,
-    description: "Especial de Confraternização de Fim de Ano no Cápsula Bar, em Brasília: remada no Lago Paranoá, Superioga, lanche saudável, massagem ou reflexologia e educação ambiental sobre o Cerrado. 23 de novembro de 2026, das 16h30 às 20h.",
+    description: "Especial de Confraternização de Fim de Ano no Cápsula Bar, em Brasília: remada no Lago Paranoá, Superioga, lanche saudável, massagem ou reflexologia e educação ambiental sobre o Cerrado. 23 de novembro de 2026, das 17h15 às 20h30.",
   },
   event: {
     theme: "dusk",
@@ -116,9 +90,9 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
       imageShape: "portrait",
       items: [
         {
-          time: "16:30",
-          title: "Recepção e boas-vindas",
-          description: "Um momento de acolhimento para iniciar nossa experiência em um ambiente de conexão e boas energias.",
+          time: "17:15",
+          title: "Recepção e acolhimento",
+          description: "Chegada e preparação para a experiência.",
           hosts: [],
           image: {
             src: `${IMG}/recepcao-deck-lago.webp`,
@@ -126,9 +100,9 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
           },
         },
         {
-          time: "17:00",
+          time: "17:30",
           title: "Remada Alma Azul",
-          description: "Um convite para contemplar o pôr do sol e presenciar o despertar da Lua Cheia de dentro da água. Uma remada leve em canoas havaianas, acompanhada pela equipe Alma Azul Academy. Não é necessário ter experiência prévia na modalidade.",
+          description: "Uma remada ao entardecer no Lago Paranoá e um momento para contemplar o despertar da Lua Cheia, conforme as condições naturais. Não é necessário ter experiência prévia.",
           hosts: ["Alma Azul Academy"],
           note: "Colete salva-vidas obrigatório, inclusive para crianças.",
           image: {
@@ -138,19 +112,35 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
           },
         },
         {
-          time: "17:45",
-          title: "Superioga",
-          description: "Movimento, energia e conexão com o corpo em uma prática especial de bem-estar.",
-          hosts: ["Rapha Dantas"],
-          note: "Traga seu próprio tapete.",
-          image: {
-            src: `${IMG}/superioga-1a-edicao.webp`,
-            alt: "Participantes em prática de Superioga sobre tapetes no deck do Cápsula Bar",
-            credit: FIRST_EDITION,
-          },
+          time: "18:30",
+          title: "Superioga e dinâmica educativa",
+          description: "As duas atividades acontecem ao mesmo tempo. A dinâmica é opcional e foi pensada principalmente para crianças e adolescentes, que devem permanecer sob supervisão adequada de seus responsáveis.",
+          hosts: [],
+          parallel: [
+            {
+              title: "Superioga",
+              description: "Corpo, respiração e presença. Traga seu próprio tapete.",
+              hosts: ["Rapha Dantas"],
+              image: {
+                src: `${IMG}/superioga-1a-edicao.webp`,
+                alt: "Participantes em prática de Superioga sobre tapetes no deck do Cápsula Bar",
+                credit: FIRST_EDITION,
+              },
+            },
+            {
+              title: "Dinâmica educativa sobre a fauna e a flora do Cerrado",
+              description: "Enquanto os adultos praticam Superioga, crianças e adolescentes podem explorar e aprender sobre o Cerrado de forma lúdica, com supervisão adequada de seus responsáveis.",
+              hosts: ["Instituto Equilibraí", "Fernanda Garcia"],
+              image: {
+                src: `${IMG}/educacao-ambiental-cerrado.webp`,
+                alt: "Mata de galeria do Cerrado acompanhando um córrego, vista do alto, com a paisagem do Distrito Federal ao fundo",
+                credit: "Córrego do Torto · Cerrado do Distrito Federal",
+              },
+            },
+          ],
         },
         {
-          time: "18:45",
+          time: "19:30",
           title: "Lanche saudável",
           description: "Momento de alimentação saudável e convivência, com o lanche da Nutre - DF.",
           hosts: ["Nutre - DF"],
@@ -162,33 +152,16 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
           },
         },
         {
-          time: "19:00",
-          timeLabel: "19h às 20h",
-          title: "Momento de Bem-Estar e Conexão com a Natureza",
-          description: "Duas experiências acontecem ao mesmo tempo: massagem ou reflexologia com o Cure-se Bem e Educação Ambiental com Fernanda Garcia. Aproveite um momento enriquecedor de educação ambiental enquanto aguarda o seu atendimento.",
-          hosts: ["Cure-se Bem", "Fernanda Garcia"],
-          parallel: [
-            {
-              title: "Massagem e Reflexologia",
-              description: "Escolha no local entre massagem relaxante ou reflexologia podal, conforme a disponibilidade dos terapeutas, com a utilização de óleos essenciais.",
-              hosts: ["Cure-se Bem"],
-              image: {
-                src: `${IMG}/bem-estar-1a-edicao.webp`,
-                alt: "Participante sentada sobre o tapete aplicando óleo essencial nas mãos, durante a aromaterapia",
-                credit: FIRST_EDITION,
-              },
-            },
-            {
-              title: "Educação Ambiental: Fauna e Flora do Cerrado",
-              description: "Uma vivência educativa para crianças e adultos, com experiências de conexão com a natureza e descobertas sobre a riqueza da biodiversidade do Cerrado, seus animais, suas plantas e a importância da preservação ambiental.",
-              hosts: ["Fernanda Garcia"],
-              image: {
-                src: `${IMG}/educacao-ambiental-cerrado.webp`,
-                alt: "Mata de galeria do Cerrado acompanhando um córrego, vista do alto, com a paisagem do Distrito Federal ao fundo",
-                credit: "Córrego do Torto · Cerrado do Distrito Federal",
-              },
-            },
-          ],
+          time: "19:30",
+          timeLabel: "19h30 às 20h30",
+          title: "Autocuidado com Cure-se Bem",
+          description: "O lanche e os atendimentos começam às 19h30. Escolha entre massagem terapêutica ou reflexologia podal, conforme a disponibilidade dos profissionais.",
+          hosts: ["Cure-se Bem"],
+          image: {
+            src: `${IMG}/bem-estar-1a-edicao.webp`,
+            alt: "Participante sentada sobre o tapete aplicando óleo essencial nas mãos, durante a aromaterapia",
+            credit: FIRST_EDITION,
+          },
         },
       ],
     },
@@ -197,12 +170,12 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
       title: "Tudo o que está incluso.",
       description: "Um único ingresso para viver a experiência completa, do fim da tarde ao despertar da Lua.",
       items: [
-        "Recepção e boas-vindas",
+        "Recepção e acolhimento",
         "Remada em canoa havaiana, com colete salva-vidas",
         "Superioga com Rapha Dantas",
         "Lanche saudável da Nutre - DF",
-        "Massagem relaxante ou reflexologia podal com o Cure-se Bem, conforme a disponibilidade dos terapeutas",
-        "Educação Ambiental: fauna e flora do Cerrado, com Fernanda Garcia",
+        "Massagem terapêutica ou reflexologia podal com o Cure-se Bem, conforme a disponibilidade dos profissionais",
+        "Dinâmica educativa opcional sobre o Cerrado, com o Instituto Equilibraí e Fernanda Garcia",
       ],
     },
     partners: {
@@ -214,8 +187,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         { name: "Cápsula Bar", role: "Realização · Local do evento", logo: { src: "/images/bases/concha-acustica/capsula-bar-logo.webp", alt: "Logo Cápsula Bar" } },
         { name: "Rapha Dantas", role: "Superioga", logo: { src: "/images/eventos/essencia/logo-superioga-rapha-dantas.jpg", alt: "Logo Superioga — Rapha Dantas" } },
         { name: "Nutre - DF", role: "Lanche saudável", logo: { src: "/images/eventos/essencia/logo-nutre.png", alt: "Logo Nutre - DF" } },
-        // Sem logo: a Educação Ambiental não usa a marca de outro parceiro.
-        { name: "Fernanda Garcia", role: "Educação Ambiental · fauna e flora do Cerrado" },
+        { name: "Instituto Equilibraí", role: "Dinâmica educativa · fauna e flora do Cerrado, com Fernanda Garcia" },
       ],
     },
     info: {
@@ -225,7 +197,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         {
           id: "chegada",
           title: "Horário e chegada",
-          body: "A chegada e a recepção começam às 16h30, no Cápsula Bar, às margens do Lago Paranoá.\n\nA tolerância máxima de chegada é até 16h50: às 17h00 começa a remada.\n\nA programação vai até as 20h00.",
+          body: "A chegada e a recepção começam às 17h15, no Cápsula Bar, às margens do Lago Paranoá. A tolerância de chegada vai até as 17h30, horário de início da remada. A programação termina às 20h30.",
         },
         {
           id: "o-que-levar",
@@ -235,7 +207,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         {
           id: "criancas",
           title: "Participação de crianças",
-          body: "Crianças são bem-vindas e participam somente acompanhadas por um responsável.\n\nCada criança paga o mesmo ingresso (R$ 160) e conta na capacidade total de 24 participantes. Durante a remada, o uso de colete salva-vidas adequado é obrigatório.",
+          body: "Crianças são bem-vindas e participam somente acompanhadas por um responsável. A dinâmica educativa é opcional e os menores continuam sob supervisão adequada de seus responsáveis.\n\nCada criança paga o mesmo ingresso (R$ 160) e conta na capacidade total de 24 participantes. Durante a remada, o uso de colete salva-vidas adequado é obrigatório.",
           email: true,
         },
         {
@@ -246,7 +218,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         {
           id: "alimentacao",
           title: "Lanche saudável",
-          body: "O ingresso inclui o lanche saudável da Nutre - DF, servido às 18h45, sem cobrança adicional.",
+          body: "O ingresso inclui o lanche saudável da Nutre - DF, servido às 19h30, sem cobrança adicional.",
         },
         {
           id: "clima",
@@ -260,8 +232,7 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
         },
       ],
     },
-    /** Recepção às 16h30, chegada tolerada até 16h50 (a remada começa às 17h). */
-    arrival: { startTime: "16:30", toleranceUntil: "16:50" },
+    arrival: { startTime: "17:15", toleranceUntil: "17:30" },
     /** Prazo inclusivo: até 21/11/2026 12h00 de Brasília (UTC−3). Crédito e reembolso seguem o processo manual. */
     cancellation: { deadline: "2026-11-21T12:00:00-03:00", timeZone: "America/Sao_Paulo", summary: "crédito para outra experiência da Alma Azul Academy ou reembolso, pelo atendimento da nossa equipe" },
     reservation: {
@@ -276,12 +247,11 @@ export const ESSENCIA_LUA_CHEIA_EDITORIAL = {
   },
 } as const;
 
-/** 23/11/2026, 16h30 em Brasília (UTC−3). */
-export const ESSENCIA_LUA_CHEIA_STARTS_AT = "2026-11-23T19:30:00.000Z";
+/** 23/11/2026, 17h15 em Brasília (UTC−3). */
+export const ESSENCIA_LUA_CHEIA_STARTS_AT = "2026-11-23T20:15:00.000Z";
 
 /**
- * A 2ª edição está cadastrada em produção como rascunho.
- * Duração técnica de 210 minutos: das 16h30 às 20h, o horário anunciado.
+ * Modelo da edição. As reservas em produção seguem o estado da sessão no banco.
  */
 export const ESSENCIA_LUA_CHEIA_EDITION: EventEdition = {
   slug: ESSENCIA_LUA_CHEIA_SLUG,
@@ -290,7 +260,7 @@ export const ESSENCIA_LUA_CHEIA_EDITION: EventEdition = {
   baseSlug: "concha-acustica",
   location: CONCHA_ACUSTICA_LOCATION,
   startsAt: ESSENCIA_LUA_CHEIA_STARTS_AT,
-  durationMinutes: 210,
+  durationMinutes: 195,
   priceCents: 16_000,
   capacity: 24,
   editorial: ESSENCIA_LUA_CHEIA_EDITORIAL,

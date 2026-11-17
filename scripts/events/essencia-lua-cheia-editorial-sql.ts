@@ -1,7 +1,11 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
-import { ESSENCIA_LUA_CHEIA_EDITION as edition, ESSENCIA_LUA_CHEIA_EDITORIAL as editorial } from "../../lib/events/fixtures/essencia-lua-cheia.ts";
+import { ESSENCIA_LUA_CHEIA_EDITION as currentEdition } from "../../lib/events/fixtures/essencia-lua-cheia.ts";
 import { COMMON_COUNTS, EDITION_ADMIN_EMAIL, SECURITY_APPLIED, editionFileStem, literal, otherEventsFingerprint } from "./edition-cadastro-sql.ts";
+
+// Parâmetros históricos da correção editorial anterior à mudança de horário.
+const edition = { ...currentEdition, startsAt: "2026-11-23T19:30:00.000Z", durationMinutes: 210 };
+const editorial: unknown = JSON.parse(readFileSync(new URL("./essencia-lua-cheia-editorial-0deab56.json", import.meta.url), "utf8"));
 
 const previousTitle = "ESSÊNCIA — Experiência Relax | Celebração da Lua Cheia";
 const previousBadge = "Celebração da Lua Cheia · Especial de Confraternização de Fim de Ano";

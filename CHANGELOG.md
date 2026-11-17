@@ -1,5 +1,10 @@
 # Changelog
 
+## ESSÊNCIA — programação de 23/11
+
+- Novo horário de 17h15 a 20h30, com tolerância de chegada até 17h30. Às 18h30, Superioga e dinâmica opcional do Instituto Equilibraí com Fernanda Garcia acontecem em paralelo. O lanche e os atendimentos começam às 19h30.
+- SQLs de diagnóstico, atualização auditada e reversão para a sessão existente com reservas abertas.
+
 ## ESSÊNCIA — ajustes da página publicada
 
 - Revisão da apresentação, da remada e da orientação durante a atividade de educação ambiental. Identificação de Nutre - DF e foto original da 1ª edição na programação. O logo do Cure-se Bem aparece no seu próprio card, e Fernanda Garcia é identificada por nome e função.
