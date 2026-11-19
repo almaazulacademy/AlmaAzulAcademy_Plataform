@@ -22,6 +22,7 @@ import { listAgendaSessions, type AgendaSession } from "@/lib/agenda/data";
 import { WHATSAPP_AGENDA_LINK } from "@/lib/contact";
 import { buildSessionChoice } from "@/lib/sessions/choice";
 import { sessionDayKey } from "@/lib/sessions/date-filter";
+import { formatExperienceDuration, sessionHolidayName } from "@/lib/sessions/modality";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSessionBookable, SOLD_OUT_LABEL } from "@/lib/waitlist/public";
 import { isWaitlistSignupEnabled } from "@/lib/waitlist/signup";
@@ -91,7 +92,8 @@ function EmptyState({ error = false }: { error?: boolean }) {
 function AgendaCard({ session, waitlistSignup }: { session: AgendaSession; waitlistSignup: boolean }) {
   const Icon = resolveExperienceIcon(session.experienceSlug);
   const choice = buildSessionChoice(session);
-  const dateLabel = `${choice.weekday}, ${choice.dayMonth}`;
+  const holiday = sessionHolidayName(session.startsAt);
+  const dateLabel = `${choice.weekday}, ${choice.dayMonth}${holiday ? ` · feriado (${holiday})` : ""}`;
   // Só aparece com a lista de espera pública ligada: sem ela, a agenda lê
   // list_open_sessions e toda turma listada tem vaga.
   const soldOut = !isSessionBookable(session);
@@ -122,7 +124,7 @@ function AgendaCard({ session, waitlistSignup }: { session: AgendaSession; waitl
         <p className="flex items-center gap-2.5">
           <Clock3 className="size-4 shrink-0 text-lake" aria-hidden="true" />
           <span className="sr-only">Duração: </span>
-          {session.durationMinutes > 0 ? `${session.durationMinutes} minutos de experiência` : "Duração a confirmar"}
+          {session.durationMinutes > 0 ? formatExperienceDuration(session.durationMinutes) : "Duração a confirmar"}
         </p>
         <p className="flex items-center gap-2.5">
           <Ticket className="size-4 shrink-0 text-lake" aria-hidden="true" />

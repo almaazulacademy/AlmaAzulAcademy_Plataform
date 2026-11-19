@@ -1,8 +1,12 @@
 import type { PublicExperience } from "./experience.ts";
+import { applyModalityCopy } from "./modality-copy.ts";
 import { revisePublicCopy } from "./public-copy.ts";
 
 export function refinePublicExperience(experience: PublicExperience): PublicExperience {
-  experience = revisePublicCopy(experience);
+  return applyModalityCopy(refineExperienceCopy(revisePublicCopy(experience)));
+}
+
+function refineExperienceCopy(experience: PublicExperience): PublicExperience {
   if (experience.slug === "imersao-paranoa") {
     return {
       ...experience,
@@ -30,8 +34,8 @@ export function refinePublicExperience(experience: PublicExperience): PublicExpe
       ...experience.editorial,
       hero: {
         ...experience.editorial.hero,
-        title: "O melhor pôr do sol de Brasília",
-        subtitle: "Uma remada para desacelerar e acompanhar as últimas luzes do dia em um dos cenários mais bonitos da cidade.",
+        title: "O melhor pôr do sol de Brasília, no seu ritmo.",
+        subtitle: "O fim do dia ganha outro significado quando você troca a correria pela tranquilidade do lago. Durante a semana, uma remada de 1 hora; aos domingos, a experiência tradicional de 1h30.",
         details: experience.editorial.hero.details
           .filter((detail) => !/^(local|onde)\s*:/i.test(detail.trim()))
           .map((detail) => (/^nível\s*:/i.test(detail.trim()) ? "Nível: iniciantes ao avançado" : detail)),

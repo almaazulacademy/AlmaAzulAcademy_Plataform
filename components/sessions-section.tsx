@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CalendarDays, Ticket, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, Clock3, Ticket, Users } from "lucide-react";
 
 import { SessionDateFilter } from "@/components/session-date-filter";
 import { buttonVariants } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { WaitlistJoinLink } from "@/components/waitlist/join-link";
 import { SoldOutNotice } from "@/components/waitlist/sold-out-notice";
 import { readPublicSessions } from "@/lib/reservations/session-catalog";
 import { groupSessionsByDay, type SessionChoice } from "@/lib/sessions/choice";
+import { brasiliaHolidayName } from "@/lib/sessions/holidays";
+import { formatExperienceDuration } from "@/lib/sessions/modality";
 import { isSessionBookable, type PublicSession } from "@/lib/waitlist/public";
 import { isWaitlistSignupEnabled } from "@/lib/waitlist/signup";
 
@@ -61,6 +63,12 @@ function SessionCard({ choice, session, waitlistSignup }: { choice: SessionChoic
       </p>
 
       <div className="mt-7 space-y-2.5 border-t border-white/10 pt-5 text-sm text-white/65">
+        {session.durationMinutes > 0 ? (
+          <p className="flex items-center gap-3">
+            <Clock3 aria-hidden="true" className="size-4 shrink-0 text-sand" />
+            {formatExperienceDuration(session.durationMinutes)}
+          </p>
+        ) : null}
         <p className="flex items-center gap-3">
           <Ticket aria-hidden="true" className="size-4 shrink-0 text-sand" />
           {formatPrice(session.priceCents)} por pessoa
@@ -98,6 +106,12 @@ function SoldOutSessionCard({ choice, session, waitlistSignup }: { choice: Sessi
       </p>
 
       <div className="mt-7 space-y-2.5 border-t border-white/10 pt-5 text-sm text-white/50">
+        {session.durationMinutes > 0 ? (
+          <p className="flex items-center gap-3">
+            <Clock3 aria-hidden="true" className="size-4 shrink-0 text-sand/60" />
+            {formatExperienceDuration(session.durationMinutes)}
+          </p>
+        ) : null}
         <p className="flex items-center gap-3">
           <Ticket aria-hidden="true" className="size-4 shrink-0 text-sand/60" />
           {formatPrice(session.priceCents)} por pessoa
@@ -134,15 +148,18 @@ export function SessionsGrid({ sessions, date = null, waitlistSignup = false }: 
       initialDate={date}
       listClassName="space-y-12 sm:space-y-14"
       emptyMessage="Não encontramos horários desta experiência nesta data."
-      entries={days.map((day) => ({
+      entries={days.map((day) => {
+        const holiday = brasiliaHolidayName(day.dayKey);
+        return {
         key: day.dayKey,
         dayKey: day.dayKey,
         count: day.turmas.length,
         node: (
-          <section aria-label={day.fullDate}>
+          <section aria-label={holiday ? `${day.fullDate} — feriado: ${holiday}` : day.fullDate}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-white/15 pb-4">
               <h3 className="text-2xl font-medium tracking-[-0.035em] first-letter:uppercase sm:text-3xl">
                 {day.weekday}, {day.dayMonth}
+                {holiday ? <span className="ml-3 inline-block align-middle rounded-full border border-sand/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-sand">Feriado · {holiday}</span> : null}
               </h3>
               <p className="text-sm text-white/55">
                 {day.turmas.length === 1 ? "1 turma neste dia" : `${day.turmas.length} turmas neste dia`}
@@ -156,7 +173,8 @@ export function SessionsGrid({ sessions, date = null, waitlistSignup = false }: 
             </div>
           </section>
         ),
-      }))}
+        };
+      })}
     />
   );
 }
