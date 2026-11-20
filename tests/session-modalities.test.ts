@@ -14,7 +14,7 @@ import test from "node:test";
 
 import { validateExperienceEditorial } from "../lib/editorial/experience.ts";
 import { imersaoParanoaFallback } from "../lib/editorial/imersao-paranoa.ts";
-import { applyModalityCopy } from "../lib/editorial/modality-copy.ts";
+import { applyModalityCopy, PHOTO_NOTE, PHOTO_QUESTION } from "../lib/editorial/modality-copy.ts";
 import {
   CAPSULA_BAR_CAPACITY,
   experienceModalities,
@@ -39,6 +39,11 @@ import {
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+function migrationEditorialFrom(file: string) {
+  const match = source(`supabase/migrations/${file}`).match(/\$editorial\$\s*(\{[\s\S]*?\})\s*\$editorial\$::jsonb/)!;
+  return JSON.parse(match[1]);
 }
 
 function migrationEditorial(file: string) {
@@ -282,7 +287,7 @@ test("Lago Norte: banho, prainha e fotos só aparecem associados à experiência
   });
   assert.deepEqual(unscopedActivityPromises(pageTexts(nascer)), []);
   assert.equal(nascer.summary, "Uma remada nas primeiras luzes do dia, com os sons da natureza ao redor.");
-  assert.ok(nascer.editorial.included!.items.some((item) => item.title === "Paradas para banho na experiência de 1h30"));
+  assert.ok(nascer.editorial.included!.items.some((item) => item.title === "Paradas previstas no roteiro da experiência de 1h30"));
 
   const sunsetEditorial = migrationEditorial("202608030003_remada_sunset.sql");
   // Textos como estão hoje em produção (revisados pelo painel depois da migration).
@@ -322,4 +327,41 @@ test("resumo da reserva recebe a mesma revisão da página e mantém preço e du
   // Outras experiências e eventos passam intactos.
   const rota = mapBookingSession({ experience_slug: "rota-ermida-ponte-jk", experience_summary: "Com parada para banho na prainha.", duration_minutes: 90, price_cents: 7000 });
   assert.equal(rota.experienceSummary, "Com parada para banho na prainha.");
+});
+
+/** Toda menção a foto/registro fotográfico em texto que o cliente lê. */
+function photoMentions(experience: ReturnType<typeof refinePublicExperience>) {
+  const content = experience.editorial;
+  return [
+    ...pageTexts(experience),
+    ...(content.faq?.items ?? []).flatMap((item) => [item.question, item.answer]),
+    ...content.quickFacts.map((fact) => fact.value),
+    ...content.hero.details,
+  ].filter((text) => /foto/i.test(text));
+}
+
+test("fotos nunca aparecem como entrega garantida: só o texto aprovado, nos dois formatos", () => {
+  assert.equal(PHOTO_NOTE, "Durante a experiência, nossa equipe poderá realizar registros fotográficos para guardar momentos especiais da remada.");
+  for (const [slug, file] of [["remada-nascer-do-sol", "202608040001_remada_nascer_do_sol.sql"], ["remada-sunset", "202608030003_remada_sunset.sql"]] as const) {
+    const editorial = migrationEditorial(file);
+    const revised = refinePublicExperience({ ...imersaoParanoaFallback, slug, editorial });
+    assert.ok(!revised.editorial.included!.items.some((item) => /foto/i.test(item.title)), `${slug}: foto fora de "O que está incluído"`);
+    assert.deepEqual(photoMentions(revised).filter((text) => text !== PHOTO_NOTE && text !== PHOTO_QUESTION), [], slug);
+    assert.equal(revised.editorial.faq!.items.find((item) => item.question === PHOTO_QUESTION)?.answer, PHOTO_NOTE, slug);
+    assert.deepEqual(refinePublicExperience(revised), revised, `${slug}: idempotente (FAQ de fotos não duplica)`);
+  }
+  // O quadro de formatos não fala de fotos nem promete banho no formato de 1 hora.
+  assert.doesNotMatch(`${WEEKDAY_TEXT} ${WEEKEND_TEXT}`, /foto/i);
+  // A Sunset do Cápsula não promete fotos: a página fica como está.
+  const capsula = migrationEditorialFrom("202610080001_capsula_bar_launch.sql");
+  assert.doesNotMatch(JSON.stringify({ ...capsula, about: { ...capsula.about, image: null }, reservations: { ...capsula.reservations, image: null } }), /foto|garantid/i);
+});
+
+test("1h30: paradas do roteiro com banho só como possibilidade", () => {
+  const sunset = refinePublicExperience({ ...imersaoParanoaFallback, slug: "remada-sunset", editorial: migrationEditorial("202608030003_remada_sunset.sql") });
+  const nascer = refinePublicExperience({ ...imersaoParanoaFallback, slug: "remada-nascer-do-sol", editorial: migrationEditorial("202608040001_remada_nascer_do_sol.sql") });
+  for (const text of [...pageTexts(sunset), ...pageTexts(nascer)].filter((item) => /banho/i.test(item))) {
+    assert.match(text, /1h30/, text);
+    assert.doesNotMatch(text, /inclui pausas para banho|termina em uma prainha/, text);
+  }
 });

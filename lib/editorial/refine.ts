@@ -56,7 +56,7 @@ function refineExperienceCopy(experience: PublicExperience): PublicExperience {
         ...experience.editorial.about,
         paragraphs: [
           "A Remada Sunset é um convite para terminar o dia de um jeito diferente: dentro de uma canoa havaiana, sobre as águas do Lago Paranoá e diante do melhor pôr do sol de Brasília.",
-          "Em um ritmo tranquilo, o grupo aproveita o lago e contempla as últimas luzes do dia antes de retornar à base. Na experiência tradicional de 1h30, aos domingos, o roteiro inclui pausas para banho e contemplação.",
+          "Em um ritmo tranquilo, o grupo aproveita o lago e contempla as últimas luzes do dia antes de retornar à base. Na experiência tradicional de 1h30, aos domingos, há mais tempo para as paradas previstas no roteiro, com possibilidade de banho quando fizer parte do percurso.",
           "Não é necessário ter experiência. Nossa equipe acompanha toda a atividade e orienta os participantes desde os primeiros movimentos.",
         ],
       },

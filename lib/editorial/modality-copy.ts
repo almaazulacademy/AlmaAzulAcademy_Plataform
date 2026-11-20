@@ -14,10 +14,20 @@ import type { PublicExperience } from "./experience.ts";
  * "Escolha o seu formato" (`components/experience-modalities.tsx`), sem
  * duplicar a mesma informação duas vezes na página.
  *
- * Atividades: a remada de 1 hora é curta, prática e contemplativa. Banho,
- * prainha e registros fotográficos só aparecem associados à experiência
- * tradicional de 1h30, que é onde o roteiro os prevê.
+ * Atividades: a remada de 1 hora é curta, prática e contemplativa — sem
+ * promessa de banho ou prainha. A experiência tradicional de 1h30 tem as
+ * paradas previstas no roteiro, com possibilidade de banho quando fizer parte
+ * do percurso. Fotos não são entrega garantida em nenhum formato: o item
+ * "Fotos registradas pelos instrutores" sai de "O que está incluído" e a FAQ
+ * ganha o texto aprovado (`PHOTO_NOTE`).
  */
+
+/** Texto aprovado (19/11/2026): fotos possíveis nos dois formatos, nunca garantidas. */
+export const PHOTO_NOTE = "Durante a experiência, nossa equipe poderá realizar registros fotográficos para guardar momentos especiais da remada.";
+export const PHOTO_QUESTION = "Vocês fazem fotos durante a remada?";
+
+/** Itens de "O que está incluído" que deixam de aparecer (prometiam fotos). */
+const REMOVED_INCLUDED = new Set(["Fotos registradas pelos instrutores"]);
 
 type FactRule = { label: string; from: string; to: string | null };
 
@@ -44,13 +54,12 @@ const COPY: Record<string, ModalityCopy> = {
       "Uma remada nas primeiras luzes do dia, com banho no lago e os sons da natureza ao redor.":
         "Uma remada nas primeiras luzes do dia, com os sons da natureza ao redor.",
       "Durante a experiência, o grupo acompanha as primeiras luzes da manhã e faz pausas para banho no meio do lago e em uma prainha.":
-        "Durante a remada, o grupo acompanha as primeiras luzes da manhã. Na experiência tradicional de 1h30, aos sábados, o roteiro inclui pausas para banho no meio do lago e em uma prainha.",
+        "Durante a remada, o grupo acompanha as primeiras luzes da manhã. Na experiência tradicional de 1h30, aos sábados, há mais tempo para as paradas previstas no roteiro, com possibilidade de banho quando fizer parte do percurso.",
       "Banho no lago": "O amanhecer no lago",
       "Durante o percurso, fazemos pausas para banho no meio do lago e em uma prainha enquanto contemplamos as primeiras luzes do dia.":
-        "Contemplamos as primeiras luzes do dia de dentro da canoa. Na experiência de 1h30, o roteiro inclui pausas para banho no meio do lago e em uma prainha.",
-      "Paradas para banho": "Paradas para banho na experiência de 1h30",
-      "Fotos registradas pelos instrutores": "Registros fotográficos da equipe na experiência de 1h30",
-      "Roupa de banho": "Roupa de banho, para as paradas da experiência de 1h30",
+        "Contemplamos as primeiras luzes do dia de dentro da canoa. Na experiência de 1h30, há mais tempo para as paradas previstas no roteiro, com possibilidade de banho quando fizer parte do percurso.",
+      "Paradas para banho": "Paradas previstas no roteiro da experiência de 1h30",
+      "Roupa de banho": "Roupa de banho, se quiser entrar na água nas paradas da experiência de 1h30",
       "Uma experiência ao amanhecer para contemplar o despertar de Brasília, mergulhar no Lago Paranoá e começar o dia com mais energia e leveza.":
         "Uma experiência ao amanhecer para contemplar o despertar de Brasília e começar o dia com mais energia e leveza.",
     },
@@ -79,10 +88,9 @@ const COPY: Record<string, ModalityCopy> = {
         "Uma remada ao entardecer para contemplar as últimas luzes do dia no Lago Paranoá.",
       "Banho, contemplação e prainha": "O pôr do sol na água",
       "Durante o percurso, fazemos pausas prolongadas para banho e contemplação. A experiência termina em uma prainha, acompanhando as últimas luzes do pôr do sol antes do retorno à base.":
-        "Acompanhamos as últimas luzes do dia de dentro da canoa. Na experiência de 1h30, o roteiro inclui pausas para banho e contemplação e o encerramento em uma prainha, antes do retorno à base.",
-      "Paradas para banho e contemplação": "Paradas para banho e contemplação na experiência de 1h30",
-      "Fotos registradas pelos instrutores": "Registros fotográficos da equipe na experiência de 1h30",
-      "Roupa de banho": "Roupa de banho, para as paradas da experiência de 1h30",
+        "Acompanhamos as últimas luzes do dia de dentro da canoa. Na experiência de 1h30, há mais tempo para as paradas previstas no roteiro, com possibilidade de banho quando fizer parte do percurso, antes do retorno à base.",
+      "Paradas para banho e contemplação": "Paradas previstas no roteiro da experiência de 1h30",
+      "Roupa de banho": "Roupa de banho, se quiser entrar na água nas paradas da experiência de 1h30",
       "Uma experiência de 1h30 em canoa havaiana para contemplar o pôr do sol, aproveitar o Lago Paranoá e encerrar o dia em uma prainha, cercado pela natureza.":
         "Uma remada em canoa havaiana para contemplar o pôr do sol, aproveitar o Lago Paranoá e encerrar o dia cercado pela natureza.",
       "Contemple o pôr do sol de Brasília em uma canoa havaiana. Experiência de 1h30 com instrução, banho no lago, fotos e acompanhamento completo.":
@@ -125,15 +133,19 @@ export function applyModalityCopy(experience: PublicExperience): PublicExperienc
     if (!rule) return [fact];
     return rule.to === null ? [] : [{ ...fact, value: rule.to }];
   });
-  const faq = editorial.faq
-    ? {
-        ...editorial.faq,
-        items: editorial.faq.items.map((item) => {
-          const rule = copy.faq[item.question];
-          return rule && item.answer === rule[0] ? { ...item, answer: rule[1] } : item;
-        }),
-      }
-    : editorial.faq;
+  const faqItems = (editorial.faq?.items ?? []).map((item) => {
+    const rule = copy.faq[item.question];
+    return rule && item.answer === rule[0] ? { ...item, answer: rule[1] } : item;
+  });
+  if (!faqItems.some((item) => item.question === PHOTO_QUESTION)) faqItems.push({ question: PHOTO_QUESTION, answer: PHOTO_NOTE });
+  const faq = { ...editorial.faq, eyebrow: editorial.faq?.eyebrow ?? "Dúvidas frequentes", title: editorial.faq?.title ?? "Antes de entrar na água.", items: faqItems };
+  const included = editorial.included
+    ? { ...editorial.included, items: editorial.included.items.filter((item) => !REMOVED_INCLUDED.has(item.title)) }
+    : editorial.included;
 
-  return { ...experience, summary: modalitySummary(experience.slug, experience.summary), editorial: { ...editorial, quickFacts, faq } };
+  return {
+    ...experience,
+    summary: modalitySummary(experience.slug, experience.summary),
+    editorial: { ...editorial, quickFacts, faq, included },
+  };
 }

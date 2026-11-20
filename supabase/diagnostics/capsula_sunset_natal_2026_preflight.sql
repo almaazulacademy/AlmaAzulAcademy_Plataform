@@ -56,6 +56,7 @@ facts as (
        and tstzrange(s.starts_at, s.starts_at + make_interval(mins => coalesce(s.duration_minutes, 90)))
         && tstzrange(make_timestamptz(2026, 12, 25, 17, 0, 0, 'America/Sao_Paulo'), make_timestamptz(2026, 12, 25, 18, 30, 0, 'America/Sao_Paulo'))) as overlap_17_00,
     (select count(*) from target t where to_char(t.local_start, 'HH24:MI') = '17:00' and t.duration_minutes = 90 and t.price_cents = 7000) as already_holiday_format,
+    (select count(*) from target t where to_char(t.local_start, 'HH24:MI') = '17:30' and t.duration_minutes = 60 and t.price_cents = 6000) as weekday_format,
     (select md5(to_jsonb(t)::text) from target t limit 1) as session_fingerprint
 )
 select checks.check_name, checks.result, checks.status
@@ -76,11 +77,13 @@ from (
          case
            when facts.target_rows <> 1 then 'sessão de 25/12 não encontrada ou duplicada'
            when facts.already_holiday_format = 1 then 'já está em 17:00, 90 min, R$ 70: nada a fazer'
+           when facts.weekday_format <> 1 then 'formato atual diferente de 17:30, 60 min, R$ 60: o script recusa; conferir à mão'
            when facts.referencing_total > 0 or facts.reservations_total > 0 then 'há reservas ou vínculos: não trocar sem decisão caso a caso'
            when facts.overlap_17_00 > 0 then 'outra sessão da base ocupa 17:00–18:30'
            else 'sem reservas nem vínculos: a troca para 17:00, 90 min, R$ 70 pode ser feita'
          end,
          case when facts.target_rows = 1 and facts.referencing_total = 0 and facts.reservations_total = 0 and facts.overlap_17_00 = 0
+                   and (facts.weekday_format = 1 or facts.already_holiday_format = 1)
               then 'OK' else 'REVIEW_REQUIRED' end
   from facts
 ) checks
