@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { imersaoParanoaFallback } from "../lib/editorial/imersao-paranoa.ts";
 import { refinePublicExperience } from "../lib/editorial/refine.ts";
+import { applyModalityCopy } from "../lib/editorial/modality-copy.ts";
 import { validateExperienceEditorial } from "../lib/editorial/experience.ts";
 import { CONCHA_LANDING } from "../lib/bases/concha-landing.ts";
 
@@ -36,7 +37,9 @@ test("Remada antiga perde oferta de café em todas as superfícies públicas", (
   editorial.seo.description = "Veja Brasília despertar de dentro de uma canoa havaiana. Remada de 1h30 com banho no lago, café preto na canoa, fotos e acompanhamento completo.";
   const revised = refinePublicExperience({ ...imersaoParanoaFallback, slug: "remada-nascer-do-sol", summary: oldSummary, editorial });
   assert.doesNotMatch(JSON.stringify(revised), /lanche|colaborativo|café/i);
-  assert.deepEqual(revised.editorial, clean);
+  // Além do café, só a revisão dos dois formatos (1 hora / 1h30) muda o texto.
+  const expected = applyModalityCopy({ ...imersaoParanoaFallback, slug: "remada-nascer-do-sol", editorial: clean }).editorial;
+  assert.deepEqual(revised.editorial, expected);
   assert.equal(validateExperienceEditorial(revised.editorial, true).success, true);
 });
 

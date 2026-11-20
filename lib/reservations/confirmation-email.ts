@@ -28,6 +28,7 @@ import { LAGO_NORTE_SLUG } from "../bases/types.ts";
 import { checkinQrImageUrl, checkinUrl, isCheckinToken } from "../checkin/token.ts";
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE, INSTAGRAM_LINK, WHATSAPP_NUMBER } from "../contact.ts";
 import { formatSessionDate, formatSessionTime } from "../sessions/date-time.ts";
+import { formatDurationLabel } from "../sessions/modality.ts";
 import { SITE_NAME, SITE_URL } from "../site.ts";
 import { validateEventEditorial, type EventContent } from "../events/editorial.ts";
 import { isEventEmailReady } from "../events/email-readiness.ts";
@@ -67,6 +68,19 @@ export const DURATION_TITLE = "Duração";
 
 export const DURATION_NOTE =
   "A experiência dura em torno de 1h30 e conta com uma parada para banho durante a remada.";
+
+/**
+ * Frase de duração do Lago Norte para a sessão reservada.
+ *
+ * A turma tradicional (90 min) — e todo payload antigo, sem a duração — mantém
+ * `DURATION_NOTE` palavra por palavra. Uma turma com outra duração (a remada de
+ * 1 hora dos dias de semana, a partir de dezembro/2026) recebe a duração real
+ * da sessão, sem prometer a parada para banho da experiência tradicional.
+ */
+export function durationNoteFor(durationMinutes: number | null | undefined) {
+  if (typeof durationMinutes !== "number" || durationMinutes <= 0 || durationMinutes === 90) return DURATION_NOTE;
+  return `A experiência dura em torno de ${formatDurationLabel(durationMinutes)}.`;
+}
 
 /** Política de cancelamento. Texto operacional — não ampliar nem restringir. */
 export const CANCELLATION_TITLE = "Imprevistos acontecem";
@@ -294,7 +308,7 @@ function buildText(data: ReservationConfirmationData) {
     "",
     // A frase de duração do Lago Norte fala da parada para banho; nas outras
     // bases a duração da sessão já está nos dados da reserva, acima.
-    ...(origin ? [DURATION_TITLE, DURATION_NOTE, ""] : []),
+    ...(origin ? [DURATION_TITLE, durationNoteFor(data.durationMinutes), ""] : []),
     CANCELLATION_TITLE,
     CANCELLATION_NOTE,
     "",
@@ -523,7 +537,7 @@ ${locationCard(data)}
 ${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
               <div style="height:12px;line-height:12px;">&nbsp;</div>
 ${infoSection(PREPARATION_TITLE, bulletList(PREPARATION_ITEMS))}${origin ? `
-${infoSection(DURATION_TITLE, paragraph(DURATION_NOTE))}` : ""}
+${infoSection(DURATION_TITLE, paragraph(durationNoteFor(data.durationMinutes)))}` : ""}
 ${infoSection(CANCELLATION_TITLE, paragraph(CANCELLATION_NOTE))}
 ${infoSection(GROUP_TITLE, paragraph(GROUP_NOTE))}
               <div style="height:24px;line-height:24px;">&nbsp;</div>

@@ -30,7 +30,18 @@ function revise(value: unknown, removeRefreshments: boolean): unknown {
   return value;
 }
 
+const REFRESHMENT_SLUGS = ["imersao-paranoa", "remada-nascer-do-sol"];
+
 export function revisePublicCopy(experience: PublicExperience): PublicExperience {
-  const removeRefreshments = ["imersao-paranoa", "remada-nascer-do-sol"].includes(experience.slug);
+  const removeRefreshments = REFRESHMENT_SLUGS.includes(experience.slug);
   return revise(experience, removeRefreshments) as PublicExperience;
+}
+
+/**
+ * Mesma revisão para um texto solto da experiência — o resumo que o fluxo de
+ * reserva lê direto do banco (`experience_summary`), sem passar pela página.
+ * Só a troca de texto antigo: nada de normalizar nomes fora das páginas.
+ */
+export function revisePublicSummary(slug: string, summary: string) {
+  return REFRESHMENT_SLUGS.includes(slug) ? replacements.get(summary) ?? summary : summary;
 }
