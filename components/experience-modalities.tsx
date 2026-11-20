@@ -29,7 +29,7 @@ export function ExperienceModalitiesBoard({
   openFormats: ReadonlySet<string>;
 }) {
   return (
-    <section aria-label="Formatos da experiência" className="rounded-4xl border border-lake/20 bg-white p-6 shadow-soft sm:p-8">
+    <section aria-label="Formatos da experiência" className="rounded-4xl border border-lake/20 bg-white p-4 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <p className="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.18em] text-lake">
           <Clock3 aria-hidden="true" className="size-4" />
@@ -40,11 +40,11 @@ export function ExperienceModalitiesBoard({
         </Link>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <div className="mt-5 grid gap-3 sm:mt-6 sm:gap-4 md:grid-cols-2">
         {modalities.items.map((item) => {
           const open = openFormats.has(`${item.durationMinutes}|${item.priceCents}`);
           return (
-            <article key={item.eyebrow} className="flex flex-col rounded-3xl border border-ink/10 bg-paper p-6 sm:p-7">
+            <article key={item.eyebrow} className="flex flex-col rounded-3xl border border-ink/10 bg-paper p-5 sm:p-7">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-lake">{item.eyebrow}</p>
               <h3 className="mt-3 text-2xl font-medium tracking-[-0.035em] sm:text-3xl">{item.title}</h3>
               <p className="mt-3 leading-7 text-ink/65">{item.text}</p>

@@ -159,7 +159,7 @@ export function SessionsGrid({ sessions, date = null, waitlistSignup = false }: 
             <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-white/15 pb-4">
               <h3 className="text-2xl font-medium tracking-[-0.035em] first-letter:uppercase sm:text-3xl">
                 {day.weekday}, {day.dayMonth}
-                {holiday ? <span className="ml-3 inline-block align-middle rounded-full border border-sand/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-sand">Feriado · {holiday}</span> : null}
+                {holiday ? <span className="mt-2 block w-fit rounded-full border border-sand/40 px-3 py-1 align-middle text-xs font-semibold uppercase tracking-[0.14em] text-sand sm:ml-3 sm:mt-0 sm:inline-block">Feriado · {holiday}</span> : null}
               </h3>
               <p className="text-sm text-white/55">
                 {day.turmas.length === 1 ? "1 turma neste dia" : `${day.turmas.length} turmas neste dia`}
