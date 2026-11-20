@@ -16,9 +16,12 @@
 --     (17:30, 60 min, R$ 60) — neste caso nada é feito;
 --   * nenhuma linha em tabela alguma aponta para a sessão (reservas de qualquer
 --     status, lista de espera, Stand-by, trocas de turma…);
---   * nenhuma outra sessão ativa da base se sobrepõe ao horário de destino.
+--   * nenhuma outra sessão ativa da base se sobrepõe ao horário de destino;
+--   * capacidade 12 e status OPEN;
+--   * na mesma fotografia REPEATABLE READ, todas as outras sessões, todas as
+--     reservas e todos os eventos de pagamento ficam idênticos (md5).
 
-begin;
+begin isolation level repeatable read;
 set local lock_timeout = '5s';
 
 do $capsula_natal_rollback$
@@ -28,6 +31,12 @@ declare
   ref record;
   partial integer;
   overlap integer;
+  others_before text;
+  others_after text;
+  reservations_before text;
+  reservations_after text;
+  payments_before text;
+  payments_after text;
   new_start constant timestamptz := make_timestamptz(2026, 12, 25, 17, 30, 0, 'America/Sao_Paulo');
 begin
   select s.*, e.base_id into target
@@ -74,10 +83,30 @@ begin
     and tstzrange(s.starts_at, s.starts_at + make_interval(mins => coalesce(s.duration_minutes, 90)))
      && tstzrange(new_start, new_start + make_interval(mins => 60));
   if overlap > 0 then raise exception 'NATAL_SESSION_OVERLAP'; end if;
+  if target.capacity <> 12 or target.status::text <> 'OPEN' then
+    raise exception using message = 'NATAL_SESSION_UNEXPECTED_STATE',
+      detail = format('capacidade %s, status %s.', target.capacity, target.status);
+  end if;
+
+  select md5(coalesce(string_agg(to_jsonb(s)::text, '|' order by s.id), '')) into others_before from public.sessions s where s.id <> target.id;
+  select md5(coalesce(string_agg(to_jsonb(r)::text, '|' order by r.id), '')) into reservations_before from public.reservations r;
+  if to_regclass('public.payment_events') is not null then
+    execute $q$select md5(coalesce(string_agg(to_jsonb(p)::text, '|' order by p.id), '')) from public.payment_events p$q$ into payments_before;
+  end if;
 
   update public.sessions
   set starts_at = new_start, duration_minutes = 60, price_cents = 6000
   where id = target.id;
+
+  select md5(coalesce(string_agg(to_jsonb(s)::text, '|' order by s.id), '')) into others_after from public.sessions s where s.id <> target.id;
+  select md5(coalesce(string_agg(to_jsonb(r)::text, '|' order by r.id), '')) into reservations_after from public.reservations r;
+  if to_regclass('public.payment_events') is not null then
+    execute $q$select md5(coalesce(string_agg(to_jsonb(p)::text, '|' order by p.id), '')) from public.payment_events p$q$ into payments_after;
+  end if;
+  if others_after is distinct from others_before then raise exception 'NATAL_OTHER_SESSIONS_CHANGED'; end if;
+  if reservations_after is distinct from reservations_before or payments_after is distinct from payments_before then
+    raise exception 'NATAL_RESERVATIONS_OR_PAYMENTS_CHANGED';
+  end if;
 
   insert into public.admin_audit_log (actor_user_id, action, entity_type, entity_id, metadata)
   values (null, 'SESSION_UPDATED', 'SESSION', target.id, jsonb_build_object(

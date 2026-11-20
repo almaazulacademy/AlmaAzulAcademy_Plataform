@@ -57,7 +57,12 @@ facts as (
         && tstzrange(make_timestamptz(2026, 12, 25, 17, 0, 0, 'America/Sao_Paulo'), make_timestamptz(2026, 12, 25, 18, 30, 0, 'America/Sao_Paulo'))) as overlap_17_00,
     (select count(*) from target t where to_char(t.local_start, 'HH24:MI') = '17:00' and t.duration_minutes = 90 and t.price_cents = 7000) as already_holiday_format,
     (select count(*) from target t where to_char(t.local_start, 'HH24:MI') = '17:30' and t.duration_minutes = 60 and t.price_cents = 6000) as weekday_format,
-    (select md5(to_jsonb(t)::text) from target t limit 1) as session_fingerprint
+    (select md5(to_jsonb(t)::text) from target t limit 1) as session_fingerprint,
+    (select count(*) from target t where t.capacity = 12 and t.status::text = 'OPEN') as capacity_status_ok,
+    (select md5(coalesce(string_agg(to_jsonb(s)::text, '|' order by s.id), '')) from public.sessions s
+     where not exists (select 1 from target t where t.id = s.id)) as other_sessions_fingerprint,
+    (select count(*) from public.sessions) as sessions_total,
+    (select count(*) from public.reservations) as reservations_total_all
 )
 select checks.check_name, checks.result, checks.status
 from (
@@ -73,17 +78,23 @@ from (
   union all select 7, 'other_base_sessions_same_day', coalesce(facts.other_base_sessions_same_day, 'nenhuma'), 'INFO' from facts
   union all select 8, 'overlap_17_00_18_30', facts.overlap_17_00::text, case when facts.overlap_17_00 = 0 then 'OK' else 'REVIEW_REQUIRED' end from facts
   union all select 9, 'session_fingerprint', coalesce(facts.session_fingerprint, '-'), 'INFO: comparar antes da troca' from facts
-  union all select 10, 'READY_FOR_HOLIDAY_FORMAT',
+  union all select 10, 'capacity_and_status', case when facts.capacity_status_ok = 1 then '12 vagas, OPEN' else 'diferente de 12 vagas / OPEN' end,
+         case when facts.capacity_status_ok = 1 then 'OK' else 'REVIEW_REQUIRED' end from facts
+  union all select 11, 'other_sessions_fingerprint', facts.other_sessions_fingerprint, 'INFO: comparar no postcheck' from facts
+  union all select 12, 'sessions_total', facts.sessions_total::text, 'INFO' from facts
+  union all select 13, 'reservations_total', facts.reservations_total_all::text, 'INFO' from facts
+  union all select 14, 'READY_FOR_HOLIDAY_FORMAT',
          case
            when facts.target_rows <> 1 then 'sessão de 25/12 não encontrada ou duplicada'
            when facts.already_holiday_format = 1 then 'já está em 17:00, 90 min, R$ 70: nada a fazer'
            when facts.weekday_format <> 1 then 'formato atual diferente de 17:30, 60 min, R$ 60: o script recusa; conferir à mão'
            when facts.referencing_total > 0 or facts.reservations_total > 0 then 'há reservas ou vínculos: não trocar sem decisão caso a caso'
            when facts.overlap_17_00 > 0 then 'outra sessão da base ocupa 17:00–18:30'
+           when facts.capacity_status_ok <> 1 then 'capacidade ou status diferente de 12 vagas / OPEN'
            else 'sem reservas nem vínculos: a troca para 17:00, 90 min, R$ 70 pode ser feita'
          end,
          case when facts.target_rows = 1 and facts.referencing_total = 0 and facts.reservations_total = 0 and facts.overlap_17_00 = 0
-                   and (facts.weekday_format = 1 or facts.already_holiday_format = 1)
+                   and (facts.weekday_format = 1 or facts.already_holiday_format = 1) and facts.capacity_status_ok = 1
               then 'OK' else 'REVIEW_REQUIRED' end
   from facts
 ) checks
