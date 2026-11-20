@@ -16,8 +16,9 @@ function formatPrice(cents: number) {
  * Fica no lugar do quadro de turmas, logo depois do Hero. O texto e a
  * programação aprovada vêm de `lib/editorial/modalities.ts`; `openFormats`
  * diz quais formatos têm turma aberta de verdade (mesma duração e preço da
- * sessão). Um formato sem turma aberta continua explicado, com o aviso de que
- * as datas abrem em breve — nunca com um link que leve a uma data inexistente.
+ * sessão). Um formato sem turma aberta continua explicado e convida a
+ * acompanhar a agenda — sem prometer data de abertura nem levar a uma turma
+ * inexistente.
  */
 export function ExperienceModalitiesBoard({
   modalities,
@@ -77,7 +78,11 @@ export function ExperienceModalitiesBoard({
 
               {open ? null : (
                 <p className="mt-5 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-ink/60">
-                  Novas datas deste formato serão abertas em breve.
+                  Confira a{" "}
+                  <Link href="/agenda" className="font-semibold text-forest underline underline-offset-4 hover:text-lake">
+                    agenda
+                  </Link>{" "}
+                  para acompanhar a abertura de novas turmas.
                 </p>
               )}
             </article>

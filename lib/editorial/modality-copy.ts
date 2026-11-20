@@ -13,6 +13,10 @@ import type { PublicExperience } from "./experience.ts";
  * das informações rápidas e passam a ser mostrados lado a lado no quadro
  * "Escolha o seu formato" (`components/experience-modalities.tsx`), sem
  * duplicar a mesma informação duas vezes na página.
+ *
+ * Atividades: a remada de 1 hora é curta, prática e contemplativa. Banho,
+ * prainha e registros fotográficos só aparecem associados à experiência
+ * tradicional de 1h30, que é onde o roteiro os prevê.
  */
 
 type FactRule = { label: string; from: string; to: string | null };
@@ -36,6 +40,19 @@ const COPY: Record<string, ModalityCopy> = {
       "Horário: 6h": "Horário: 5h30 ou 5h",
       "Veja Brasília despertar de dentro de uma canoa havaiana. Remada de 1h30 com banho no lago, fotos e acompanhamento completo.":
         "Veja Brasília despertar de dentro de uma canoa havaiana: remadas de 1 hora durante a semana e a tradicional de 1h30 aos sábados, com instrução e acompanhamento completo.",
+      // Resumo (cards e reserva) e galeria.
+      "Uma remada nas primeiras luzes do dia, com banho no lago e os sons da natureza ao redor.":
+        "Uma remada nas primeiras luzes do dia, com os sons da natureza ao redor.",
+      "Durante a experiência, o grupo acompanha as primeiras luzes da manhã e faz pausas para banho no meio do lago e em uma prainha.":
+        "Durante a remada, o grupo acompanha as primeiras luzes da manhã. Na experiência tradicional de 1h30, aos sábados, o roteiro inclui pausas para banho no meio do lago e em uma prainha.",
+      "Banho no lago": "O amanhecer no lago",
+      "Durante o percurso, fazemos pausas para banho no meio do lago e em uma prainha enquanto contemplamos as primeiras luzes do dia.":
+        "Contemplamos as primeiras luzes do dia de dentro da canoa. Na experiência de 1h30, o roteiro inclui pausas para banho no meio do lago e em uma prainha.",
+      "Paradas para banho": "Paradas para banho na experiência de 1h30",
+      "Fotos registradas pelos instrutores": "Registros fotográficos da equipe na experiência de 1h30",
+      "Roupa de banho": "Roupa de banho, para as paradas da experiência de 1h30",
+      "Uma experiência ao amanhecer para contemplar o despertar de Brasília, mergulhar no Lago Paranoá e começar o dia com mais energia e leveza.":
+        "Uma experiência ao amanhecer para contemplar o despertar de Brasília e começar o dia com mais energia e leveza.",
     },
     facts: [
       { label: "Duração", from: "1h30", to: "1h ou 1h30, conforme o dia" },
@@ -56,7 +73,16 @@ const COPY: Record<string, ModalityCopy> = {
     texts: {
       "Duração: 1h30": "Duração: 1h ou 1h30",
       "Uma experiência de 1h30 em ritmo tranquilo, com paradas prolongadas para banho, contemplação e registros fotográficos feitos pelos instrutores.":
-        "Uma experiência em ritmo tranquilo, com pausas para banho, contemplação e registros fotográficos feitos pelos instrutores.",
+        "Uma remada guiada em ritmo tranquilo, com instrutores em cada canoa do início ao fim.",
+      // Resumo (cards e reserva) e galeria.
+      "Uma remada ao entardecer com pausas para banho, contemplação e as últimas luzes do dia no Lago Paranoá.":
+        "Uma remada ao entardecer para contemplar as últimas luzes do dia no Lago Paranoá.",
+      "Banho, contemplação e prainha": "O pôr do sol na água",
+      "Durante o percurso, fazemos pausas prolongadas para banho e contemplação. A experiência termina em uma prainha, acompanhando as últimas luzes do pôr do sol antes do retorno à base.":
+        "Acompanhamos as últimas luzes do dia de dentro da canoa. Na experiência de 1h30, o roteiro inclui pausas para banho e contemplação e o encerramento em uma prainha, antes do retorno à base.",
+      "Paradas para banho e contemplação": "Paradas para banho e contemplação na experiência de 1h30",
+      "Fotos registradas pelos instrutores": "Registros fotográficos da equipe na experiência de 1h30",
+      "Roupa de banho": "Roupa de banho, para as paradas da experiência de 1h30",
       "Uma experiência de 1h30 em canoa havaiana para contemplar o pôr do sol, aproveitar o Lago Paranoá e encerrar o dia em uma prainha, cercado pela natureza.":
         "Uma remada em canoa havaiana para contemplar o pôr do sol, aproveitar o Lago Paranoá e encerrar o dia cercado pela natureza.",
       "Contemple o pôr do sol de Brasília em uma canoa havaiana. Experiência de 1h30 com instrução, banho no lago, fotos e acompanhamento completo.":
@@ -83,6 +109,12 @@ function replaceTexts(value: unknown, texts: Record<string, string>): unknown {
   return value;
 }
 
+/** Resumo da experiência lido fora da página (cards do catálogo, reserva). */
+export function modalitySummary(slug: string, summary: string) {
+  const copy = COPY[slug];
+  return copy && Object.hasOwn(copy.texts, summary) ? copy.texts[summary] : summary;
+}
+
 export function applyModalityCopy(experience: PublicExperience): PublicExperience {
   const copy = COPY[experience.slug];
   if (!copy) return experience;
@@ -103,5 +135,5 @@ export function applyModalityCopy(experience: PublicExperience): PublicExperienc
       }
     : editorial.faq;
 
-  return { ...experience, editorial: { ...editorial, quickFacts, faq } };
+  return { ...experience, summary: modalitySummary(experience.slug, experience.summary), editorial: { ...editorial, quickFacts, faq } };
 }

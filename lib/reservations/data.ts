@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { parseBaseLocation, type BaseLocation } from "@/lib/bases/location";
+import { refineBookingSummary } from "@/lib/editorial/refine";
 import type { BookingSession, ReservationDetails, ReservationStatus } from "@/lib/reservations/types";
 import type { PublicSession } from "@/lib/waitlist/public";
 
@@ -21,12 +22,14 @@ function firstRow(value: unknown): Row | null {
 }
 
 export function mapBookingSession(row: Row): BookingSession {
+  const experienceSlug = asString(row.experience_slug);
   return {
     id: asString(row.id ?? row.session_id),
     experienceId: asString(row.experience_id),
-    experienceSlug: asString(row.experience_slug),
+    experienceSlug,
     experienceTitle: asString(row.experience_title),
-    experienceSummary: asString(row.experience_summary),
+    // O resumo vem direto do banco: recebe a mesma revisão de texto da página.
+    experienceSummary: refineBookingSummary(experienceSlug, asString(row.experience_summary)),
     startsAt: asString(row.starts_at),
     durationMinutes: asNumber(row.duration_minutes),
     priceCents: asNumber(row.price_cents),

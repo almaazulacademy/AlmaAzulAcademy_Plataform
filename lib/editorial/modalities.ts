@@ -33,6 +33,14 @@ export type ExperienceModalities = {
 export const LAGO_NORTE_CAPACITY = 24;
 export const CAPSULA_BAR_CAPACITY = 12;
 
+/** Remada de 1 hora: curta, prática e contemplativa — sem prometer banho ou prainha. */
+export const WEEKDAY_TITLE = "Uma pausa na rotina";
+export const WEEKDAY_TEXT = "Para contemplar a natureza, movimentar o corpo e renovar as energias: uma experiência guiada de canoa havaiana, perfeita para aproveitar o Lago Paranoá mesmo nos dias mais corridos.";
+
+/** Experiência tradicional de 1h30: as paradas do roteiro continuam valendo. */
+export const WEEKEND_TITLE = "Mais tempo para viver o lago";
+export const WEEKEND_TEXT = "Para aproveitar o lago, contemplar a paisagem e viver a experiência com tranquilidade, incluindo as paradas previstas no roteiro.";
+
 export const HOLIDAY_NOTE = "Em feriados, vale a configuração de cada turma, informada na agenda e no resumo da reserva.";
 
 const MODALITIES: Record<string, ExperienceModalities> = {
@@ -41,16 +49,16 @@ const MODALITIES: Record<string, ExperienceModalities> = {
     items: [
       {
         eyebrow: "Durante a semana",
-        title: "Uma pausa na rotina",
-        text: "Uma hora para deixar as preocupações em terra firme, respirar novos ares e contemplar o pôr do sol no Lago Paranoá.",
+        title: WEEKDAY_TITLE,
+        text: WEEKDAY_TEXT,
         schedule: "Segundas, quartas e sextas, às 17h30",
         durationMinutes: 60,
         priceCents: 6000,
       },
       {
         eyebrow: "Domingos",
-        title: "Mais tempo para aproveitar",
-        text: "Nossa experiência tradicional de 1h30, para remar com tranquilidade e aproveitar o entardecer em meio à natureza.",
+        title: WEEKEND_TITLE,
+        text: WEEKEND_TEXT,
         schedule: "Domingos, às 17h",
         durationMinutes: 90,
         priceCents: 7000,
@@ -62,16 +70,16 @@ const MODALITIES: Record<string, ExperienceModalities> = {
     items: [
       {
         eyebrow: "Durante a semana",
-        title: "Seu dia começa diferente",
-        text: "Uma hora de conexão com a natureza antes da rotina começar: contemplar o nascer do sol, movimentar o corpo e começar a manhã com uma nova energia.",
+        title: WEEKDAY_TITLE,
+        text: WEEKDAY_TEXT,
         schedule: "Segundas, quartas e sextas, às 5h30",
         durationMinutes: 60,
         priceCents: 6000,
       },
       {
         eyebrow: "Sábados",
-        title: "Um amanhecer sem pressa",
-        text: "Nossa experiência tradicional de 1h30, com mais tempo para contemplar a paisagem e aproveitar a tranquilidade das primeiras horas do dia.",
+        title: WEEKEND_TITLE,
+        text: WEEKEND_TEXT,
         schedule: "Sábados, às 5h",
         durationMinutes: 90,
         priceCents: 7000,
@@ -83,16 +91,16 @@ const MODALITIES: Record<string, ExperienceModalities> = {
     items: [
       {
         eyebrow: "Durante a semana",
-        title: "Uma pausa no fim do dia",
-        text: "Uma hora de remada para respirar novos ares, contemplar a paisagem e renovar as energias.",
+        title: WEEKDAY_TITLE,
+        text: WEEKDAY_TEXT,
         schedule: "Segunda a sexta, às 17h30",
         durationMinutes: 60,
         priceCents: 6000,
       },
       {
         eyebrow: "Fins de semana",
-        title: "Mais tempo no lago",
-        text: "Mais momentos para aproveitar: uma experiência de 1h30 para viver o entardecer sem pressa.",
+        title: WEEKEND_TITLE,
+        text: WEEKEND_TEXT,
         schedule: "Sábados e domingos, às 17h",
         durationMinutes: 90,
         priceCents: 7000,

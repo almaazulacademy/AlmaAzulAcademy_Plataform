@@ -15,7 +15,16 @@ import test from "node:test";
 import { validateExperienceEditorial } from "../lib/editorial/experience.ts";
 import { imersaoParanoaFallback } from "../lib/editorial/imersao-paranoa.ts";
 import { applyModalityCopy } from "../lib/editorial/modality-copy.ts";
-import { CAPSULA_BAR_CAPACITY, experienceModalities, LAGO_NORTE_CAPACITY } from "../lib/editorial/modalities.ts";
+import {
+  CAPSULA_BAR_CAPACITY,
+  experienceModalities,
+  LAGO_NORTE_CAPACITY,
+  WEEKDAY_TEXT,
+  WEEKDAY_TITLE,
+  WEEKEND_TEXT,
+  WEEKEND_TITLE,
+} from "../lib/editorial/modalities.ts";
+import { mapBookingSession } from "../lib/reservations/data.ts";
 import { refinePublicExperience } from "../lib/editorial/refine.ts";
 import { DURATION_NOTE, durationNoteFor } from "../lib/reservations/confirmation-email.ts";
 import { brasiliaHolidayName, easterSunday } from "../lib/sessions/holidays.ts";
@@ -222,10 +231,95 @@ test("telas: cartão da turma mostra a duração; quadro de turmas só fala em '
   const landing = source("components/experience-landing.tsx");
   assert.match(landing, /experienceModalities\(experience\.slug\)/);
   const modalities = source("components/experience-modalities.tsx");
-  assert.match(modalities, /Novas datas deste formato serão abertas em breve/);
+  assert.match(modalities, /para acompanhar a abertura de novas turmas\./);
+  assert.match(modalities, /href="\/agenda"/);
+  assert.doesNotMatch(modalities, /em breve/);
   assert.match(modalities, /Até \{modalities\.capacity\} participantes por turma/);
   // Agenda e resumo da reserva continuam lendo duração e preço da sessão.
   assert.match(source("components/agenda-sessions.tsx"), /formatExperienceDuration\(session\.durationMinutes\)/);
   assert.match(source("components/reservation/reservation-summary.tsx"), /formatExperienceDuration\(session\.durationMinutes\)/);
   assert.match(source("components/reservation/reservation-summary.tsx"), /formatPrice\(session\.priceCents \* quantity\)/);
+});
+
+test("formato de 1 hora não promete banho, prainha nem fotos; o de 1h30 mantém as paradas do roteiro", () => {
+  assert.equal(WEEKDAY_TITLE, "Uma pausa na rotina");
+  assert.equal(WEEKEND_TITLE, "Mais tempo para viver o lago");
+  assert.doesNotMatch(WEEKDAY_TEXT, /banho|prainha|foto/i);
+  assert.match(WEEKEND_TEXT, /paradas previstas no roteiro/);
+  for (const slug of ["remada-sunset", "remada-nascer-do-sol", "remada-sunset-concha-acustica"]) {
+    const [weekday, weekend] = experienceModalities(slug)!.items;
+    assert.deepEqual([weekday.title, weekday.text, weekend.title, weekend.text], [WEEKDAY_TITLE, WEEKDAY_TEXT, WEEKEND_TITLE, WEEKEND_TEXT], slug);
+  }
+});
+
+/** Frases que prometem banho, prainha ou fotos sem dizer que são da experiência de 1h30. */
+function unscopedActivityPromises(texts: string[]) {
+  return texts.filter((text) => /banho|prainha|foto/i.test(text) && !/1h30/.test(text));
+}
+
+function pageTexts(editorial: ReturnType<typeof refinePublicExperience>) {
+  const content = editorial.editorial;
+  return [
+    editorial.summary,
+    content.hero.subtitle,
+    ...content.about.paragraphs,
+    content.gallery?.description ?? "",
+    content.steps?.description ?? "",
+    ...(content.steps?.items ?? []).flatMap((item) => [item.title, item.description]),
+    ...(content.included?.items ?? []).map((item) => item.title),
+    ...(content.whatToBring?.items ?? []),
+    content.reservations.description,
+    content.seo.description,
+  ];
+}
+
+test("Lago Norte: banho, prainha e fotos só aparecem associados à experiência de 1h30", () => {
+  const nascer = refinePublicExperience({
+    ...imersaoParanoaFallback,
+    slug: "remada-nascer-do-sol",
+    summary: "Uma remada nas primeiras luzes do dia, com banho no lago, café preto dentro da canoa e os sons da natureza ao redor.",
+    editorial: migrationEditorial("202608040001_remada_nascer_do_sol.sql"),
+  });
+  assert.deepEqual(unscopedActivityPromises(pageTexts(nascer)), []);
+  assert.equal(nascer.summary, "Uma remada nas primeiras luzes do dia, com os sons da natureza ao redor.");
+  assert.ok(nascer.editorial.included!.items.some((item) => item.title === "Paradas para banho na experiência de 1h30"));
+
+  const sunsetEditorial = migrationEditorial("202608030003_remada_sunset.sql");
+  // Textos como estão hoje em produção (revisados pelo painel depois da migration).
+  sunsetEditorial.gallery.description = "Uma remada ao entardecer com pausas para banho, contemplação e as últimas luzes do dia no Lago Paranoá.";
+  sunsetEditorial.steps.items[2] = {
+    title: "Banho, contemplação e prainha",
+    description: "Durante o percurso, fazemos pausas prolongadas para banho e contemplação. A experiência termina em uma prainha, acompanhando as últimas luzes do pôr do sol antes do retorno à base.",
+  };
+  sunsetEditorial.included.items = sunsetEditorial.included.items.map((item: { title: string }) => item.title.startsWith("Paradas") ? { ...item, title: "Paradas para banho e contemplação" } : item);
+  const sunset = refinePublicExperience({
+    ...imersaoParanoaFallback,
+    slug: "remada-sunset",
+    summary: "Uma remada ao entardecer com pausas para banho, contemplação e as últimas luzes do dia no Lago Paranoá.",
+    editorial: sunsetEditorial,
+  });
+  assert.deepEqual(unscopedActivityPromises(pageTexts(sunset)), []);
+  assert.equal(sunset.editorial.steps!.items[2].title, "O pôr do sol na água");
+  assert.equal(validateExperienceEditorial(sunset.editorial, true).success, true);
+});
+
+test("resumo da reserva recebe a mesma revisão da página e mantém preço e duração da sessão", () => {
+  const nascer = mapBookingSession({
+    id: "s1",
+    experience_slug: "remada-nascer-do-sol",
+    experience_title: "Remada do Nascer do Sol",
+    experience_summary: "Uma remada nas primeiras luzes do dia, com banho no lago, café preto dentro da canoa e os sons da natureza ao redor.",
+    starts_at: at("2026-12-07T05:30"),
+    duration_minutes: 60,
+    price_cents: 6000,
+    remaining_spots: 24,
+  });
+  assert.equal(nascer.experienceSummary, "Uma remada nas primeiras luzes do dia, com os sons da natureza ao redor.");
+  assert.deepEqual([nascer.durationMinutes, nascer.priceCents], [60, 6000]);
+  const sunset = mapBookingSession({ experience_slug: "remada-sunset", experience_summary: "Uma remada ao entardecer com pausas para banho, contemplação e as últimas luzes do dia no Lago Paranoá.", duration_minutes: 90, price_cents: 7000 });
+  assert.equal(sunset.experienceSummary, "Uma remada ao entardecer para contemplar as últimas luzes do dia no Lago Paranoá.");
+  assert.deepEqual([sunset.durationMinutes, sunset.priceCents], [90, 7000]);
+  // Outras experiências e eventos passam intactos.
+  const rota = mapBookingSession({ experience_slug: "rota-ermida-ponte-jk", experience_summary: "Com parada para banho na prainha.", duration_minutes: 90, price_cents: 7000 });
+  assert.equal(rota.experienceSummary, "Com parada para banho na prainha.");
 });

@@ -1,9 +1,18 @@
 import type { PublicExperience } from "./experience.ts";
-import { applyModalityCopy } from "./modality-copy.ts";
-import { revisePublicCopy } from "./public-copy.ts";
+import { applyModalityCopy, modalitySummary } from "./modality-copy.ts";
+import { revisePublicCopy, revisePublicSummary } from "./public-copy.ts";
 
 export function refinePublicExperience(experience: PublicExperience): PublicExperience {
   return applyModalityCopy(refineExperienceCopy(revisePublicCopy(experience)));
+}
+
+/**
+ * O resumo da experiência lido fora da página (resumo da reserva): recebe a
+ * mesma revisão de texto da página — sem o café antigo e sem prometer banho na
+ * remada de 1 hora.
+ */
+export function refineBookingSummary(slug: string, summary: string) {
+  return modalitySummary(slug, revisePublicSummary(slug, summary));
 }
 
 function refineExperienceCopy(experience: PublicExperience): PublicExperience {
@@ -47,7 +56,7 @@ function refineExperienceCopy(experience: PublicExperience): PublicExperience {
         ...experience.editorial.about,
         paragraphs: [
           "A Remada Sunset é um convite para terminar o dia de um jeito diferente: dentro de uma canoa havaiana, sobre as águas do Lago Paranoá e diante do melhor pôr do sol de Brasília.",
-          "Em um ritmo tranquilo, o grupo aproveita o lago, faz pausas para banho e contempla as últimas luzes do dia antes de retornar à base.",
+          "Em um ritmo tranquilo, o grupo aproveita o lago e contempla as últimas luzes do dia antes de retornar à base. Na experiência tradicional de 1h30, aos domingos, o roteiro inclui pausas para banho e contemplação.",
           "Não é necessário ter experiência. Nossa equipe acompanha toda a atividade e orienta os participantes desde os primeiros movimentos.",
         ],
       },
