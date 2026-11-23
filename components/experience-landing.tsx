@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { BaseBadge, ExclusiveBadge } from "@/components/bases/badges";
 import { BaseMapLink } from "@/components/bases/base-location";
 import { EditorialImage } from "@/components/editorial-image";
+import { ExperienceModalitiesSection } from "@/components/experience-modalities";
 import { FAQ } from "@/components/faq";
 import { FeatureCard } from "@/components/feature-card";
 import { Gallery } from "@/components/gallery";
@@ -19,6 +20,7 @@ import { baseLocation } from "@/lib/bases/location";
 import type { PublicBase } from "@/lib/bases/types";
 import type { PublicExperience } from "@/lib/editorial/experience";
 import { resolveExperienceFaq } from "@/lib/editorial/faq";
+import { experienceModalities } from "@/lib/editorial/modalities";
 
 const icons: Record<string, LucideIcon> = { Compass, Droplets, LifeBuoy, ShieldCheck, Sparkles };
 
@@ -35,6 +37,7 @@ export function ExperienceLanding({
 }) {
   const content = experience.editorial;
   const faq = resolveExperienceFaq(content.faq);
+  const modalities = experienceModalities(experience.slug);
   return (
     <main>
       <Navbar overlay />
@@ -70,8 +73,12 @@ export function ExperienceLanding({
           {/* As turmas vêm antes dos quick facts de propósito: é a primeira coisa
               depois do Hero, no lugar onde antes nada dizia que a experiência
               tem mais de um horário por dia. */}
+          {/* Com formato de semana e de fim de semana, os dois formatos tomam o
+              lugar do quadro de turmas: duração, valor e dias de cada um. */}
           <Suspense fallback={<SessionTimesLoading />}>
-            <SessionTimes experienceSlug={experience.slug} />
+            {modalities
+              ? <ExperienceModalitiesSection experienceSlug={experience.slug} modalities={modalities} />
+              : <SessionTimes experienceSlug={experience.slug} />}
           </Suspense>
 
           <div className="grid grid-cols-2 gap-4 sm:[grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">

@@ -3,6 +3,7 @@ import { Clock3 } from "lucide-react";
 
 import { readPublicSessions } from "@/lib/reservations/session-catalog";
 import { listSessionStartTimes } from "@/lib/sessions/choice";
+import { hasSeveralTimesOnSameDay } from "@/lib/sessions/modality";
 
 const COUNT_WORD = ["", "uma", "duas", "três", "quatro", "cinco", "seis"] as const;
 
@@ -24,9 +25,11 @@ export function SessionTimesLoading() {
  * experiência.
  *
  * Recebe os horários prontos: nenhum horário fixo mora neste componente e
- * nenhuma consulta acontece aqui.
+ * nenhuma consulta acontece aqui. `sameDay` diz se algum dia tem mesmo mais de
+ * um horário: 05:00 num sábado e 05:30 em outro não são "duas turmas no mesmo
+ * dia", são horários que mudam conforme a data.
  */
-export function SessionTimesBoard({ times }: { times: string[] }) {
+export function SessionTimesBoard({ times, sameDay = true }: { times: string[]; sameDay?: boolean }) {
   const multiple = times.length > 1;
 
   return (
@@ -59,9 +62,11 @@ export function SessionTimesBoard({ times }: { times: string[] }) {
       </ul>
 
       <p className="mt-6 leading-7 text-ink/65">
-        {multiple
-          ? `A experiência acontece em ${countWord(times.length)} turmas no mesmo dia. Escolha o horário na hora de reservar — cada turma tem vagas próprias.`
-          : "Todas as datas abertas começam neste horário."}
+        {!multiple
+          ? "Todas as datas abertas começam neste horário."
+          : sameDay
+            ? `A experiência acontece em ${countWord(times.length)} turmas no mesmo dia. Escolha o horário na hora de reservar — cada turma tem vagas próprias.`
+            : "O horário de início muda conforme a data. Confira o horário de cada turma na hora de reservar."}
       </p>
     </section>
   );
@@ -84,5 +89,5 @@ export async function SessionTimes({ experienceSlug }: { experienceSlug: string 
   const times = listSessionStartTimes(result.sessions);
   if (!times.length) return null;
 
-  return <SessionTimesBoard times={times} />;
+  return <SessionTimesBoard times={times} sameDay={hasSeveralTimesOnSameDay(result.sessions)} />;
 }

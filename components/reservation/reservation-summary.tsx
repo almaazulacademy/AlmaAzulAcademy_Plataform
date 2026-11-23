@@ -3,6 +3,7 @@ import { CalendarDays, Clock3, Ticket, Users } from "lucide-react";
 import type { EventBookingContext } from "@/lib/events/booking";
 import type { BookingSession } from "@/lib/reservations/types";
 import { buildSessionChoice } from "@/lib/sessions/choice";
+import { formatExperienceDuration } from "@/lib/sessions/modality";
 
 function formatPrice(cents: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
@@ -41,7 +42,7 @@ export function ReservationSummary({ session, quantity = 1, event }: { session: 
       <div className="mt-7 space-y-4 border-t border-white/15 pt-7 text-sm text-white/75">
         <p className="flex items-center gap-3">
           <Clock3 aria-hidden="true" className="size-4 shrink-0 text-sand" />
-          {session.durationMinutes} minutos de experiência
+          {formatExperienceDuration(session.durationMinutes)}
         </p>
         <p className="flex items-center gap-3">
           <Ticket aria-hidden="true" className="size-4 shrink-0 text-sand" />

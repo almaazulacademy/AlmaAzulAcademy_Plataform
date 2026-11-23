@@ -1,8 +1,21 @@
 import type { PublicExperience } from "./experience.ts";
-import { revisePublicCopy } from "./public-copy.ts";
+import { applyModalityCopy, modalitySummary } from "./modality-copy.ts";
+import { revisePublicCopy, revisePublicSummary } from "./public-copy.ts";
 
 export function refinePublicExperience(experience: PublicExperience): PublicExperience {
-  experience = revisePublicCopy(experience);
+  return applyModalityCopy(refineExperienceCopy(revisePublicCopy(experience)));
+}
+
+/**
+ * O resumo da experiência lido fora da página (resumo da reserva): recebe a
+ * mesma revisão de texto da página — sem o café antigo e sem prometer banho na
+ * remada de 1 hora.
+ */
+export function refineBookingSummary(slug: string, summary: string) {
+  return modalitySummary(slug, revisePublicSummary(slug, summary));
+}
+
+function refineExperienceCopy(experience: PublicExperience): PublicExperience {
   if (experience.slug === "imersao-paranoa") {
     return {
       ...experience,
@@ -30,8 +43,8 @@ export function refinePublicExperience(experience: PublicExperience): PublicExpe
       ...experience.editorial,
       hero: {
         ...experience.editorial.hero,
-        title: "O melhor pôr do sol de Brasília",
-        subtitle: "Uma remada para desacelerar e acompanhar as últimas luzes do dia em um dos cenários mais bonitos da cidade.",
+        title: "O melhor pôr do sol de Brasília, no seu ritmo.",
+        subtitle: "O fim do dia ganha outro significado quando você troca a correria pela tranquilidade do lago. Durante a semana, uma remada de 1 hora; aos domingos, a experiência tradicional de 1h30.",
         details: experience.editorial.hero.details
           .filter((detail) => !/^(local|onde)\s*:/i.test(detail.trim()))
           .map((detail) => (/^nível\s*:/i.test(detail.trim()) ? "Nível: iniciantes ao avançado" : detail)),
@@ -43,7 +56,7 @@ export function refinePublicExperience(experience: PublicExperience): PublicExpe
         ...experience.editorial.about,
         paragraphs: [
           "A Remada Sunset é um convite para terminar o dia de um jeito diferente: dentro de uma canoa havaiana, sobre as águas do Lago Paranoá e diante do melhor pôr do sol de Brasília.",
-          "Em um ritmo tranquilo, o grupo aproveita o lago, faz pausas para banho e contempla as últimas luzes do dia antes de retornar à base.",
+          "Em um ritmo tranquilo, o grupo aproveita o lago e contempla as últimas luzes do dia antes de retornar à base. Na experiência tradicional de 1h30, aos domingos, há mais tempo para as paradas previstas no roteiro, com possibilidade de banho quando fizer parte do percurso.",
           "Não é necessário ter experiência. Nossa equipe acompanha toda a atividade e orienta os participantes desde os primeiros movimentos.",
         ],
       },
