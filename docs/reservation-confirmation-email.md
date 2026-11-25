@@ -112,40 +112,52 @@ A mesma tela mostra o estado: **Enviado** (com a data), **Pendente**, **Erro** (
 O e-mail é montado pela **base da reserva** (`reserva → sessão → experiência → base`), devolvida
 pela RPC `reservation_confirmation_email`. Nunca pelo nome da experiência.
 
-| Base | Assunto | Local de encontro |
+| Base | Assunto | Ponto de encontro |
 | --- | --- | --- |
-| Lago Norte | `Reserva confirmada — AZ7K2M9QX1` | `QL 5 Conjunto 5 - Lago Norte`, sem link de mapa |
-| Demais bases (Cápsula Bar — Concha Acústica) | `Sua reserva está confirmada! 🌊 \| Alma Azul Academy` | ponto de encontro, endereço e botão **Como chegar — Google Maps**, de `public.bases` |
+| Lago Norte | `Reserva confirmada — AZ7K2M9QX1` | foto do portão, "Portão de entrada da Alma Azul Academy", `SHIN QL 5, Conjunto 5, Casa 19 — Lago Norte, Brasília-DF` e botão **Como chegar — Google Maps** (`https://maps.app.goo.gl/KQUaHE4LGmg8h3q17`), de `public.bases` depois do script abaixo |
+| Demais bases (Cápsula Bar — Concha Acústica) | `Sua reserva está confirmada! 🌊 \| Alma Azul Academy` | foto do Cápsula Bar, ponto de encontro, endereço e botão **Como chegar — Google Maps**, de `public.bases` |
 
-O Lago Norte mantém o modelo anterior palavra por palavra — um teste compara o e-mail byte a
-byte com o que era gerado antes de existir base no payload. As demais bases usam o modelo novo:
-saudação própria, linhas de experiência, data, horário, duração (da sessão) e participantes, e o
-mesmo QR de check-in, tolerância, "Antes de vir", política de cancelamento e aviso do grupo. A
-frase fixa de duração ("parada para banho") é só do Lago Norte.
+Desde 25/11/2026 as duas bases usam a mesma hierarquia (o que muda por base é a abertura, a
+assinatura, a foto e a chegada):
 
-`pnpm email:preview` gera as duas versões em `.preview/`.
+| # | Bloco | Conteúdo | Origem |
+| --- | --- | --- | --- |
+| 1 | Confirmação | cabeçalho com a logo oficial, "Reserva confirmada", saudação e abertura da base | `ORIGIN_INTRO` / `NEW_BASE_INTRO` |
+| 2–3 | Sua experiência | nome da experiência, data e horário | RPC `reservation_confirmation_email` |
+| 4 | Reserva | código, participantes, duração (fora do Lago Norte) e o QR de check-in | RPC |
+| 5 | Ponto de encontro | foto real da base, local, endereço e **Como chegar** | `public.bases` + `lib/reservations/meeting-point.ts` |
+| 6 | Chegada | Lago Norte: portão aberto 10 min antes, tolerância de 20 min e o WhatsApp em texto (`LAGO_NORTE_ARRIVAL_PARAGRAPHS`). Cápsula Bar e demais bases: a regra de sempre, horário de encontro + `MEETING_TOLERANCE_NOTE` ("Tolerância de até 20 minutos após o horário marcado."), sem portão | constantes |
+| 7 | O que levar | roupa de banho, repelente, roupa confortável; chinelo | `WHAT_TO_BRING_ITEMS` |
+| 8 | Informações importantes | não precisa de experiência; duração com parada para banho (Lago Norte); guardar o código | `PREPARATION_ITEMS[0]`, `durationNoteFor`, `RESERVATION_CODE_NOTE` |
+| 9 | Cancelamento e remarcação | reembolso ou crédito até 1 dia antes (texto inalterado) | `CANCELLATION_NOTE` |
+| 10 | Atendimento pelo WhatsApp | resposta por e-mail ou WhatsApp (61) 99268-2522 e o **único** botão do e-mail, **Falar com a nossa equipe** → `https://wa.me/5561992682522` | `SUPPORT_NOTE` |
 
-**Assunto (Lago Norte):** `Reserva confirmada — AZ7K2M9QX1`
+**Não existe mais aviso de grupo de WhatsApp** nem promessa de orientação posterior: tudo o que o
+cliente precisa está no próprio e-mail. Um teste recusa qualquer texto desse tipo na confirmação
+e no reagendamento. Os e-mails de evento especial (`event-email.ts`) não mudaram (conferido byte a
+byte contra a `main` nas prévias de ESSÊNCIA e ESSÊNCIA Lua Cheia).
 
-O corpo concentra de propósito as perguntas que hoje chegam por WhatsApp, nesta ordem:
+O mesmo vale fora do e-mail: a página `/pagamento/retorno` diz que as informações estão no e-mail de
+confirmação, e as duas respostas de FAQ do Cápsula Bar que citavam o grupo são trocadas na
+apresentação (`lib/editorial/group-copy.ts`, só quando o texto é exatamente o antigo; o banco não
+muda). `tests/whatsapp-group-copy.test.ts` varre `app/`, `components/` e `lib/`.
 
-| Bloco | Conteúdo | Origem |
-| --- | --- | --- |
-| Resumo da reserva | código, experiência, data e — quando é para mais de uma pessoa — a quantidade | RPC `reservation_confirmation_email` |
-| Localização | `QL 5 Conjunto 5 - Lago Norte` | constante `MEETING_LOCATION` |
-| Horário de encontro | horário da sessão reservada + "Tolerância de até 20 minutos após o horário marcado." | `starts_at` da sessão |
-| Antes de vir | não precisa ter experiência; roupa de banho, repelente e roupa confortável; vir de chinelo | constante `PREPARATION_ITEMS` |
-| Duração | "A experiência dura em torno de 1h30 e conta com uma parada para banho durante a remada." | constante `DURATION_NOTE` |
-| Imprevistos acontecem | política de cancelamento com reembolso ou crédito até 1 dia antes | constante `CANCELLATION_NOTE` |
-| Criaremos um grupo | grupo de comunicação criado até 1 dia antes da experiência | constante `GROUP_NOTE` |
-| Fechamento | guardar o código, canal de contato, assinatura e rodapé | — |
+### Fotos
+
+`public/images/email/` guarda as fotos do ponto de encontro (JPEG 1200×675, sRGB, sem EXIF, até
+~200 KB — Outlook não exibe WebP) e a logo branca recortada para o cabeçalho. O e-mail as carrega
+por URL HTTPS absoluta do domínio oficial, então só aparecem depois do deploy em Production.
+Trocar uma foto = arquivo com nome novo (e-mails antigos continuam com a imagem que tinham). Local
+e endereço são sempre texto; a foto tem texto alternativo para quando o cliente bloqueia imagens.
+
+`pnpm email:preview` gera as versões em `.preview/` (com as imagens locais) e
+`.preview/revisao-emails.html`, com as duas bases em largura de desktop e de celular.
 
 Cada bloco de texto fixo é uma **constante exportada** de `lib/reservations/confirmation-email.ts`, e é a própria constante que a suíte de testes compara com o HTML e com o texto puro. Mudar a frase num lugar só não passa no CI.
 
-Duas escolhas deliberadas:
-
-- **No Lago Norte a localização é texto, sem link de mapa.** A base não tem link oficial cadastrado; quando tiver, basta preencher `bases.maps_url` e o botão aparece sozinho.
-- **A duração é texto fixo, não `duration_minutes`.** A RPC que alimenta o e-mail não devolve a duração, todas as experiências atuais duram 90 minutos e a frase fala também da parada para banho, que nenhum campo do banco carrega. Buscar o valor dinamicamente exigiria mexer na RPC.
+- **Link de mapa só oficial.** Sem `bases.maps_url`, nenhum link é montado por busca de endereço; preenchido o campo, o botão aparece sozinho.
+- **Endereço e link do Lago Norte** (enviados pela equipe em 25/11/2026) entram no banco por script manual, não por código nem migration: preflight `supabase/diagnostics/lago_norte_localizacao_2026_11_preflight.sql` → `supabase/maintenance/lago_norte_localizacao_2026_11.sql` → postcheck `..._postcheck.sql` (última linha `LAGO_NORTE_LOCALIZACAO_OK`); reversão em `supabase/rollback/lago_norte_localizacao_2026_11.rollback.sql`. Até o script rodar, o e-mail do Lago Norte sai com o endereço antigo e sem o botão. Depois dele, `supabase/diagnostics/capsula_bar_launch_postcheck.sql` (histórico) passa a acusar o endereço novo do Lago Norte; isso é esperado.
+- O reagendamento (Stand-by) usa os mesmos blocos 5 a 10, sem a política de cancelamento.
 
 O e-mail **informa** a política de cancelamento; ele não abre nenhum fluxo de cancelamento, e o teste recusa qualquer link nesse sentido.
 

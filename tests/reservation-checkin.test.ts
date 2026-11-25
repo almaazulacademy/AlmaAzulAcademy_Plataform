@@ -224,7 +224,7 @@ test("o e-mail de confirmação inclui a seção do QR com os dados da reserva",
   assert.match(email.html, /09:00/);
   // Conteúdo anterior continua lá.
   assert.match(email.html, /Reserva confirmada/);
-  assert.match(email.html, /Localização/);
+  assert.match(email.html, /Ponto de encontro/);
   assert.match(email.text, /SEU QR CODE DE CHECK-IN/);
   assert.ok(email.text.includes(checkinUrl(TOKEN)));
 });

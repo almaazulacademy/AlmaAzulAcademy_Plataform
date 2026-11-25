@@ -10,10 +10,16 @@
  * e Gmail ignoram boa parte do CSS moderno, e o layout precisa se manter de pé
  * no celular e no desktop.
  *
- * O corpo concentra de propósito as respostas que hoje chegam por WhatsApp:
- * onde é, a que horas, o que levar, quanto dura, como cancelar e quando o grupo
- * de comunicação aparece. Cada uma dessas seções é uma constante exportada,
- * para que o teste verifique exatamente o texto que o cliente lê.
+ * O corpo concentra de propósito tudo o que o cliente precisa para participar:
+ * a experiência, a data, o ponto de encontro (com foto da base), como chegar,
+ * o que levar, quanto dura e como cancelar. Nenhuma orientação fica para depois
+ * — o e-mail não promete grupo nem mensagem complementar. Cada seção é uma
+ * constante exportada, para que o teste verifique exatamente o texto que o
+ * cliente lê.
+ *
+ * Ordem do e-mail regular: confirmação, experiência, data e horário, dados da
+ * reserva (com o QR), ponto de encontro, chegada, o que levar, informações
+ * importantes, cancelamento e o atendimento pelo WhatsApp.
  */
 
 import {
@@ -29,8 +35,14 @@ import { checkinQrImageUrl, checkinUrl, isCheckinToken } from "../checkin/token.
 import { CONTACT_EMAIL, INSTAGRAM_HANDLE, INSTAGRAM_LINK, WHATSAPP_NUMBER } from "../contact.ts";
 import { formatSessionDate, formatSessionTime } from "../sessions/date-time.ts";
 import { formatDurationLabel } from "../sessions/modality.ts";
-import { SITE_NAME, SITE_URL } from "../site.ts";
+import { absoluteUrl, SITE_NAME, SITE_URL } from "../site.ts";
 import { validateEventEditorial, type EventContent } from "../events/editorial.ts";
+import {
+  LAGO_NORTE_ARRIVAL_TITLE,
+  LAGO_NORTE_MEETING_POINT,
+  meetingPointPhoto,
+  WHATSAPP_BUTTON_LABEL,
+} from "./meeting-point.ts";
 import { isEventEmailReady } from "../events/email-readiness.ts";
 import { buildEventCheckinReminderEmail, buildEventConfirmationEmail, buildEventRescheduleEmail } from "./event-email.ts";
 
@@ -47,9 +59,10 @@ export const MEETING_LOCATION = LAGO_NORTE_LOCATION.address ?? "";
 /** Tolerância de chegada, contada a partir do horário da sessão reservada. */
 export const MEETING_TOLERANCE_NOTE = "Tolerância de até 20 minutos após o horário marcado.";
 
-/** O que o cliente precisa saber antes de sair de casa. */
-export const PREPARATION_TITLE = "Antes de vir";
-
+/**
+ * O que o cliente precisa saber antes de sair de casa. O primeiro item vai para
+ * "Informações importantes"; os outros dois formam "O que levar".
+ */
 export const PREPARATION_ITEMS = [
   "Não é necessário ter experiência com esportes ou canoa. A remada em grupo é tranquila de acompanhar e aprender.",
   "Traga roupa de banho, repelente e roupa confortável para praticar atividade física.",
@@ -57,15 +70,11 @@ export const PREPARATION_ITEMS = [
 ] as const;
 
 /**
- * Duração da experiência.
+ * Duração da experiência no Lago Norte, em "Informações importantes".
  *
- * Texto fixo, e não `duration_minutes` da sessão: a RPC que alimenta este
- * e-mail não devolve a duração, todas as experiências atuais duram 90 minutos e
- * a frase fala também da parada para banho, que nenhum campo do banco carrega.
- * Buscar a duração dinamicamente exigiria mexer na RPC — fora do escopo aqui.
+ * Texto fixo para a turma tradicional: a frase fala também da parada para
+ * banho, que nenhum campo do banco carrega.
  */
-export const DURATION_TITLE = "Duração";
-
 export const DURATION_NOTE =
   "A experiência dura em torno de 1h30 e conta com uma parada para banho durante a remada.";
 
@@ -83,22 +92,47 @@ export function durationNoteFor(durationMinutes: number | null | undefined) {
 }
 
 /** Política de cancelamento. Texto operacional — não ampliar nem restringir. */
-export const CANCELLATION_TITLE = "Imprevistos acontecem";
+export const CANCELLATION_TITLE = "Cancelamento e remarcação";
 
 export const CANCELLATION_NOTE =
   "Caso ocorra algum imprevisto, é permitido solicitar cancelamento com reembolso ou crédito para uma próxima remada até 1 dia antes do horário marcado.";
 
-/** Aviso do grupo de comunicação, o que mais reduz mensagem individual. */
-export const GROUP_TITLE = "Criaremos um grupo";
+/** "O que levar": os itens de preparo que são, de fato, coisas para trazer. */
+export const WHAT_TO_BRING_TITLE = "O que levar";
 
-export const GROUP_NOTE =
-  "Até 1 dia antes da sua experiência, criaremos um grupo para facilitar a comunicação, enviar orientações finais e manter todos atualizados.";
+export const WHAT_TO_BRING_ITEMS = [PREPARATION_ITEMS[1], PREPARATION_ITEMS[2]] as const;
 
-/** Fechamento: o código e o canal de contato. */
-const CLOSING_PARAGRAPHS = [
-  "Guarde o código da reserva: é por ele que identificamos o seu agendamento.",
-  "Se precisar falar conosco antes disso, responda a este e-mail ou utilize o nosso canal oficial de atendimento.",
+/** "Informações importantes": experiência prévia, duração e o código. */
+export const IMPORTANT_INFO_TITLE = "Informações importantes";
+
+export const RESERVATION_CODE_NOTE = "Guarde o código da reserva: é por ele que identificamos o seu agendamento.";
+
+/** Cartão do ponto de encontro: foto, local, endereço e "Como chegar". */
+export const MEETING_POINT_TITLE = "Ponto de encontro";
+
+/** Chegada nas bases sem orientação própria: o horário e a tolerância de sempre. */
+export const ARRIVAL_TITLE = "Chegada";
+
+export const MEETING_TIME_LABEL = "Horário de encontro";
+
+/**
+ * Chegada no Lago Norte: o instrutor abre o portão 10 minutos antes. Texto
+ * aprovado pela equipe; só aparece nas reservas do Lago Norte.
+ */
+export const LAGO_NORTE_ARRIVAL_PARAGRAPHS = [
+  "Um de nossos instrutores estará disponível para abrir o portão de acesso 10 minutos antes do horário marcado para sua experiência.",
+  "Pedimos que chegue com antecedência para que possamos realizar a preparação e iniciar a atividade da melhor forma possível.",
+  "Teremos uma tolerância de até 20 minutos após o horário marcado para a chegada dos participantes.",
+  `Caso tenha algum atraso ou dificuldade para encontrar nossa entrada, entre em contato com a equipe da Alma Azul Academy pelo WhatsApp: ${formatWhatsappNumber()}.`,
 ] as const;
+
+/**
+ * Fechamento: o canal de atendimento, com o único botão do WhatsApp do e-mail
+ * (a chegada do Lago Norte cita o número em texto, sem botão próprio).
+ */
+export const SUPPORT_TITLE = "Atendimento pelo WhatsApp";
+
+export const SUPPORT_NOTE = `Se precisar falar conosco, responda a este e-mail ou chame a nossa equipe pelo WhatsApp: ${formatWhatsappNumber()}.`;
 
 /** Paleta da marca, espelhando as variáveis de `app/globals.css`. */
 export const BRAND = {
@@ -176,7 +210,8 @@ export function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-function whatsappLink() {
+/** WhatsApp oficial da equipe, sem mensagem pronta: https://wa.me/5561992682522. */
+export function whatsappLink() {
   return `https://wa.me/${WHATSAPP_NUMBER}`;
 }
 
@@ -203,12 +238,35 @@ function locationOf(data: ReservationConfirmationData) {
 }
 
 /**
- * O Lago Norte mantém o e-mail que os clientes já recebem, palavra por palavra.
- * Qualquer outra base usa o modelo novo. A decisão é pela base da reserva —
- * nunca pelo nome da experiência, que se repete entre bases.
+ * O Lago Norte tem abertura, assinatura, frase de duração e orientações de
+ * chegada próprias; as demais bases usam as do Cápsula Bar. A decisão é pela
+ * base da reserva — nunca pelo nome da experiência, que se repete entre bases.
  */
 function usesOriginTemplate(data: ReservationConfirmationData) {
   return locationOf(data).baseSlug === LAGO_NORTE_SLUG;
+}
+
+/** Abertura do e-mail do Lago Norte. */
+export const ORIGIN_INTRO = "Sua reserva está confirmada. Será um prazer receber você para essa experiência!";
+
+export const ORIGIN_SIGNOFF = "Até breve!";
+
+/**
+ * Onde o grupo se encontra: o ponto cadastrado na base; no Lago Norte, que não
+ * tem um, o portão de entrada; e, em último caso, o endereço.
+ */
+export function meetingPointOf(location: BaseLocation) {
+  return (
+    location.meetingPoint ??
+    (location.baseSlug === LAGO_NORTE_SLUG ? LAGO_NORTE_MEETING_POINT : null) ??
+    location.address ??
+    location.baseName
+  );
+}
+
+/** Endereço como linha própria, quando não é ele mesmo o ponto de encontro. */
+function meetingAddressOf(location: BaseLocation) {
+  return location.address && location.address !== meetingPointOf(location) ? location.address : null;
 }
 
 export function formatDuration(minutes: number | null | undefined) {
@@ -236,32 +294,36 @@ export function locationText(data: ReservationConfirmationData) {
 }
 
 /**
- * Linhas de dados da reserva. A data sai sempre no fuso de Brasília, que é o
- * mesmo usado pelo site na hora de escolher a sessão. O horário tem bloco
- * próprio, logo abaixo, junto da tolerância.
+ * Dados da reserva logo abaixo da experiência, da data e do horário (que têm
+ * cartão próprio, sempre no fuso de Brasília). No Lago Norte a duração sai em
+ * "Informações importantes", com a parada para banho; nas demais bases, a
+ * duração da sessão entra aqui.
  */
-function detailRows(data: ReservationConfirmationData) {
-  if (!usesOriginTemplate(data)) {
-    const duration = formatDuration(data.durationMinutes);
-    const rows: Array<[string, string]> = [
-      ["Código da reserva", data.publicCode],
-      ["🌊 Experiência", data.experienceTitle],
-      ["📅 Data", formatSessionDate(data.startsAt)],
-      ["🕔 Horário", formatSessionTime(data.startsAt)],
-    ];
-    if (duration) rows.push(["⏱️ Duração", duration]);
-    rows.push(["👥 Participantes", `${data.quantity}`]);
-    return rows;
-  }
-
+function reservationRows(data: ReservationConfirmationData) {
   const rows: Array<[string, string]> = [
     ["Código da reserva", data.publicCode],
-    ["Experiência", data.experienceTitle],
-    ["Data", formatSessionDate(data.startsAt)],
+    ["Participantes", `${data.quantity}`],
   ];
-  if (data.quantity > 1) rows.push(["Pessoas", `${data.quantity}`]);
+  const duration = formatDuration(data.durationMinutes);
+  if (!usesOriginTemplate(data) && duration) rows.push(["Duração", duration]);
   return rows;
 }
+
+/** Itens de "Informações importantes". */
+function importantItems(data: ReservationConfirmationData, codeNote: string) {
+  return [
+    PREPARATION_ITEMS[0],
+    ...(usesOriginTemplate(data) ? [durationNoteFor(data.durationMinutes)] : []),
+    codeNote,
+  ];
+}
+
+/** Do ponto de encontro ao atendimento: igual na confirmação e no reagendamento. */
+type GuidanceOptions = {
+  /** O reagendamento não antecipa a política de cancelamento. */
+  cancellation: boolean;
+  codeNote: string;
+};
 
 // --- Versão em texto puro ----------------------------------------------------
 
@@ -282,48 +344,75 @@ function checkinText(data: ReservationConfirmationData) {
   ];
 }
 
-function buildText(data: ReservationConfirmationData) {
-  const rows = detailRows(data).map(([label, value]) => `${label}: ${value}`);
-
-  const origin = usesOriginTemplate(data);
-
+/** Ponto de encontro no texto puro: o mesmo do cartão, sem a foto. */
+function meetingPointText(data: ReservationConfirmationData) {
+  const location = locationOf(data);
+  const address = meetingAddressOf(location);
   return [
-    `Olá, ${firstName(data.fullName)}!`,
+    MEETING_POINT_TITLE,
+    meetingPointOf(location),
+    ...(address ? [`Endereço: ${address}`] : []),
+    ...(location.mapsUrl ? [`${MAPS_BUTTON_LABEL}: ${location.mapsUrl}`] : []),
+  ];
+}
+
+function arrivalText(data: ReservationConfirmationData) {
+  if (usesOriginTemplate(data)) {
+    return [LAGO_NORTE_ARRIVAL_TITLE, ...LAGO_NORTE_ARRIVAL_PARAGRAPHS];
+  }
+  return [ARRIVAL_TITLE, `${MEETING_TIME_LABEL}: ${formatSessionTime(data.startsAt)}`, MEETING_TOLERANCE_NOTE];
+}
+
+function guidanceText(data: ReservationConfirmationData, options: GuidanceOptions) {
+  return [
+    ...meetingPointText(data),
     "",
-    ...(origin
-      ? ["Sua reserva está confirmada. Será um prazer receber você para essa experiência!", ""]
-      : NEW_BASE_INTRO.flatMap((line) => [line, ""])),
-    ...rows,
+    ...arrivalText(data),
     "",
-    ...checkinText(data),
-    locationLabel(data),
-    ...locationText(data),
+    WHAT_TO_BRING_TITLE,
+    ...WHAT_TO_BRING_ITEMS.map((item) => `- ${item}`),
     "",
-    "Horário de encontro",
-    formatSessionTime(data.startsAt),
-    MEETING_TOLERANCE_NOTE,
+    IMPORTANT_INFO_TITLE,
+    ...importantItems(data, options.codeNote).map((item) => `- ${item}`),
     "",
-    PREPARATION_TITLE,
-    ...PREPARATION_ITEMS.map((item) => `- ${item}`),
+    ...(options.cancellation ? [CANCELLATION_TITLE, CANCELLATION_NOTE, ""] : []),
+    SUPPORT_TITLE,
+    SUPPORT_NOTE,
+    `${WHATSAPP_BUTTON_LABEL}: ${whatsappLink()}`,
     "",
-    // A frase de duração do Lago Norte fala da parada para banho; nas outras
-    // bases a duração da sessão já está nos dados da reserva, acima.
-    ...(origin ? [DURATION_TITLE, durationNoteFor(data.durationMinutes), ""] : []),
-    CANCELLATION_TITLE,
-    CANCELLATION_NOTE,
-    "",
-    GROUP_TITLE,
-    GROUP_NOTE,
-    "",
-    ...CLOSING_PARAGRAPHS.flatMap((paragraph) => [paragraph, ""]),
-    origin ? "Até breve!" : NEW_BASE_SIGNOFF,
-    `Equipe ${SITE_NAME}`,
-    "",
+  ];
+}
+
+function textFooter() {
+  return [
     "—",
     `WhatsApp: ${formatWhatsappNumber()}`,
     `E-mail: ${CONTACT_EMAIL}`,
     `Instagram: ${INSTAGRAM_HANDLE}`,
     SITE_URL,
+  ];
+}
+
+function buildText(data: ReservationConfirmationData) {
+  const origin = usesOriginTemplate(data);
+
+  return [
+    `Olá, ${firstName(data.fullName)}!`,
+    "",
+    ...(origin ? [ORIGIN_INTRO, ""] : NEW_BASE_INTRO.flatMap((line) => [line, ""])),
+    "Sua experiência",
+    data.experienceTitle,
+    `Data: ${formatSessionDate(data.startsAt)}`,
+    `Horário: ${formatSessionTime(data.startsAt)}`,
+    "",
+    ...reservationRows(data).map(([label, value]) => `${label}: ${value}`),
+    "",
+    ...checkinText(data),
+    ...guidanceText(data, { cancellation: true, codeNote: RESERVATION_CODE_NOTE }),
+    origin ? ORIGIN_SIGNOFF : NEW_BASE_SIGNOFF,
+    `Equipe ${SITE_NAME}`,
+    "",
+    ...textFooter(),
   ].join("\n");
 }
 
@@ -450,8 +539,16 @@ function checkinHtml(data: ReservationConfirmationData) {
               </table>`;
 }
 
-/** Moldura comum aos e-mails: cabeçalho da marca, corpo e rodapé de contato. */
-export function emailLayout({ title, preheader, heading, body }: { title: string; preheader: string; heading: string; body: string }) {
+/** Logo oficial (branca, recortada para o cabeçalho), servida pelo site. */
+export const EMAIL_LOGO_PATH = "/images/email/alma-azul-logo-branca.png";
+
+/**
+ * Moldura comum aos e-mails: cabeçalho da marca, corpo e rodapé de contato.
+ * `logo` troca o nome em texto pela logo oficial no
+ * cabeçalho (o texto alternativo mantém o nome quando a imagem é bloqueada);
+ * sem ele a moldura é exatamente a de sempre.
+ */
+export function emailLayout({ title, preheader, heading, body, logo = false }: { title: string; preheader: string; heading: string; body: string; logo?: boolean }) {
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -467,9 +564,11 @@ export function emailLayout({ title, preheader, heading, body }: { title: string
       <td align="center" style="padding:24px 12px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;background-color:#ffffff;border-radius:20px;overflow:hidden;">
           <tr>
-            <td style="padding:28px 28px 20px;background-color:${BRAND.forest};">
-              <p style="margin:0;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:${BRAND.sand};">${escapeHtml(SITE_NAME)}</p>
-              <h1 style="margin:10px 0 0;font-size:26px;line-height:32px;font-weight:600;color:#ffffff;">${escapeHtml(heading)}</h1>
+            <td style="padding:28px 28px 20px;background-color:${BRAND.forest};${logo ? `font-family:${SANS};` : ""}">
+              ${logo
+                ? `<img src="${absoluteUrl(EMAIL_LOGO_PATH)}" width="120" height="50" alt="${escapeHtml(SITE_NAME)}" style="display:block;width:120px;height:50px;border:0;font-family:${SANS};font-size:14px;line-height:20px;color:#ffffff;">`
+                : `<p style="margin:0;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:${BRAND.sand};">${escapeHtml(SITE_NAME)}</p>`}
+              <h1 style="margin:${logo ? "16px" : "10px"} 0 0;font-size:26px;line-height:32px;font-weight:600;color:#ffffff;">${escapeHtml(heading)}</h1>
             </td>
           </tr>
           <tr>
@@ -496,8 +595,26 @@ export function emailLayout({ title, preheader, heading, body }: { title: string
 </html>`;
 }
 
-function buildHtml(data: ReservationConfirmationData) {
-  const rows = detailRows(data)
+/** Botão de ação em tabela: é o formato que sobrevive ao Outlook. */
+function actionButton(href: string, label: string, color: string) {
+  return `
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:14px 0 0;">
+                      <tr><td style="border-radius:999px;background-color:${color};">
+                        <a href="${escapeHtml(href)}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">${escapeHtml(label)}</a>
+                      </td></tr>
+                    </table>`;
+}
+
+function paragraphs(lines: readonly string[]) {
+  return lines
+    .map((line, index) => `
+                    <p style="margin:0 0 ${index === lines.length - 1 ? "0" : "10px"};font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.8;">${escapeHtml(line)}</p>`)
+    .join("");
+}
+
+/** Tabela de dados no fundo areia: rótulo à esquerda, valor à direita. */
+function detailsTable(rows: Array<[string, string]>) {
+  const body = rows
     .map(([label, value]) => `
                       <tr>
                         <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:14px;color:${BRAND.ink};opacity:0.6;">${escapeHtml(label)}</td>
@@ -505,15 +622,99 @@ function buildHtml(data: ReservationConfirmationData) {
                       </tr>`)
     .join("");
 
-  const closing = CLOSING_PARAGRAPHS
-    .map((text) => `
-              <p style="margin:0 0 14px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(text)}</p>`)
-    .join("");
+  return `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;margin:0 0 20px;">
+                <tr><td style="padding:4px 0;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${body}
+                  </table>
+                </td></tr>
+              </table>`;
+}
 
+/** Cartão de abertura: o nome da experiência, a data e o horário. */
+function experienceCard(data: ReservationConfirmationData) {
+  const line = (label: string, value: string) => `
+                      <tr>
+                        <td width="72" valign="top" style="padding:3px 0;font-size:13px;line-height:24px;color:${BRAND.ink};opacity:0.6;">${escapeHtml(label)}</td>
+                        <td style="padding:3px 0;font-size:16px;line-height:24px;font-weight:600;color:${BRAND.ink};">${escapeHtml(value)}</td>
+                      </tr>`;
+
+  return `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px;">
+                <tr>
+                  <td style="padding:20px 18px;background-color:${BRAND.tint};border-radius:14px;">
+                    <p style="margin:0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:${BRAND.lake};font-weight:600;">Sua experiência</p>
+                    <p style="margin:6px 0 0;font-size:24px;line-height:31px;font-weight:600;color:${BRAND.forest};">${escapeHtml(data.experienceTitle)}</p>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:12px 0 0;">${line("Data", formatSessionDate(data.startsAt))}${line("Horário", formatSessionTime(data.startsAt))}
+                    </table>
+                  </td>
+                </tr>
+              </table>`;
+}
+
+/** Largura útil do corpo: 560px da moldura menos 28px de cada lado. */
+const CONTENT_WIDTH = 504;
+
+/**
+ * Cartão do ponto de encontro: foto real da base, o local, o endereço e o
+ * botão "Como chegar". A foto é complemento — local e endereço são texto, e o
+ * texto alternativo descreve a foto quando o cliente bloqueia imagens.
+ */
+export function meetingPointCard(data: ReservationConfirmationData) {
+  const location = locationOf(data);
+  const photo = meetingPointPhoto(location.baseSlug);
+  const address = meetingAddressOf(location);
+
+  const photoRow = photo
+    ? `
+                <tr>
+                  <td style="padding:0;background-color:${BRAND.mist};border-radius:14px 14px 0 0;">
+                    <img src="${escapeHtml(photo.url)}" width="${CONTENT_WIDTH}" alt="${escapeHtml(photo.alt)}" style="display:block;width:100%;max-width:${CONTENT_WIDTH}px;height:auto;border:0;border-radius:14px 14px 0 0;font-family:${SANS};font-size:13px;line-height:20px;color:${BRAND.ink};">
+                  </td>
+                </tr>`
+    : "";
+
+  return `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px;background-color:${BRAND.tint};border-radius:14px;">${photoRow}
+                <tr>
+                  <td style="padding:16px 18px 18px;">
+                    <p style="margin:0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:${BRAND.lake};font-weight:600;">📍 ${escapeHtml(MEETING_POINT_TITLE)}</p>
+                    <p style="margin:6px 0 0;font-size:20px;line-height:28px;font-weight:600;color:${BRAND.forest};">${escapeHtml(meetingPointOf(location))}</p>${address ? `
+                    <p style="margin:8px 0 0;font-size:14px;line-height:21px;color:${BRAND.ink};opacity:0.8;">Endereço: ${escapeHtml(address)}</p>` : ""}${location.mapsUrl ? actionButton(location.mapsUrl, MAPS_BUTTON_LABEL, BRAND.lake) : ""}
+                  </td>
+                </tr>
+              </table>`;
+}
+
+function arrivalHtml(data: ReservationConfirmationData) {
+  if (usesOriginTemplate(data)) {
+    return infoSection(LAGO_NORTE_ARRIVAL_TITLE, paragraphs(LAGO_NORTE_ARRIVAL_PARAGRAPHS));
+  }
+  return infoSection(ARRIVAL_TITLE, paragraphs([`${MEETING_TIME_LABEL}: ${formatSessionTime(data.startsAt)}`, MEETING_TOLERANCE_NOTE]));
+}
+
+function guidanceHtml(data: ReservationConfirmationData, options: GuidanceOptions) {
+  return `${meetingPointCard(data)}
+              <div style="height:8px;line-height:8px;">&nbsp;</div>
+${arrivalHtml(data)}
+${infoSection(WHAT_TO_BRING_TITLE, bulletList(WHAT_TO_BRING_ITEMS))}
+${infoSection(IMPORTANT_INFO_TITLE, bulletList(importantItems(data, options.codeNote)))}${options.cancellation ? `
+${infoSection(CANCELLATION_TITLE, paragraph(CANCELLATION_NOTE))}` : ""}
+${infoSection(SUPPORT_TITLE, paragraph(SUPPORT_NOTE) + actionButton(whatsappLink(), WHATSAPP_BUTTON_LABEL, BRAND.forest))}`;
+}
+
+function signoffHtml(signoff: string) {
+  return `
+              <p style="margin:28px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">${escapeHtml(signoff)}</p>
+              <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">Equipe ${escapeHtml(SITE_NAME)}</p>
+`;
+}
+
+function buildHtml(data: ReservationConfirmationData) {
   const origin = usesOriginTemplate(data);
   const intro = origin
     ? `
-              <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">Sua reserva está confirmada. Será um prazer receber você para essa experiência!</p>`
+              <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(ORIGIN_INTRO)}</p>`
     : NEW_BASE_INTRO
         .map((text, index) => `
               <p style="margin:0 0 ${index === NEW_BASE_INTRO.length - 1 ? "24px" : "12px"};font-size:15px;line-height:24px;color:${BRAND.ink};opacity:${index === 0 ? "1" : "0.75"};${index === 0 ? "font-weight:600;" : ""}">${escapeHtml(text)}</p>`)
@@ -523,28 +724,14 @@ function buildHtml(data: ReservationConfirmationData) {
     title: reservationConfirmationSubject(data.publicCode, locationOf(data)),
     preheader: `Sua reserva ${data.publicCode} está confirmada.`,
     heading: "Reserva confirmada",
+    logo: true,
     body: `
               <p style="margin:0 0 16px;font-size:17px;line-height:26px;font-weight:600;color:${BRAND.ink};">Olá, ${escapeHtml(firstName(data.fullName))}!</p>${intro}
-
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;margin:0 0 20px;">
-                <tr><td style="padding:4px 0;">
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}
-                  </table>
-                </td></tr>
-              </table>
+${experienceCard(data)}
+${detailsTable(reservationRows(data))}
 ${checkinHtml(data)}
-${locationCard(data)}
-${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
-              <div style="height:12px;line-height:12px;">&nbsp;</div>
-${infoSection(PREPARATION_TITLE, bulletList(PREPARATION_ITEMS))}${origin ? `
-${infoSection(DURATION_TITLE, paragraph(durationNoteFor(data.durationMinutes)))}` : ""}
-${infoSection(CANCELLATION_TITLE, paragraph(CANCELLATION_NOTE))}
-${infoSection(GROUP_TITLE, paragraph(GROUP_NOTE))}
-              <div style="height:24px;line-height:24px;">&nbsp;</div>
-${closing}
-              <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">${origin ? "Até breve!" : escapeHtml(NEW_BASE_SIGNOFF)}</p>
-              <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">Equipe ${escapeHtml(SITE_NAME)}</p>
-`,
+${guidanceHtml(data, { cancellation: true, codeNote: RESERVATION_CODE_NOTE })}
+${signoffHtml(origin ? ORIGIN_SIGNOFF : NEW_BASE_SIGNOFF)}`,
   });
 }
 
@@ -661,10 +848,8 @@ export const RESCHEDULE_QR_NOTE = "O QR Code da sua reserva continua o mesmo e v
 
 const RESCHEDULE_SIGNOFF = "Nos vemos na água!";
 
-const RESCHEDULE_CLOSING = [
-  "O código da sua reserva não mudou: é por ele que identificamos o seu agendamento.",
-  CLOSING_PARAGRAPHS[1],
-] as const;
+/** No reagendamento o código é o mesmo da reserva original. */
+export const RESCHEDULE_CODE_NOTE = "O código da sua reserva não mudou: é por ele que identificamos o seu agendamento.";
 
 /** Os dados da turma nova, iguais para todas as bases. */
 function rescheduleRows(data: ReservationConfirmationData): Array<[string, string]> {
@@ -681,7 +866,8 @@ function rescheduleRows(data: ReservationConfirmationData): Array<[string, strin
 /**
  * Enviado quando uma reserva em Stand-by é reagendada. Não é o e-mail de
  * pagamento de novo: é outra mensagem, com a turma nova, o mesmo código, o
- * mesmo QR e o aviso de que nada precisa ser pago outra vez.
+ * mesmo QR e o aviso de que nada precisa ser pago outra vez. Do ponto de
+ * encontro em diante, as orientações são as mesmas da confirmação.
  *
  * A política de cancelamento fica de fora de propósito: o que vale para uma
  * reserva reagendada é decisão da operação, e este e-mail não a antecipa.
@@ -692,6 +878,7 @@ export function buildReservationRescheduleEmail(data: ReservationConfirmationDat
   const subject = rescheduleConfirmationSubject(data.publicCode);
   const greeting = `Olá, ${firstName(data.fullName)}!`;
   const rows = rescheduleRows(data);
+  const guidance: GuidanceOptions = { cancellation: false, codeNote: RESCHEDULE_CODE_NOTE };
 
   const text = [
     greeting,
@@ -705,42 +892,12 @@ export function buildReservationRescheduleEmail(data: ReservationConfirmationDat
     "",
     ...checkinText(data),
     ...(data.checkinToken ? [RESCHEDULE_QR_NOTE, ""] : []),
-    locationLabel(data),
-    ...locationText(data),
-    "",
-    "Horário de encontro",
-    formatSessionTime(data.startsAt),
-    MEETING_TOLERANCE_NOTE,
-    "",
-    PREPARATION_TITLE,
-    ...PREPARATION_ITEMS.map((item) => `- ${item}`),
-    "",
-    GROUP_TITLE,
-    GROUP_NOTE,
-    "",
-    ...RESCHEDULE_CLOSING.flatMap((line) => [line, ""]),
+    ...guidanceText(data, guidance),
     RESCHEDULE_SIGNOFF,
     `Equipe ${SITE_NAME}`,
     "",
-    "—",
-    `WhatsApp: ${formatWhatsappNumber()}`,
-    `E-mail: ${CONTACT_EMAIL}`,
-    `Instagram: ${INSTAGRAM_HANDLE}`,
-    SITE_URL,
+    ...textFooter(),
   ].join("\n");
-
-  const detailRowsHtml = rows
-    .map(([label, value]) => `
-                      <tr>
-                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:14px;color:${BRAND.ink};opacity:0.6;">${escapeHtml(label)}</td>
-                        <td style="padding:10px 0;border-bottom:1px solid ${BRAND.mist};font-size:15px;font-weight:600;color:${BRAND.ink};text-align:right;">${escapeHtml(value)}</td>
-                      </tr>`)
-    .join("");
-
-  const closing = RESCHEDULE_CLOSING
-    .map((line) => `
-              <p style="margin:0 0 14px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(line)}</p>`)
-    .join("");
 
   const qrNote = data.checkinToken
     ? `
@@ -751,28 +908,15 @@ export function buildReservationRescheduleEmail(data: ReservationConfirmationDat
     title: subject,
     preheader: `Sua reserva ${data.publicCode} tem nova data. O pagamento continua válido.`,
     heading: RESCHEDULE_HEADING,
+    logo: true,
     body: `
               <p style="margin:0 0 16px;font-size:17px;line-height:26px;font-weight:600;color:${BRAND.ink};">${escapeHtml(greeting)}</p>
               <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:${BRAND.ink};opacity:0.75;">${escapeHtml(RESCHEDULE_INTRO)}</p>
-
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.paper};border-radius:14px;padding:4px 16px;margin:0 0 20px;">
-                <tr><td style="padding:4px 0;">
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${detailRowsHtml}
-                  </table>
-                </td></tr>
-              </table>
+${detailsTable(rows)}
 ${highlightCard(RESCHEDULE_PAYMENT_LABEL, RESCHEDULE_PAYMENT_HEADLINE, RESCHEDULE_PAYMENT_NOTE)}
 ${checkinHtml(data)}${qrNote}
-${locationCard(data)}
-${highlightCard("Horário de encontro", formatSessionTime(data.startsAt), MEETING_TOLERANCE_NOTE)}
-              <div style="height:12px;line-height:12px;">&nbsp;</div>
-${infoSection(PREPARATION_TITLE, bulletList(PREPARATION_ITEMS))}
-${infoSection(GROUP_TITLE, paragraph(GROUP_NOTE))}
-              <div style="height:24px;line-height:24px;">&nbsp;</div>
-${closing}
-              <p style="margin:24px 0 4px;font-size:15px;line-height:24px;color:${BRAND.ink};">${escapeHtml(RESCHEDULE_SIGNOFF)}</p>
-              <p style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:${BRAND.forest};">Equipe ${escapeHtml(SITE_NAME)}</p>
-`,
+${guidanceHtml(data, guidance)}
+${signoffHtml(RESCHEDULE_SIGNOFF)}`,
   });
 
   return { to: data.email, subject, html, text };
