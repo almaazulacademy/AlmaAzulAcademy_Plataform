@@ -3,24 +3,33 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  ARRIVAL_TITLE,
   buildReservationConfirmationEmail,
+  buildReservationRescheduleEmail,
   CANCELLATION_NOTE,
   CANCELLATION_TITLE,
   deliverReservationConfirmationEmail,
   DURATION_NOTE,
-  DURATION_TITLE,
-  GROUP_NOTE,
-  GROUP_TITLE,
+  EMAIL_LOGO_PATH,
+  IMPORTANT_INFO_TITLE,
+  LAGO_NORTE_ARRIVAL_PARAGRAPHS,
   MEETING_LOCATION,
+  MEETING_POINT_TITLE,
   MEETING_TOLERANCE_NOTE,
   parseReservationConfirmationData,
   PREPARATION_ITEMS,
-  PREPARATION_TITLE,
+  RESERVATION_CODE_NOTE,
   reservationConfirmationSubject,
+  SUPPORT_NOTE,
+  SUPPORT_TITLE,
+  WHAT_TO_BRING_ITEMS,
+  WHAT_TO_BRING_TITLE,
+  whatsappLink,
   type ConfirmationEmail,
   type ConfirmationEmailDeps,
   type ReservationConfirmationData,
 } from "../lib/reservations/confirmation-email.ts";
+import { LAGO_NORTE_ARRIVAL_TITLE, LAGO_NORTE_MEETING_POINT, MEETING_POINT_PHOTOS } from "../lib/reservations/meeting-point.ts";
 import { isAuthorizedCronRequest } from "../lib/cron/authorization.ts";
 
 function source(path: string) {
@@ -144,15 +153,15 @@ test("nome do cliente é escapado antes de entrar no HTML", () => {
   assert.match(html, /&lt;script&gt;/);
 });
 
-test("reserva de mais de uma pessoa mostra a quantidade", () => {
+test("a quantidade de participantes aparece sempre", () => {
   const uma = buildReservationConfirmationEmail(data());
   const tres = buildReservationConfirmationEmail(data({ quantity: 3 }));
 
-  assert.doesNotMatch(uma.text, /^Pessoas:/m);
-  assert.match(tres.text, /^Pessoas: 3$/m);
+  assert.match(uma.text, /^Participantes: 1$/m);
+  assert.match(tres.text, /^Participantes: 3$/m);
 });
 
-// --- As informações que o e-mail passou a concentrar ------------------------
+// --- As informações que o e-mail concentra ----------------------------------
 
 /** Escapa um texto para virar regex — as frases têm parênteses e acento. */
 function literal(value: string) {
@@ -165,20 +174,167 @@ function versions(overrides: Partial<ReservationConfirmationData> = {}) {
   return [email.html, email.text];
 }
 
-test("o e-mail informa o endereço do ponto de encontro", () => {
-  assert.equal(MEETING_LOCATION, "QL 5 Conjunto 5 - Lago Norte");
+const CAPSULA: Partial<ReservationConfirmationData> = {
+  experienceTitle: "Remada Sunset",
+  startsAt: "2026-10-11T20:00:00.000Z", // 17:00 em Brasília
+  durationMinutes: 90,
+  location: {
+    baseSlug: "concha-acustica",
+    baseName: "Cápsula Bar — Concha Acústica",
+    meetingPoint: "Em frente ao Cápsula Bar — Concha Acústica",
+    address: "SHTN Trecho 1, Lote 8 — Brasília/DF",
+    mapsUrl: "https://maps.app.goo.gl/ueSCiLvHAggrzuAX7",
+  },
+};
 
-  for (const conteudo of versions()) {
-    assert.match(conteudo, /Localiza(ç|&ccedil;)ão/);
-    assert.match(conteudo, literal(MEETING_LOCATION));
+const TOKEN = "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b";
+
+/** Procura cada trecho depois do anterior: se a ordem mudar, algum some. */
+function inOrder(content: string, pieces: string[]) {
+  let from = 0;
+  for (const piece of pieces) {
+    const index = content.indexOf(piece, from);
+    assert.ok(index >= 0, `faltou "${piece}" depois da posição ${from}`);
+    from = index + piece.length;
+  }
+}
+
+test("a hierarquia do e-mail segue a ordem aprovada, nas duas bases e nas duas versões", () => {
+  for (const [nome, overrides] of [["Lago Norte", {}], ["Cápsula Bar", CAPSULA]] as const) {
+    const email = buildReservationConfirmationEmail(data({ ...overrides, checkinToken: TOKEN }));
+    const arrival = nome === "Lago Norte" ? LAGO_NORTE_ARRIVAL_TITLE : ARRIVAL_TITLE;
+    for (const content of [email.html, email.text]) {
+      inOrder(content, [
+        content === email.html ? ">Reserva confirmada</h1>" : "Olá, João!",
+        data(overrides).experienceTitle,
+        "Data",
+        "Horário",
+        "Código da reserva",
+        "Participantes",
+        // No texto puro o título do QR sai em caixa alta.
+        content === email.html ? "Seu QR Code de check-in" : "SEU QR CODE DE CHECK-IN",
+        MEETING_POINT_TITLE,
+        arrival,
+        WHAT_TO_BRING_TITLE,
+        IMPORTANT_INFO_TITLE,
+        CANCELLATION_TITLE,
+        SUPPORT_TITLE,
+      ]);
+    }
   }
 });
 
-test("o horário exibido é o da sessão reservada, com a tolerância ao lado", () => {
-  for (const conteudo of versions()) {
-    assert.match(conteudo, /Horário de encontro/);
-    assert.match(conteudo, /09:00/);
+test("Lago Norte: foto do portão, ponto de encontro e endereço da base", () => {
+  assert.equal(MEETING_LOCATION, "QL 5 Conjunto 5 - Lago Norte");
+  const { html, text } = buildReservationConfirmationEmail(data());
+
+  for (const conteudo of [html, text]) {
+    assert.match(conteudo, literal(MEETING_POINT_TITLE));
+    assert.match(conteudo, literal(LAGO_NORTE_MEETING_POINT));
+    assert.match(conteudo, literal(`Endereço: ${MEETING_LOCATION}`));
+  }
+  const photo = MEETING_POINT_PHOTOS["lago-norte"];
+  assert.ok(html.includes(`src="https://www.almaazulacademy.com.br${photo.path}"`));
+  assert.ok(html.includes(`alt="${photo.alt}"`));
+  assert.match(photo.alt, /portão/);
+  assert.doesNotMatch(html, /ponto-de-encontro-capsula-bar/);
+  // Sem link oficial em `bases.maps_url`, nenhum link de mapa é inventado.
+  assert.doesNotMatch(html + text, /maps\.app|google\.com\/maps|Como chegar/);
+});
+
+test("Lago Norte com link oficial cadastrado na base: o botão Como chegar usa esse link", () => {
+  const mapsUrl = "https://maps.app.goo.gl/exemploLagoNorte";
+  const email = buildReservationConfirmationEmail(data({
+    location: { baseSlug: "lago-norte", baseName: "Lago Norte", meetingPoint: null, address: MEETING_LOCATION, mapsUrl },
+  }));
+  assert.ok(email.html.includes(`href="${mapsUrl}"`));
+  assert.match(email.html, />Como chegar — Google Maps<\/a>/);
+  assert.ok(email.text.includes(`Como chegar — Google Maps: ${mapsUrl}`));
+});
+
+test("Cápsula Bar: foto do bar, ponto de encontro, endereço e Como chegar", () => {
+  const { html, text } = buildReservationConfirmationEmail(data(CAPSULA));
+  for (const conteudo of [html, text]) {
+    assert.match(conteudo, /Em frente ao Cápsula Bar — Concha Acústica/);
+    assert.match(conteudo, /Endereço: SHTN Trecho 1, Lote 8 — Brasília\/DF/);
+    assert.match(conteudo, /https:\/\/maps\.app\.goo\.gl\/ueSCiLvHAggrzuAX7/);
+    assert.doesNotMatch(conteudo, /QL 5|Lago Norte|portão/i);
+  }
+  const photo = MEETING_POINT_PHOTOS["concha-acustica"];
+  assert.ok(html.includes(`src="https://www.almaazulacademy.com.br${photo.path}"`));
+  assert.ok(html.includes(`alt="${photo.alt}"`));
+  assert.ok(html.includes('href="https://maps.app.goo.gl/ueSCiLvHAggrzuAX7"'));
+});
+
+test("base sem foto cadastrada sai sem imagem, com o local em texto", () => {
+  const { html, text } = buildReservationConfirmationEmail(data({
+    location: { baseSlug: "nova-base", baseName: "Nova base", meetingPoint: "Na rampa", address: "Endereço X", mapsUrl: null },
+  }));
+  assert.doesNotMatch(html, /images\/email\/ponto-de-encontro/);
+  for (const conteudo of [html, text]) {
+    assert.match(conteudo, /Na rampa/);
+    assert.match(conteudo, /Endereço: Endereço X/);
+  }
+});
+
+test("as fotos do ponto de encontro existem, são JPEG leves e sem EXIF", () => {
+  for (const [slug, photo] of Object.entries(MEETING_POINT_PHOTOS)) {
+    const file = readFileSync(new URL(`../public${photo.path}`, import.meta.url));
+    assert.ok(photo.path.endsWith(".jpg"), `${slug}: Outlook não exibe WebP`);
+    assert.equal(file[0], 0xff, `${slug}: não é JPEG`);
+    assert.equal(file[1], 0xd8, `${slug}: não é JPEG`);
+    assert.ok(file.length < 300_000, `${slug}: ${file.length} bytes é pesado demais para e-mail`);
+    // Sem EXIF (APP1): nenhuma coordenada de GPS ou dado da câmera vai junto.
+    assert.equal(file.indexOf(Buffer.from([0xff, 0xe1])), -1, `${slug}: carrega EXIF`);
+    assert.ok(photo.alt.length > 20, `${slug}: texto alternativo descritivo`);
+  }
+  assert.ok(readFileSync(new URL(`../public${EMAIL_LOGO_PATH}`, import.meta.url)).length < 30_000);
+});
+
+test("a foto não esconde nada: local e endereço continuam em texto e a imagem é fluida", () => {
+  const { html } = buildReservationConfirmationEmail(data(CAPSULA));
+  const img = html.match(/<img src="[^"]*ponto-de-encontro[^>]*>/)?.[0] ?? "";
+  assert.match(img, /width="504"/, "largura fixa para o Outlook");
+  assert.match(img, /width:100%;max-width:504px;height:auto/, "encolhe no celular");
+  assert.match(img, /alt="[^"]{20,}"/);
+  // Todas as imagens do e-mail são HTTPS absolutas do domínio oficial.
+  for (const [, src] of html.matchAll(/<img src="([^"]+)"/g)) {
+    assert.match(src, /^https:\/\/www\.almaazulacademy\.com\.br\//);
+  }
+});
+
+test("Lago Norte: orientações de chegada exatas e o botão do WhatsApp da equipe", () => {
+  assert.equal(LAGO_NORTE_ARRIVAL_TITLE, "Chegada e acesso à Alma Azul Academy");
+  assert.deepEqual(LAGO_NORTE_ARRIVAL_PARAGRAPHS, [
+    "Um de nossos instrutores estará disponível para abrir o portão de acesso 10 minutos antes do horário marcado para sua experiência.",
+    "Pedimos que chegue com antecedência para que possamos realizar a preparação e iniciar a atividade da melhor forma possível.",
+    "Teremos uma tolerância de até 20 minutos após o horário marcado para a chegada dos participantes.",
+    "Caso tenha algum atraso ou dificuldade para encontrar nossa entrada, entre em contato com a equipe da Alma Azul Academy pelo WhatsApp: (61) 99268-2522.",
+  ]);
+  assert.equal(whatsappLink(), "https://wa.me/5561992682522");
+
+  const { html, text } = buildReservationConfirmationEmail(data());
+  for (const conteudo of [html, text]) {
+    assert.match(conteudo, literal(LAGO_NORTE_ARRIVAL_TITLE));
+    for (const paragrafo of LAGO_NORTE_ARRIVAL_PARAGRAPHS) assert.match(conteudo, literal(paragrafo));
+  }
+  assert.match(html, /<a href="https:\/\/wa\.me\/5561992682522" [^>]*>Falar com a nossa equipe<\/a>/);
+  assert.match(text, /^Falar com a nossa equipe: https:\/\/wa\.me\/5561992682522$/m);
+});
+
+test("portão e tolerância do Lago Norte não aparecem em outra base", () => {
+  for (const conteudo of versions(CAPSULA)) {
+    assert.doesNotMatch(conteudo, literal(LAGO_NORTE_ARRIVAL_TITLE));
+    for (const paragrafo of LAGO_NORTE_ARRIVAL_PARAGRAPHS) assert.doesNotMatch(conteudo, literal(paragrafo));
+    // O Cápsula Bar mantém a chegada que já tinha: horário e tolerância de sempre.
+    assert.match(conteudo, /Horário de encontro: 17:00/);
     assert.match(conteudo, literal(MEETING_TOLERANCE_NOTE));
+  }
+});
+
+test("o horário exibido é o da sessão reservada", () => {
+  for (const conteudo of versions()) {
+    assert.match(conteudo, /09:00/);
     assert.match(conteudo, /20 minutos/);
   }
 });
@@ -196,21 +352,23 @@ test("outra sessão gera outro horário: nada de horário fixo no template", () 
   assert.match(template, /formatSessionTime\(data\.startsAt\)/);
 });
 
-test("a seção de preparo tranquiliza quem nunca remou e diz o que levar", () => {
-  for (const conteudo of versions()) {
-    assert.match(conteudo, literal(PREPARATION_TITLE));
-    for (const item of PREPARATION_ITEMS) assert.match(conteudo, literal(item));
-    assert.match(conteudo, /Não é necessário ter experiência/);
-    assert.match(conteudo, /roupa de banho/);
-    assert.match(conteudo, /repelente/);
-    assert.match(conteudo, /chinelo/);
+test("o que levar e as informações importantes tranquilizam quem nunca remou", () => {
+  assert.deepEqual(WHAT_TO_BRING_ITEMS, [PREPARATION_ITEMS[1], PREPARATION_ITEMS[2]]);
+  for (const overrides of [{}, CAPSULA]) {
+    for (const conteudo of versions(overrides)) {
+      assert.match(conteudo, literal(WHAT_TO_BRING_TITLE));
+      assert.match(conteudo, literal(IMPORTANT_INFO_TITLE));
+      for (const item of PREPARATION_ITEMS) assert.match(conteudo, literal(item));
+      assert.match(conteudo, /roupa de banho/);
+      assert.match(conteudo, /repelente/);
+      assert.match(conteudo, /chinelo/);
+      assert.match(conteudo, literal(RESERVATION_CODE_NOTE));
+    }
   }
-  assert.equal(PREPARATION_ITEMS.length, 3);
 });
 
-test("a duração da experiência aparece com a parada para banho", () => {
+test("Lago Norte: a duração aparece com a parada para banho", () => {
   for (const conteudo of versions()) {
-    assert.match(conteudo, literal(DURATION_TITLE));
     assert.match(conteudo, literal(DURATION_NOTE));
     assert.match(conteudo, /1h30/);
     assert.match(conteudo, /parada para banho/);
@@ -224,9 +382,11 @@ test("a política de cancelamento sai exatamente como foi definida", () => {
     "Caso ocorra algum imprevisto, é permitido solicitar cancelamento com reembolso ou crédito para uma próxima remada até 1 dia antes do horário marcado.",
   );
 
-  for (const conteudo of versions()) {
-    assert.match(conteudo, literal(CANCELLATION_TITLE));
-    assert.match(conteudo, literal(CANCELLATION_NOTE));
+  for (const overrides of [{}, CAPSULA]) {
+    for (const conteudo of versions(overrides)) {
+      assert.match(conteudo, literal(CANCELLATION_TITLE));
+      assert.match(conteudo, literal(CANCELLATION_NOTE));
+    }
   }
 
   // O e-mail informa a regra; ele não abre nenhum fluxo de cancelamento.
@@ -234,15 +394,37 @@ test("a política de cancelamento sai exatamente como foi definida", () => {
   assert.doesNotMatch(html, /href="[^"]*cancel/i);
 });
 
-test("o aviso do grupo de comunicação aparece com o prazo de 1 dia", () => {
-  assert.equal(
-    GROUP_NOTE,
-    "Até 1 dia antes da sua experiência, criaremos um grupo para facilitar a comunicação, enviar orientações finais e manter todos atualizados.",
-  );
+test("nenhum e-mail regular promete grupo de WhatsApp nem orientação posterior", () => {
+  const promessas = /grupo de (whats|comunica)|criaremos|criar um grupo|ao grupo|orientações finais|aguard\w* (as )?(informações|orientações)|enviaremos (as )?orientações/i;
+  for (const overrides of [{}, CAPSULA]) {
+    for (const quantity of [1, 4]) {
+      const confirmation = buildReservationConfirmationEmail(data({ ...overrides, quantity, checkinToken: TOKEN }));
+      const reschedule = buildReservationRescheduleEmail(data({ ...overrides, quantity, checkinToken: TOKEN }));
+      for (const conteudo of [confirmation.html, confirmation.text, reschedule.html, reschedule.text]) {
+        assert.doesNotMatch(conteudo, promessas);
+      }
+    }
+  }
+  assert.doesNotMatch(source("lib/reservations/confirmation-email.ts"), /GROUP_NOTE|GROUP_TITLE|Criaremos um grupo/);
+});
 
-  for (const conteudo of versions()) {
-    assert.match(conteudo, literal(GROUP_TITLE));
-    assert.match(conteudo, literal(GROUP_NOTE));
+test("o atendimento pelo WhatsApp fecha todos os e-mails regulares, com um único botão", () => {
+  for (const overrides of [{}, CAPSULA]) {
+    const confirmation = buildReservationConfirmationEmail(data({ ...overrides, checkinToken: TOKEN }));
+    const reschedule = buildReservationRescheduleEmail(data({ ...overrides, checkinToken: TOKEN }));
+    for (const { html, text } of [confirmation, reschedule]) {
+      for (const conteudo of [html, text]) {
+        assert.match(conteudo, literal(SUPPORT_TITLE));
+        assert.match(conteudo, literal(SUPPORT_NOTE));
+        assert.match(conteudo, /\(61\) 99268-2522/);
+      }
+      assert.equal((html.match(/>Falar com a nossa equipe<\/a>/g) ?? []).length, 1, "um só botão de WhatsApp por e-mail");
+      assert.equal((text.match(/^Falar com a nossa equipe: https:\/\/wa\.me\/5561992682522$/gm) ?? []).length, 1);
+      // O botão vem depois da chegada e do texto de atendimento.
+      const button = html.indexOf(">Falar com a nossa equipe</a>");
+      assert.ok(button > html.indexOf(SUPPORT_NOTE.slice(0, 40)));
+      assert.ok(button > html.indexOf(MEETING_POINT_TITLE));
+    }
   }
 });
 
@@ -256,7 +438,7 @@ test("nenhuma informação antiga importante desapareceu", () => {
     assert.match(conteudo, /AZ7K2M9QX1/);
     assert.match(conteudo, /Imersão Paranoá/);
     assert.match(conteudo, /domingo, 06 de setembro de 2026/);
-    assert.match(conteudo, /Pessoas/);
+    assert.match(conteudo, /Participantes/);
     assert.match(conteudo, /Até breve!/);
     assert.match(conteudo, /Equipe Alma Azul Academy/);
     assert.match(conteudo, /almaazulacademy@gmail\.com/);
@@ -265,33 +447,38 @@ test("nenhuma informação antiga importante desapareceu", () => {
   assert.equal(email.subject, "Reserva confirmada — AZ7K2M9QX1");
 });
 
-test("as seções novas valem para qualquer experiência", () => {
+test("as seções valem para qualquer experiência da base", () => {
   // Um único template atende todas: o que muda é o título e a sessão.
   for (const experienceTitle of ["Imersão Paranoá", "Remada Lua Cheia", "Remada Nascer do Sol", "Remada Sunset"]) {
     const email = buildReservationConfirmationEmail(data({ experienceTitle }));
 
     for (const conteudo of [email.html, email.text]) {
       assert.match(conteudo, literal(experienceTitle));
-      for (const trecho of [MEETING_LOCATION, MEETING_TOLERANCE_NOTE, DURATION_NOTE, CANCELLATION_NOTE, GROUP_NOTE]) {
+      for (const trecho of [MEETING_LOCATION, LAGO_NORTE_ARRIVAL_PARAGRAPHS[2], DURATION_NOTE, CANCELLATION_NOTE, SUPPORT_NOTE]) {
         assert.match(conteudo, literal(trecho), `"${experienceTitle}" perdeu uma seção`);
       }
     }
   }
 });
 
-test("as seções novas cabem no celular sem CSS que Gmail e Outlook ignoram", () => {
-  const { html } = buildReservationConfirmationEmail(data());
+test("as seções cabem no celular sem CSS que Gmail e Outlook ignoram", () => {
+  for (const overrides of [{}, CAPSULA]) {
+    const { html } = buildReservationConfirmationEmail(data(overrides));
 
-  // Os blocos de destaque e as listas continuam em tabela, estilo inline.
-  assert.doesNotMatch(html, /display:\s*(flex|grid)/);
-  assert.doesNotMatch(html, /<ul|<li/i, "lista em <ul> quebra no Outlook: o marcador vai em célula própria");
-  assert.doesNotMatch(html, /@media/, "sem media query: o layout já é fluido");
-  assert.doesNotMatch(html, /position:\s*(absolute|fixed)/);
-  assert.doesNotMatch(html, /<style/i);
-  assert.equal((html.match(/max-width:560px/g) ?? []).length, 1, "uma única largura máxima");
+    // Os blocos de destaque e as listas continuam em tabela, estilo inline.
+    assert.doesNotMatch(html, /display:\s*(flex|grid)/);
+    assert.doesNotMatch(html, /<ul|<li/i, "lista em <ul> quebra no Outlook: o marcador vai em célula própria");
+    assert.doesNotMatch(html, /@media/, "sem media query: o layout já é fluido");
+    assert.doesNotMatch(html, /position:\s*(absolute|fixed)/);
+    assert.doesNotMatch(html, /<style/i);
+    assert.equal((html.match(/max-width:560px/g) ?? []).length, 1, "uma única largura máxima");
 
-  // Nenhuma imagem externa: as seções são texto, e texto sempre aparece.
-  assert.doesNotMatch(html, /<img/i);
+    // Imagens: só a logo e a foto do ponto de encontro (sem QR neste dado),
+    // ambas com texto alternativo.
+    const images = [...html.matchAll(/<img [^>]*>/g)].map(([tag]) => tag);
+    assert.equal(images.length, 2);
+    for (const tag of images) assert.match(tag, /alt="[^"]+"/);
+  }
 });
 
 test("o conteúdo novo não tocou na prevenção de envio duplicado", () => {

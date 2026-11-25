@@ -272,7 +272,7 @@ test("Teste 1: e-mail, lembrete e ingresso do QR saem com o endereço do Cápsul
     assert.match(body, /Sua experiência com a Alma Azul está confirmada! 💙/);
     assert.match(body, /Remada Sunset/);
     assert.match(body, /90 minutos/);
-    assert.match(body, /Em frente ao Cápsula Bar — Concha Acústica\./);
+    assert.match(body, /Em frente ao Cápsula Bar — Concha Acústica/);
     assert.match(body, /SHTN Trecho 1, Lote 8 — Brasília\/DF/);
     assert.ok(body.includes(MAPS));
     assert.match(body, /Como chegar — Google Maps/);
@@ -280,12 +280,16 @@ test("Teste 1: e-mail, lembrete e ingresso do QR saem com o endereço do Cápsul
     assert.ok(body.includes(`/checkin/${data.checkinToken}`), "o QR de check-in continua no e-mail");
     // Nunca o endereço do Lago Norte.
     assert.doesNotMatch(body, /QL 5|Lago Norte/);
-    // Informações que já existiam continuam: tolerância, o que levar, cancelamento e grupo.
+    // Informações que já existiam continuam: tolerância, o que levar e cancelamento.
     assert.match(body, /Tolerância de até 20 minutos/);
     assert.match(body, /roupa de banho/);
-    assert.match(body, /Criaremos um grupo/);
+    assert.match(body, /1 dia antes do horário marcado/);
+    // Nada de grupo nem de orientação futura; o portão é só do Lago Norte.
+    assert.doesNotMatch(body, /grupo de|criaremos|orientações finais|abrir o portão/i);
   }
-  assert.match(email.text, /👥 Participantes: 2/);
+  assert.match(email.text, /^Participantes: 2$/m);
+  assert.ok(email.html.includes("/images/email/ponto-de-encontro-capsula-bar.jpg"), "foto do Cápsula Bar");
+  assert.doesNotMatch(email.html, /ponto-de-encontro-lago-norte/);
   assert.ok(email.html.includes(`href="${MAPS}"`));
   assert.ok(email.html.includes(`/api/checkin/qr/${data.checkinToken}`));
 
@@ -385,9 +389,12 @@ test("Teste 2: reserva do Lago Norte continua com o mesmo fluxo e o mesmo e-mail
 
   const email = buildReservationConfirmationEmail(data);
   assert.equal(email.subject, `Reserva confirmada — ${reservation.publicCode}`);
-  assert.match(email.text, /Localização\nQL 5 Conjunto 5 - Lago Norte\n/);
+  assert.match(email.text, /Ponto de encontro\nPortão de entrada da Alma Azul Academy\nEndereço: QL 5 Conjunto 5 - Lago Norte\n/);
   assert.match(email.text, /parada para banho/);
-  assert.doesNotMatch(email.html + email.text, /Cápsula|SHTN|maps\.app\.goo\.gl|Como chegar/);
+  assert.match(email.text, /abrir o portão de acesso 10 minutos antes/);
+  assert.ok(email.html.includes("/images/email/ponto-de-encontro-lago-norte.jpg"), "foto do portão do Lago Norte");
+  // Sem link oficial cadastrado na base, nenhum link de mapa é inventado.
+  assert.doesNotMatch(email.html + email.text, /Cápsula|SHTN|maps\.app\.goo\.gl|google\.com\/maps|Como chegar/);
 
   // Idêntico, byte a byte, ao e-mail montado sem nenhuma informação de base
   // (o payload que a RPC devolvia antes desta migration).
@@ -397,6 +404,65 @@ test("Teste 2: reserva do Lago Norte continua com o mesmo fluxo e o mesmo e-mail
   assert.ok(legacy);
   assert.deepEqual(buildReservationConfirmationEmail(legacy), email);
   assert.deepEqual(buildCheckinReminderEmail(legacy), buildCheckinReminderEmail(data));
+});
+
+test("Lago Norte: endereço completo e link oficial pelo script manual, com preflight, postcheck e reversão", async () => {
+  const db = await launchedDatabase();
+  const PREFLIGHT = source("supabase/diagnostics/lago_norte_localizacao_2026_11_preflight.sql");
+  const SCRIPT = source("supabase/maintenance/lago_norte_localizacao_2026_11.sql");
+  const POSTCHECK = source("supabase/diagnostics/lago_norte_localizacao_2026_11_postcheck.sql");
+  const ROLLBACK = source("supabase/rollback/lago_norte_localizacao_2026_11.rollback.sql");
+  const NEW_ADDRESS = "SHIN QL 5, Conjunto 5, Casa 19 — Lago Norte, Brasília-DF";
+  const NEW_MAPS = "https://maps.app.goo.gl/KQUaHE4LGmg8h3q17";
+  const report = async (sql: string) => Object.fromEntries((await rows(db, sql)).map((row) => [row.check_name, row]));
+  const lago = async () => one(db, "select address, meeting_point, maps_url, status from public.bases where slug = 'lago-norte'");
+  const audits = async () => (await one(db, "select count(*)::int as n from public.admin_audit_log where action = 'BASE_UPDATED' and metadata ->> 'source' = 'lago_norte_localizacao_2026_11'")).n;
+
+  // Só leitura e o código não carrega o link: ele vive no banco.
+  for (const sql of [PREFLIGHT, POSTCHECK]) assert.doesNotMatch(sql, /\b(insert|update|delete)\s/i);
+  assert.doesNotMatch(source("lib/bases/location.ts") + source("lib/bases/catalog.ts"), /KQUaHE4LGmg8h3q17|Casa 19/i);
+
+  const pre = await report(PREFLIGHT);
+  assert.equal(pre.LAGO_NORTE_LOCALIZACAO_PRONTO.status, "OK");
+  assert.equal((await report(POSTCHECK)).LAGO_NORTE_LOCALIZACAO_OK.status, "REVIEW_REQUIRED", "antes do script o postcheck não passa");
+
+  await db.exec(SCRIPT);
+  const post = await report(POSTCHECK);
+  assert.equal(post.LAGO_NORTE_LOCALIZACAO_OK.status, "OK");
+  assert.equal(post.other_columns_fingerprint.value, pre.other_columns_fingerprint.value, "nenhuma outra coluna mudou");
+  assert.deepEqual(await lago(), { address: NEW_ADDRESS, meeting_point: null, maps_url: NEW_MAPS, status: "ACTIVE" });
+  assert.equal(await audits(), 1);
+
+  // Idempotente: rodar de novo não grava nada.
+  await db.exec(SCRIPT);
+  assert.equal(await audits(), 1);
+
+  // O próximo e-mail do Lago Norte sai com o endereço completo e o botão Como chegar.
+  const session = await lagoNorteSession(db);
+  const reservation = await preReserve(db, session.id as string, 2);
+  assert.equal(await confirm(db, reservation.reservationId, 14000), true);
+  const data = parseReservationConfirmationData((await one(db, "select public.reservation_confirmation_email($1) as data", [reservation.reservationId])).data);
+  assert.ok(data);
+  const email = buildReservationConfirmationEmail(data);
+  for (const body of [email.html, email.text]) {
+    assert.ok(body.includes(`Endereço: ${NEW_ADDRESS}`));
+    assert.ok(body.includes(NEW_MAPS));
+    assert.match(body, /Como chegar — Google Maps/);
+    assert.match(body, /Portão de entrada da Alma Azul Academy/);
+  }
+  assert.ok(email.html.includes(`href="${NEW_MAPS}"`));
+
+  // Reversão volta exatamente ao estado anterior.
+  await db.exec(ROLLBACK);
+  assert.deepEqual(await lago(), { address: "QL 5 Conjunto 5 - Lago Norte", meeting_point: null, maps_url: null, status: "ACTIVE" });
+  assert.equal((await report(PREFLIGHT)).LAGO_NORTE_LOCALIZACAO_PRONTO.status, "OK");
+
+  // Endereço diferente do esperado: o script aborta e não grava nada.
+  await db.exec("update public.bases set address = 'Outro endereço' where slug = 'lago-norte'");
+  await assert.rejects(db.exec(SCRIPT), /LAGO_NORTE_ADDRESS_UNEXPECTED/);
+  await db.exec("rollback");
+  assert.equal((await lago()).address, "Outro endereço");
+  assert.equal((await report(PREFLIGHT)).LAGO_NORTE_LOCALIZACAO_PRONTO.status, "BLOCKED");
 });
 
 test("Teste 4: cada reserva pertence à sua base e uma base não mexe nas vagas da outra", async () => {

@@ -15,13 +15,13 @@ import { getReservationConfirmationSummary, type ReservationConfirmationSummary 
 import { confirmPayment } from "@/lib/reservations/payment-confirmation";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
-const NEXT_STEPS = [
-  "localização;",
-  "horário de chegada;",
-  "o que levar;",
-  "previsão do tempo;",
-  "comunicados da experiência.",
-];
+/**
+ * Depois do pagamento confirmado: tudo o que o cliente precisa já está no
+ * e-mail de confirmação; a página não anuncia nenhum envio posterior de
+ * orientações.
+ */
+const PAYMENT_CONFIRMED_EMAIL_NOTE =
+  "Todas as informações sobre sua experiência, incluindo o ponto de encontro e as orientações de chegada, estão no e-mail de confirmação da sua reserva.";
 
 export const metadata: Metadata = { title: "Retorno do pagamento", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -117,20 +117,11 @@ export default async function PaymentReturnPage({ searchParams }: { searchParams
               <p className="mx-auto mt-6 max-w-lg leading-7 text-ink/65">
                 Obrigado por escolher viver essa experiência com a Alma Azul Academy.
               </p>
-              <p className="mx-auto mt-4 max-w-lg leading-7 text-ink/65">
-                Em breve nossa equipe irá adicionar você ao grupo oficial da sua experiência, onde enviaremos todas as
-                informações importantes, como:
+              <p className="mx-auto mt-4 max-w-lg rounded-3xl bg-paper p-6 leading-7 text-ink/75 sm:p-7">
+                {PAYMENT_CONFIRMED_EMAIL_NOTE}
               </p>
-              <ul className="mx-auto mt-6 max-w-lg space-y-2 rounded-3xl bg-paper p-6 text-left leading-7 text-ink/70 sm:p-7">
-                {NEXT_STEPS.map((step) => (
-                  <li key={step} className="flex gap-3">
-                    <span aria-hidden="true" className="mt-2.5 size-1.5 shrink-0 rounded-full bg-lake" />
-                    {step}
-                  </li>
-                ))}
-              </ul>
               <p className="mx-auto mt-6 max-w-lg leading-7 text-ink/65">
-                Caso tenha qualquer dúvida antes disso, estamos à disposição para ajudar.
+                Caso tenha qualquer dúvida, estamos à disposição para ajudar.
               </p>
               {summary.eventSlug ? (
                 <p className="mx-auto mt-4 max-w-lg leading-7 text-ink/65">

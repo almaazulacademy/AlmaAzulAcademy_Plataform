@@ -1,9 +1,10 @@
 import type { PublicExperience } from "./experience.ts";
+import { withoutGroupPromises } from "./group-copy.ts";
 import { applyModalityCopy, modalitySummary } from "./modality-copy.ts";
 import { revisePublicCopy, revisePublicSummary } from "./public-copy.ts";
 
 export function refinePublicExperience(experience: PublicExperience): PublicExperience {
-  return applyModalityCopy(refineExperienceCopy(revisePublicCopy(experience)));
+  return withoutGroupPromises(applyModalityCopy(refineExperienceCopy(revisePublicCopy(experience))));
 }
 
 /**

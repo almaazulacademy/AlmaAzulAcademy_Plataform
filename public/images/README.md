@@ -11,6 +11,7 @@ Fonte: pasta oficial aprovada no Google Drive (`18mkunV4wjs7sgDhCRPi2H65WAv8c6Qc
 - Remada Sunset: `experiences/remada-sunset/`
 - Remada do Nascer do Sol: `experiences/remada-nascer-do-sol/`
 - Remada da Lua Cheia: `experiences/remada-lua-cheia/`
+- E-mails de confirmação: `email/` — única exceção ao WebP: JPEG 1200×675 sem EXIF das fotos do ponto de encontro (portão do Lago Norte e Cápsula Bar, enviadas pela equipe em 25/11/2026) e a logo branca recortada em PNG, porque o Outlook não exibe WebP. Ver `docs/reservation-confirmation-email.md`.
 - Base Concha Acústica (landing e card): `bases/concha-acustica/` e vídeos em `public/videos/bases/concha-acustica/`. Originais na pasta "Capsula + Alma Azul" do Drive; aqui só derivados WebP e MP4 H.264 sem áudio. Fotos e vídeo com canoas são registros da Alma Azul no Lago Paranoá, não da nova base.
 
 ## Critérios aplicados
