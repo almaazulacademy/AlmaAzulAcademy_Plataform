@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { drainLastMinuteAlerts } from "@/lib/reservations/last-minute-alert-service";
 
 import { authorizeStandbyApi, isSameOriginRequest, standbyMutationError } from "@/lib/admin/http";
 import { validateStandbyReschedule } from "@/lib/admin/standby";
@@ -55,6 +56,7 @@ export async function POST(request: Request, context: RouteContext) {
       validation.data.reason,
     );
     if (!resolution) return NextResponse.json({ message: "Reserva não encontrada." }, { status: 404 });
+    after(() => drainLastMinuteAlerts());
 
     const email = await sendRescheduleConfirmationEmail(resolution.changeId);
     if (email.outcome === "PENDING" && email.retryable !== false) {
