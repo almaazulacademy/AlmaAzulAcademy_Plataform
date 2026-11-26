@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { drainLastMinuteAlerts } from "@/lib/reservations/last-minute-alert-service";
 
 import { deleteAdminSession, updateAdminSession } from "@/lib/admin/data";
 import { adminMutationError, authorizeAdminApi, isSameOriginRequest } from "@/lib/admin/http";
@@ -21,6 +22,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   try {
     const updated = await updateAdminSession(authorization.context.profile.userId, sessionId, validation.data);
+    if (updated) after(() => drainLastMinuteAlerts());
     return updated
       ? NextResponse.json({ success: true })
       : NextResponse.json({ message: "Sessão não encontrada." }, { status: 404 });

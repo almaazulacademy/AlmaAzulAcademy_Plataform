@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { drainLastMinuteAlerts } from "@/lib/reservations/last-minute-alert-service";
 
 import { authorizeStandbyApi, isSameOriginRequest, standbyMutationError } from "@/lib/admin/http";
 import { validateStandbyUndo } from "@/lib/admin/standby";
@@ -33,6 +34,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     const resolution = await undoReservationStandby(authorization.context.profile.userId, reservationId, validation.data.reason);
+    if (resolution) after(() => drainLastMinuteAlerts());
     return resolution
       ? NextResponse.json({ success: true, resolution })
       : NextResponse.json({ message: "Reserva não encontrada." }, { status: 404 });

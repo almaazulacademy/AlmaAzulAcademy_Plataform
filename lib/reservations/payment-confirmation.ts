@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { drainLastMinuteAlerts } from "@/lib/reservations/last-minute-alert-service";
 
 import { syncReservationAfterChange } from "@/lib/integrations/google-sheets/service";
 import { getPaymentProvider } from "@/lib/payments";
@@ -154,8 +155,12 @@ function result(outcome: ConfirmationOutcome): ConfirmationResult {
  * e-mail falham, a reserva segue CONFIRMED e só os jobs ficam pendentes.
  */
 export async function runPostConfirmationJobs(reservationId: string) {
-  await syncReservationAfterChange(reservationId, "CONFIRMED");
-  await sendReservationConfirmationEmail(reservationId);
+  // Alertas internos não somam seu timeout ao orçamento dos e-mails existentes.
+  const standardJobs = async () => {
+    await syncReservationAfterChange(reservationId, "CONFIRMED");
+    await sendReservationConfirmationEmail(reservationId);
+  };
+  await Promise.all([standardJobs(), drainLastMinuteAlerts()]);
 }
 
 /**

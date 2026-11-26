@@ -17,5 +17,9 @@ export async function POST(request: Request) {
   const gate = selfServiceGate(request);
   if (!gate.deps) return gate.response;
   const body: unknown = await request.json().catch(() => null);
-  return selfServiceJson(await handleSelfServiceReschedule(gate.deps, body, selfServiceClient(request)));
+  const result = await handleSelfServiceReschedule(gate.deps, body, selfServiceClient(request));
+  if (result.status === 200) after(() => drainLastMinuteAlerts());
+  return selfServiceJson(result);
 }
+import { after } from "next/server";
+import { drainLastMinuteAlerts } from "@/lib/reservations/last-minute-alert-service";

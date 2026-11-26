@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { drainLastMinuteAlerts } from "@/lib/reservations/last-minute-alert-service";
 
 import { cancelAdminReservation, confirmAdminReservation } from "@/lib/admin/data";
 import { adminMutationError, authorizeAdminApi, isSameOriginRequest } from "@/lib/admin/http";
@@ -23,6 +24,7 @@ export async function POST(request: Request, context: RouteContext) {
     const success = validation.data.action === "CONFIRM_PAYMENT"
       ? await confirmAdminReservation(authorization.context.profile.userId, reservationId, validation.data.reason)
       : await cancelAdminReservation(authorization.context.profile.userId, reservationId, validation.data.reason);
+    if (success) after(() => drainLastMinuteAlerts());
     return success
       ? NextResponse.json({ success: true })
       : NextResponse.json({ message: "Reserva não encontrada." }, { status: 404 });

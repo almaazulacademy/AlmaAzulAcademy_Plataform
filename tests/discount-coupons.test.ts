@@ -942,7 +942,8 @@ test("relatório: mostra usos e excedentes sem dado pessoal", async () => {
 });
 
 test("rollback: recusa com uso registrado; sem uso, remove tudo e devolve a régua do Stand-by", async () => {
-  const database = await fullDatabase();
+  // Rollback histórico: migrations posteriores podem adicionar funções próprias.
+  const database = await fullDatabase({ until: MIGRATION });
   const before = (await database.query<{ name: string; src: string }>(functionsSql)).rows;
   const original = (await (await fullDatabase({ until: PREVIOUS })).query<{ name: string; src: string }>(functionsSql)).rows;
 
@@ -955,7 +956,7 @@ test("rollback: recusa com uso registrado; sem uso, remove tudo e devolve a rég
   await database.exec(`rollback`);
   assert.equal((await database.query(`select 1 from public.coupons where id = $1::uuid`, [coupon.id])).rows.length, 1);
 
-  const clean = await fullDatabase();
+  const clean = await fullDatabase({ until: MIGRATION });
   await clean.exec(ROLLBACK);
   const after = (await clean.query<{ name: string; src: string }>(functionsSql)).rows;
   assert.deepEqual(after, original, "o banco volta exatamente ao de antes da migration");

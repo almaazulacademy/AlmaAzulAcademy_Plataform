@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { drainLastMinuteAlerts } from "@/lib/reservations/last-minute-alert-service";
 
 import { changeAdminReservationSession } from "@/lib/admin/data";
 import { adminMutationError, authorizeAdminApi, isSameOriginRequest } from "@/lib/admin/http";
@@ -38,6 +39,7 @@ export async function POST(request: Request, context: RouteContext) {
       validation.data.targetSessionId,
       validation.data.reason,
     );
+    if (change) after(() => drainLastMinuteAlerts());
     return change
       ? NextResponse.json({ success: true, change })
       : NextResponse.json({ message: "Reserva não encontrada." }, { status: 404 });
